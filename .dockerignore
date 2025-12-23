@@ -1,0 +1,36 @@
+# Git
+.git
+.gitignore
+.github
+
+# 敏感配置
+config.sh
+
+# 测速结果
+result_ddns.txt
+result_ddns.txt.v4
+result_ddns.txt.v6
+result_hosts.txt
+nowip_hosts.txt
+
+# 日志
+*.log
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode
+.idea
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# 数据目录
+data/
+logs/
+
+# cfst 目录（会在容器内安装）
+cfst/

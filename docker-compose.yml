@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  cfst-ddns:
+    # 使用预构建的 Docker Hub 镜像
+    image: lonelyman0108/cfst-ddns:latest
+
+    # 如果需要从源码构建，请注释上面的 image 行，取消注释下面两行
+    # build: .
+    # image: cfst-ddns:latest
+
+    container_name: cfst-ddns
+
+    environment:
+      - TZ=Asia/Shanghai
+      - AUTO_INSTALL_CFST=true
+
+      # 启用定时任务模式
+      - ENABLE_CRON=true
+
+      # 定时任务执行频率（cron 表达式）
+      # 默认: 每6小时执行一次
+      # 其他示例:
+      #   每天凌晨3点: 0 3 * * *
+      #   每小时: 0 * * * *
+      #   每12小时: 0 */12 * * *
+      #   每30分钟: */30 * * * *
+      - CRON_SCHEDULE=0 */6 * * *
+
+      # GitHub 镜像站点（可选）
+      # - GITHUB_MIRROR=https://ghproxy.com
+
+    volumes:
+      - ./data:/app/data
+      - ./cfst:/app/cfst
+      - ./logs:/var/log
+
+    restart: unless-stopped
+    network_mode: host
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# 注意：
+# 1. 默认配置使用 cfst-ddns 服务（定时任务版本）
+# 2. 如果只想手动执行，使用 cfst-ddns 服务
+# 3. 不要同时启动两个服务
+#
+# 启动定时任务版本：
+#   docker-compose up -d cfst-ddns
+#
+# 启动单次执行版本：
+#   docker-compose run --rm cfst-ddns
+#
+# 查看日志：
+#   docker-compose logs -f cfst-ddns
+#
+# 修改定时任务频率：
+#   编辑 docker-compose.yml 中的 CRON_SCHEDULE 环境变量
+#   常用示例：
+#     每天凌晨3点: CRON_SCHEDULE=0 3 * * *
+#     每小时: CRON_SCHEDULE=0 * * * *
+#     每30分钟: CRON_SCHEDULE=*/30 * * * *
+#   修改后重启: docker-compose restart cfst-ddns

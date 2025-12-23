@@ -1,0 +1,49 @@
+# 配置文件（包含敏感信息）
+config.sh
+data/config.sh
+
+# 测速结果文件
+result_ddns.txt
+result_ddns.txt.v4
+result_ddns.txt.v6
+result_hosts.txt
+nowip_hosts.txt
+
+# 数据目录（运行时生成）
+data/*.txt
+data/*.log
+
+# 日志文件
+*.log
+logs/
+
+# CloudflareSpeedTest 可执行文件
+cfst/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 临时文件
+*.tmp
+*.bak
+*.backup
+
+# Docker volumes
+docker-volumes/
