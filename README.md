@@ -262,13 +262,9 @@ cd /path/to/cfst-ddns
 
 #### 使用 Docker 运行
 
-**单次执行：**
+**方式一：定时任务模式（推荐）**
 
-```bash
-docker-compose run --rm cfst-ddns
-```
-
-**定时任务（每6小时执行）：**
+默认配置已启用定时任务模式（`ENABLE_CRON=true`），容器会持续运行并按计划执行：
 
 ```bash
 # 启动定时任务容器
@@ -283,6 +279,26 @@ docker-compose logs -f cfst-ddns
 # 停止定时任务
 docker-compose down
 ```
+
+**方式二：单次执行模式**
+
+如果只想手动执行一次，需要修改配置：
+
+1. 编辑 [docker-compose.yml](docker-compose.yml)：
+   ```yaml
+   environment:
+     - ENABLE_CRON=false  # 改为 false
+   ```
+
+2. 注释掉 `restart: unless-stopped`：
+   ```yaml
+   # restart: unless-stopped
+   ```
+
+3. 执行单次任务：
+   ```bash
+   docker-compose run --rm cfst-ddns
+   ```
 
 ## 安装 CloudflareSpeedTest
 
