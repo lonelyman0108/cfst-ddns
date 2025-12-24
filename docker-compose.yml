@@ -36,6 +36,12 @@ services:
       #   每30分钟: */30 * * * *
       - CRON_SCHEDULE=0 */6 * * *
 
+      # 应用日志文件大小限制（字节）
+      # 当日志文件超过此大小时自动轮转
+      # 默认: 10485760 (10MB)
+      # 常用值: 5242880 (5MB), 20971520 (20MB), 52428800 (50MB)
+      # - LOG_MAX_SIZE=10485760
+
     volumes:
       - ./data:/app/data
       - ./cfst:/app/cfst
@@ -47,10 +53,15 @@ services:
 
     network_mode: host
 
+    # Docker 容器日志配置
+    # 控制 Docker 容器输出（stdout/stderr）的日志大小
+    # max-size: 单个日志文件最大大小
+    # max-file: 保留的日志文件数量
+    # 总日志大小 = max-size × max-file (当前: 5m × 3 = 15MB)
     logging:
       driver: "json-file"
       options:
-        max-size: "10m"
+        max-size: "5m"
         max-file: "3"
 
 # ==================== 使用说明 ====================

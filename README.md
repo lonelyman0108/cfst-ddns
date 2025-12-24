@@ -1,4 +1,6 @@
-# CloudflareSpeedTest DDNS 自动更新脚本
+# cfst-ddns
+
+CloudflareSpeedTest DDNS 自动更新脚本
 
 ## 功能说明
 
@@ -412,6 +414,7 @@ cfst-ddns/
 | `AUTO_INSTALL_CFST` | 自动安装 CloudflareSpeedTest | `true` |
 | `DATA_DIR` | 数据目录（测速结果保存位置） | Docker: `/app/data`<br>本地: 脚本所在目录 |
 | `CRON_SCHEDULE` | 定时任务执行频率（cron 表达式） | `0 */6 * * *`（每6小时） |
+| `LOG_MAX_SIZE` | 应用日志文件大小限制（字节） | `10485760`（10MB） |
 
 **修改定时任务间隔：**
 
@@ -432,6 +435,50 @@ environment:
 修改后重启容器：
 ```bash
 docker-compose restart cfst-ddns
+```
+
+**日志管理：**
+
+项目包含两层日志管理机制：
+
+1. **Docker 容器日志**（控制 `docker logs` 输出）
+   - 位置：由 Docker 管理（通常在 `/var/lib/docker/containers/`）
+   - 配置：在 [docker-compose.yml:55-59](docker-compose.yml#L55-L59)
+   - 默认设置：5MB × 3 个文件 = 15MB 总大小
+   - 查看日志：`docker-compose logs -f cfst-ddns`
+
+2. **应用日志文件**（持久化日志）
+   - 位置：`./logs/cfst-ddns.log`（映射到容器的 `/var/log/cfst-ddns.log`）
+   - 自动轮转：当日志文件超过设定大小时自动轮转
+   - 保留策略：保留当前日志 + 1 个旧日志文件
+   - 默认大小限制：10MB（可通过 `LOG_MAX_SIZE` 环境变量调整）
+
+**修改日志大小限制：**
+
+方式一：通过环境变量（推荐）
+
+```yaml
+# docker-compose.yml
+environment:
+  # 应用日志轮转大小（字节）
+  - LOG_MAX_SIZE=20971520  # 20MB
+```
+
+常用大小参考：
+- 5MB: `5242880`
+- 10MB: `10485760`（默认）
+- 20MB: `20971520`
+- 50MB: `52428800`
+
+方式二：修改 Docker 容器日志大小
+
+```yaml
+# docker-compose.yml
+logging:
+  driver: "json-file"
+  options:
+    max-size: "5m"    # 修改单个文件大小
+    max-file: "3"     # 修改保留文件数量
 ```
 
 ## 定时执行（可选）

@@ -46,6 +46,26 @@ ENV ENABLE_CRON="false"
 # 环境变量：定时任务执行频率（cron 表达式）
 ENV CRON_SCHEDULE="0 */6 * * *"
 
+# 环境变量：日志文件大小限制（字节），超过此大小自动轮转
+ENV LOG_MAX_SIZE="10485760"
+
+# 创建日志轮转脚本
+RUN echo '#!/bin/bash' > /app/rotate_log.sh && \
+    echo 'LOG_FILE="/var/log/cfst-ddns.log"' >> /app/rotate_log.sh && \
+    echo 'MAX_SIZE=${LOG_MAX_SIZE:-10485760}  # 默认 10MB' >> /app/rotate_log.sh && \
+    echo 'if [[ -f "$LOG_FILE" ]]; then' >> /app/rotate_log.sh && \
+    echo '    SIZE=$(stat -c%s "$LOG_FILE" 2>/dev/null || stat -f%z "$LOG_FILE" 2>/dev/null || echo 0)' >> /app/rotate_log.sh && \
+    echo '    if [[ $SIZE -gt $MAX_SIZE ]]; then' >> /app/rotate_log.sh && \
+    echo '        mv "$LOG_FILE" "$LOG_FILE.old"' >> /app/rotate_log.sh && \
+    echo '        touch "$LOG_FILE"' >> /app/rotate_log.sh && \
+    echo '        echo "$(date "+%Y-%m-%d %H:%M:%S") - 日志已轮转" > "$LOG_FILE"' >> /app/rotate_log.sh && \
+    echo '        # 只保留最新的旧日志' >> /app/rotate_log.sh && \
+    echo '        rm -f "$LOG_FILE.old.old"' >> /app/rotate_log.sh && \
+    echo '        [[ -f "$LOG_FILE.old" ]] && mv "$LOG_FILE.old" "$LOG_FILE.old.old" 2>/dev/null || true' >> /app/rotate_log.sh && \
+    echo '    fi' >> /app/rotate_log.sh && \
+    echo 'fi' >> /app/rotate_log.sh && \
+    chmod +x /app/rotate_log.sh
+
 # 创建启动脚本
 RUN echo '#!/bin/bash' > /app/entrypoint.sh && \
     echo 'set -e' >> /app/entrypoint.sh && \
@@ -84,7 +104,8 @@ RUN echo '#!/bin/bash' > /app/entrypoint.sh && \
     echo '    echo "启用定时任务模式"' >> /app/entrypoint.sh && \
     echo '    echo "========================================"' >> /app/entrypoint.sh && \
     echo '    echo "定时任务设置: ${CRON_SCHEDULE}"' >> /app/entrypoint.sh && \
-    echo '    echo "${CRON_SCHEDULE} cd /app && ./cfst_ddns.sh 2>&1 | tee -a /var/log/cfst-ddns.log > /proc/1/fd/1" | crontab -' >> /app/entrypoint.sh && \
+    echo '    # 设置定时任务：执行脚本前先轮转日志' >> /app/entrypoint.sh && \
+    echo '    echo "${CRON_SCHEDULE} /app/rotate_log.sh && cd /app && ./cfst_ddns.sh 2>&1 | tee -a /var/log/cfst-ddns.log > /proc/1/fd/1" | crontab -' >> /app/entrypoint.sh && \
     echo '    echo "定时任务已设置，crond 启动中..."' >> /app/entrypoint.sh && \
     echo '    exec crond -f -l 2' >> /app/entrypoint.sh && \
     echo 'else' >> /app/entrypoint.sh && \
