@@ -73,6 +73,13 @@ detect_platform() {
 
 # 获取最新版本号
 get_latest_version() {
+    # 如果环境变量指定了版本号,直接使用
+    if [[ -n "$CFST_VERSION" ]]; then
+        BLUE "使用指定版本: $CFST_VERSION" >&2
+        echo "$CFST_VERSION"
+        return
+    fi
+
     # 输出到 stderr 避免混入返回值
     BLUE "正在获取最新版本信息..." >&2
 
@@ -83,6 +90,9 @@ get_latest_version() {
 
     if [[ -z "$version" ]]; then
         RED "错误: 无法获取最新版本信息" >&2
+        YELLOW "提示: 如果网络不佳,可以手动指定版本号:" >&2
+        YELLOW "  export CFST_VERSION='v2.2.5'" >&2
+        YELLOW "  然后重新运行安装脚本" >&2
         exit 1
     fi
 
@@ -253,11 +263,12 @@ main() {
     BLUE "1. 使用 ./cfst_ddns.sh 运行 DDNS 脚本"
     BLUE "2. 编辑 config.sh 配置文件"
     echo ""
-    YELLOW "GitHub 镜像站点："
-    YELLOW "如需使用镜像站点加速下载，可设置环境变量："
-    YELLOW "  export GITHUB_MIRROR='https://ghp.ci'"
-    YELLOW "  export GITHUB_MIRROR='https://ghproxy.cc'"
-    YELLOW "  export GITHUB_MIRROR='https://mirror.ghproxy.com'"
+    YELLOW "网络环境配置："
+    YELLOW "• 如需使用 GitHub 镜像站点："
+    YELLOW "  export GITHUB_MIRROR='https://你的镜像站点'"
+    YELLOW "• 如需手动指定版本号（当 API 访问失败时）："
+    YELLOW "  export CFST_VERSION='v2.2.5'"
+    YELLOW "  然后重新运行安装脚本"
     echo ""
 }
 

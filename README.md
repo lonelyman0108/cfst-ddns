@@ -315,16 +315,23 @@ docker-compose down
 如果下载速度慢，可以使用 GitHub 镜像站点：
 
 ```bash
-# 方式一：使用环境变量
-export GITHUB_MIRROR="https://ghp.ci"
+# 设置镜像站点环境变量
+export GITHUB_MIRROR="https://你的镜像站点"
 ./install.sh
-
-# 方式二：可用的镜像站点
-export GITHUB_MIRROR="https://ghproxy.cc"
-export GITHUB_MIRROR="https://mirror.ghproxy.com"
-export GITHUB_MIRROR="https://gh-proxy.com"
-export GITHUB_MIRROR="https://gh.api.99988866.xyz"
 ```
+
+如果无法访问 GitHub API 获取版本信息，可以手动指定版本号：
+
+```bash
+# 手动指定版本号
+export CFST_VERSION="v2.2.5"
+export GITHUB_MIRROR="https://你的镜像站点"  # 可选
+./install.sh
+```
+
+**注意**:
+- 由于网络环境不同,不同镜像站点的可用性会变化,请根据实际情况选择可用的镜像站点
+- 版本号可在 [CloudflareSpeedTest Releases](https://github.com/XIU2/CloudflareSpeedTest/releases) 页面查看
 
 ### 手动安装
 
@@ -400,7 +407,8 @@ cfst-ddns/
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
 | `TZ` | 时区设置 | `Asia/Shanghai` |
-| `GITHUB_MIRROR` | GitHub 镜像站点 | 空（使用官方） |
+| `GITHUB_MIRROR` | GitHub 镜像站点（加速下载） | 空（使用官方） |
+| `CFST_VERSION` | CloudflareSpeedTest 版本号（当 GitHub API 访问失败时使用） | 空（自动获取最新版本） |
 | `AUTO_INSTALL_CFST` | 自动安装 CloudflareSpeedTest | `true` |
 | `DATA_DIR` | 数据目录（测速结果保存位置） | Docker: `/app/data`<br>本地: 脚本所在目录 |
 | `CRON_SCHEDULE` | 定时任务执行频率（cron 表达式） | `0 */6 * * *`（每6小时） |

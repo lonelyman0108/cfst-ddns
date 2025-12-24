@@ -15,6 +15,12 @@ services:
       - TZ=Asia/Shanghai
       - AUTO_INSTALL_CFST=true
 
+      # CloudflareSpeedTest 版本号（可选，当 GitHub API 访问失败时使用）
+      # - CFST_VERSION=v2.2.5
+
+      # GitHub 镜像站点（可选，加速下载 CloudflareSpeedTest）
+      # - GITHUB_MIRROR=https://你的镜像站点
+
       # 启用定时任务模式
       # 定时任务模式: ENABLE_CRON=true (配合 restart: unless-stopped)
       # 单次执行模式: ENABLE_CRON=false (不需要 restart 策略)
@@ -29,9 +35,6 @@ services:
       #   每12小时: 0 */12 * * *
       #   每30分钟: */30 * * * *
       - CRON_SCHEDULE=0 */6 * * *
-
-      # GitHub 镜像站点（可选）
-      # - GITHUB_MIRROR=https://ghproxy.com
 
     volumes:
       - ./data:/app/data

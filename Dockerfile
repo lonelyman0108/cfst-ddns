@@ -31,6 +31,9 @@ RUN mkdir -p /app/data
 # 环境变量：GitHub 镜像站点（可选）
 ENV GITHUB_MIRROR=""
 
+# 环境变量：CloudflareSpeedTest 版本号（可选,当 API 访问失败时使用）
+ENV CFST_VERSION=""
+
 # 环境变量：是否在启动时自动安装 cfst
 ENV AUTO_INSTALL_CFST="true"
 
