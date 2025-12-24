@@ -42,12 +42,10 @@ jobs:
             type=semver,pattern={{major}}
             # 为主分支推送生成 latest 标签
             type=raw,value=latest,enable={{is_default_branch}}
-            # 为其他分支推送生成分支名标签
-            type=ref,event=branch
-            # 为 PR 推送生成 pr 标签
-            type=ref,event=pr
-            # 添加 commit SHA 短标签
-            type=sha,prefix={{branch}}-
+            # 手动触发时使用 dev 标签
+            type=raw,value=dev,enable=${{ github.event_name == 'workflow_dispatch' }}
+            # 添加 commit SHA 短标签（仅手动触发）
+            type=sha,prefix=dev-,enable=${{ github.event_name == 'workflow_dispatch' }}
 
       - name: Build and push
         uses: docker/build-push-action@v5
