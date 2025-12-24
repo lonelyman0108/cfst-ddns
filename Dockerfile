@@ -81,7 +81,7 @@ RUN echo '#!/bin/bash' > /app/entrypoint.sh && \
     echo '    echo "启用定时任务模式"' >> /app/entrypoint.sh && \
     echo '    echo "========================================"' >> /app/entrypoint.sh && \
     echo '    echo "定时任务设置: ${CRON_SCHEDULE}"' >> /app/entrypoint.sh && \
-    echo '    echo "${CRON_SCHEDULE} cd /app && ./cfst_ddns.sh >> /var/log/cfst-ddns.log 2>&1" | crontab -' >> /app/entrypoint.sh && \
+    echo '    echo "${CRON_SCHEDULE} cd /app && ./cfst_ddns.sh 2>&1 | tee -a /var/log/cfst-ddns.log > /proc/1/fd/1" | crontab -' >> /app/entrypoint.sh && \
     echo '    echo "定时任务已设置，crond 启动中..."' >> /app/entrypoint.sh && \
     echo '    exec crond -f -l 2' >> /app/entrypoint.sh && \
     echo 'else' >> /app/entrypoint.sh && \
