@@ -45,9 +45,26 @@ docker-compose logs -f cfst-ddns
 ```
 
 **可用镜像标签：**
-- `lonelyman0108/cfst-ddns:latest` - 最新版本（主分支）
-- `lonelyman0108/cfst-ddns:v1.0.0` - 特定版本（语义化版本）
-- `lonelyman0108/cfst-ddns:main` - 主分支最新构建
+- `lonelyman0108/cfst-ddns:latest` - 最新版本（运行时下载 cfst）
+- `lonelyman0108/cfst-ddns:latest-bundled` - 最新版本（预内置 cfst）
+- `lonelyman0108/cfst-ddns:v1.0.0` - 特定版本（运行时下载 cfst）
+- `lonelyman0108/cfst-ddns:v1.0.0-bundled` - 特定版本（预内置 cfst）
+
+**镜像版本说明：**
+
+本项目提供两种 Docker 镜像变体：
+
+1. **标准版本** (`latest`, `v1.0.0`)
+   - CloudflareSpeedTest 在容器首次启动时下载
+   - 镜像体积更小
+   - 适合网络环境良好的场景
+   - 可通过 `GITHUB_MIRROR` 环境变量使用镜像站点
+
+2. **捆绑版本** (`latest-bundled`, `v1.0.0-bundled`)
+   - CloudflareSpeedTest 在镜像构建时已内置
+   - 镜像体积稍大，但启动更快
+   - 无需网络下载，开箱即用
+   - **推荐用于生产环境或网络受限场景**
 
 ### 方式二：从源码构建 Docker 镜像
 
@@ -61,10 +78,17 @@ mkdir -p data
 cp config.example.sh data/config.sh
 vim data/config.sh  # 编辑配置
 
-# 3. 启动定时任务（每6小时执行一次）
+# 3. 构建镜像（选择一种）
+# 标准版本（运行时下载 cfst）
+docker build -f Dockerfile -t cfst-ddns:latest .
+
+# 捆绑版本（构建时内置 cfst）
+docker build -f Dockerfile.bundled -t cfst-ddns:latest .
+
+# 4. 启动定时任务（每6小时执行一次）
 docker-compose up -d
 
-# 4. 查看日志
+# 5. 查看日志
 docker-compose logs -f cfst-ddns
 ```
 
@@ -380,14 +404,24 @@ export GITHUB_MIRROR="https://你的镜像站点"  # 可选
 
 ### 使用预构建镜像（推荐）
 
-项目提供了多架构 Docker 镜像，自动构建并发布到 Docker Hub：
+项目提供了两种 Docker 镜像变体，均支持多架构，自动构建并发布到 Docker Hub：
 
+**1. 标准版本（运行时下载 cfst）**
 ```bash
 # 拉取最新镜像
 docker pull lonelyman0108/cfst-ddns:latest
 
 # 或拉取特定版本
 docker pull lonelyman0108/cfst-ddns:v1.0.0
+```
+
+**2. 捆绑版本（构建时内置 cfst，推荐）**
+```bash
+# 拉取最新捆绑镜像
+docker pull lonelyman0108/cfst-ddns:latest-bundled
+
+# 或拉取特定版本的捆绑镜像
+docker pull lonelyman0108/cfst-ddns:v1.0.0-bundled
 ```
 
 **支持的架构：**
@@ -401,21 +435,42 @@ Docker 会自动选择适合你系统的架构镜像。
 
 如果需要自己构建镜像：
 
+**标准版本（运行时下载 cfst）：**
 ```bash
 # 本地构建
-docker build -t cfst-ddns:latest .
+docker build -f Dockerfile -t cfst-ddns:latest .
 
 # 使用 docker-compose 构建
 docker-compose build
 ```
 
+**捆绑版本（构建时内置 cfst）：**
+```bash
+# 本地构建
+docker build -f Dockerfile.bundled -t cfst-ddns:latest .
+
+# 使用构建参数指定镜像站点（可选）
+docker build -f Dockerfile.bundled \
+  --build-arg GITHUB_MIRROR="https://你的镜像站点" \
+  -t cfst-ddns:latest .
+
+# 使用构建参数指定 cfst 版本（可选）
+docker build -f Dockerfile.bundled \
+  --build-arg CFST_VERSION="v2.2.5" \
+  -t cfst-ddns:latest .
+```
+
 ### CI/CD 自动构建
 
-项目使用 GitHub Actions 自动构建和推送 Docker 镜像到 Docker Hub。
+项目使用 GitHub Actions 自动构建和推送两种 Docker 镜像变体到 Docker Hub。
 
 **自动触发条件：**
-- 推送代码到 `main` 或 `master` 分支 → 生成 `latest` 标签
-- 推送 Git 标签（如 `v1.0.0`） → 生成版本标签（`1.0.0`、`1.0`、`1`）
+- 推送 Git 标签（如 `v1.0.0`） → 生成版本标签
+  - 标准版本：`1.0.0`、`1.0`、`1`、`latest`
+  - 捆绑版本：`1.0.0-bundled`、`1.0-bundled`、`1-bundled`、`latest-bundled`
+- 手动触发（workflow_dispatch） → 生成开发标签
+  - 标准版本：`dev`、`dev-{sha}`
+  - 捆绑版本：`dev-bundled`、`dev-bundled-{sha}`
 - 创建 Pull Request → 仅构建不推送
 
 **如需自己配置 CI/CD：**
