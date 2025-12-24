@@ -89,11 +89,11 @@ SKIP_SPEED_TEST="false"
 # 下载配置
 # =========================
 
-# GitHub 镜像站点（可选，加速下载 CloudflareSpeedTest）
-# 留空使用官方 GitHub，或使用以下镜像站点之一：
-# GITHUB_MIRROR="https://ghproxy.com/https://github.com"
-# GITHUB_MIRROR="https://mirror.ghproxy.com/https://github.com"
-# GITHUB_MIRROR="https://gh.api.99988866.xyz/https://github.com"
+# GitHub 镜像站点（用于加速下载 CloudflareSpeedTest）
+# 留空则使用官方 GitHub，国内服务器建议配置镜像站点
+# 注意：由于镜像站点可用性会变化，请根据实际情况选择
+# 镜像站点示例：
+# GITHUB_MIRROR="https://你的镜像站点"
 GITHUB_MIRROR=""
 
 # =========================
