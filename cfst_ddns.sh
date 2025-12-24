@@ -31,12 +31,11 @@ CF_API_KEY="${CF_API_KEY:-}"                  # Cloudflare Global API Key
 CF_EMAIL="${CF_EMAIL:-}"                      # Cloudflare 账号邮箱
 CF_ZONE_ID="${CF_ZONE_ID:-}"                  # Zone ID
 CF_RECORD_NAMES="${CF_RECORD_NAMES:-}"        # 要更新的域名列表（空格分隔）
-CF_RECORD_TYPE="${CF_RECORD_TYPE:-A}"         # 记录类型: A 或 AAAA
 
 # CFST 测速配置
 CFST_BIN="${CFST_BIN:-${SCRIPT_DIR}/cfst/cfst}"
 CFST_PARAMS="${CFST_PARAMS:-}"
-CFST_TEST_MODE="${CFST_TEST_MODE:-auto}"      # 测速模式: v4, v6, both, auto
+CFST_TEST_MODE="${CFST_TEST_MODE:-v4}"        # 测速模式: v4, v6, both
 DATA_DIR="${DATA_DIR:-${SCRIPT_DIR}}"         # 数据目录（测速结果保存位置）
 RESULT_FILE="${RESULT_FILE:-result_ddns.txt}"
 SKIP_SPEED_TEST="${SKIP_SPEED_TEST:-false}"   # 是否跳过测速（使用已有结果）
@@ -178,9 +177,9 @@ _SPEED_TEST() {
                 exit 1
             fi
         else
-            # 单一类型模式：根据 CF_RECORD_TYPE 加载
+            # 单一类型模式：根据 CFST_TEST_MODE 加载
             local required_file
-            if [[ "$CF_RECORD_TYPE" == "AAAA" ]]; then
+            if [[ "$CFST_TEST_MODE" == "v6" ]]; then
                 required_file="${DATA_DIR}/${RESULT_FILE}.v6"
             else
                 required_file="${DATA_DIR}/${RESULT_FILE}.v4"
@@ -218,19 +217,9 @@ _SPEED_TEST() {
             _TEST_IPV4
             _TEST_IPV6
             ;;
-        auto)
-            # 根据 CF_RECORD_TYPE 自动选择
-            if [[ "$CF_RECORD_TYPE" == "AAAA" ]]; then
-                _BLUE "自动模式: 测速 IPv6"
-                _TEST_IPV6
-            else
-                _BLUE "自动模式: 测速 IPv4"
-                _TEST_IPV4
-            fi
-            ;;
         *)
             _RED "错误: 无效的测速模式: $CFST_TEST_MODE"
-            _RED "支持的模式: v4, v6, both, auto"
+            _RED "支持的模式: v4, v6, both"
             exit 1
             ;;
     esac
@@ -284,8 +273,8 @@ _TEST_IPV6() {
 
 # 加载测速结果
 _LOAD_SPEED_RESULT() {
-    # 根据 CF_RECORD_TYPE 选择对应的最优 IP
-    if [[ "$CF_RECORD_TYPE" == "AAAA" ]]; then
+    # 根据测速模式选择对应的最优 IP
+    if [[ "$CFST_TEST_MODE" == "v6" ]]; then
         # 查找 IPv6 结果
         for ip_entry in "${BEST_IPS[@]}"; do
             if [[ "$ip_entry" == v6:* ]]; then
@@ -297,7 +286,7 @@ _LOAD_SPEED_RESULT() {
             BEST_IP=$(sed -n "2,1p" "${DATA_DIR}/${RESULT_FILE}.v6" | awk -F, '{print $1}')
         fi
     else
-        # 查找 IPv4 结果
+        # v4 模式：查找 IPv4 结果
         for ip_entry in "${BEST_IPS[@]}"; do
             if [[ "$ip_entry" == v4:* ]]; then
                 BEST_IP="${ip_entry#v4:}"
@@ -310,24 +299,25 @@ _LOAD_SPEED_RESULT() {
     fi
 
     if [[ -z "$BEST_IP" ]]; then
-        _RED "错误: 未找到可用的 IP (类型: $CF_RECORD_TYPE)"
+        _RED "错误: 未找到可用的 IP (模式: $CFST_TEST_MODE)"
         exit 1
     fi
 
-    _GREEN "\n测速完成，当前使用 IP ($CF_RECORD_TYPE): $BEST_IP"
+    _GREEN "\n测速完成，当前使用 IP ($CFST_TEST_MODE): $BEST_IP"
 }
 
 # 获取 DNS 记录 ID
 _GET_RECORD_ID() {
     local record_name="$1"
-    _BLUE "\n=== 获取 DNS 记录: $record_name ==="
+    local record_type="$2"
+    _BLUE "\n=== 获取 DNS 记录: $record_name ($record_type) ==="
 
     if [[ -n "$CF_API_TOKEN" ]]; then
-        RESPONSE=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/dns_records?type=$CF_RECORD_TYPE&name=$record_name" \
+        RESPONSE=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/dns_records?type=$record_type&name=$record_name" \
             -H "Authorization: Bearer $CF_API_TOKEN" \
             -H "Content-Type: application/json")
     else
-        RESPONSE=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/dns_records?type=$CF_RECORD_TYPE&name=$record_name" \
+        RESPONSE=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/dns_records?type=$record_type&name=$record_name" \
             -H "X-Auth-Email: $CF_EMAIL" \
             -H "X-Auth-Key: $CF_API_KEY" \
             -H "Content-Type: application/json")
@@ -358,24 +348,26 @@ _GET_RECORD_ID() {
 # 更新单个 DNS 记录
 _UPDATE_SINGLE_DNS() {
     local record_name="$1"
-    _BLUE "\n=== 更新 DNS 记录: $record_name ==="
+    local record_type="$2"
+    local best_ip="$3"
+    _BLUE "\n=== 更新 DNS 记录: $record_name ($record_type) ==="
 
     # 获取记录信息
-    _GET_RECORD_ID "$record_name" || return 1
+    _GET_RECORD_ID "$record_name" "$record_type" || return 1
 
     # 如果 IP 相同则跳过
-    if [[ "$CURRENT_IP" == "$BEST_IP" ]] && [[ "$CREATE_NEW" == "false" ]]; then
+    if [[ "$CURRENT_IP" == "$best_ip" ]] && [[ "$CREATE_NEW" == "false" ]]; then
         _GREEN "当前 DNS 记录已是最优 IP，无需更新"
-        UPDATE_RESULTS+=("✓ $record_name ($CF_RECORD_TYPE): 无需更新 (已是最优IP)")
+        UPDATE_RESULTS+=("✓ $record_name ($record_type): 无需更新 (已是最优IP)")
         return 0
     fi
 
     # 准备 JSON 数据
     JSON_DATA=$(cat <<EOF
 {
-  "type": "$CF_RECORD_TYPE",
+  "type": "$record_type",
   "name": "$record_name",
-  "content": "$BEST_IP",
+  "content": "$best_ip",
   "ttl": 1,
   "proxied": false
 }
@@ -419,16 +411,16 @@ EOF
     if [[ "$SUCCESS" == "true" ]]; then
         _GREEN "${ACTION}成功！"
         _GREEN "域名: $record_name"
-        _GREEN "类型: $CF_RECORD_TYPE"
+        _GREEN "类型: $record_type"
         _GREEN "原IP: ${CURRENT_IP:-无}"
-        _GREEN "新IP: $BEST_IP"
-        UPDATE_RESULTS+=("✓ $record_name ($CF_RECORD_TYPE): $ACTION成功 $CURRENT_IP → $BEST_IP")
+        _GREEN "新IP: $best_ip"
+        UPDATE_RESULTS+=("✓ $record_name ($record_type): $ACTION成功 $CURRENT_IP → $best_ip")
         return 0
     else
         _RED "${ACTION}失败！"
         local error_msg=$(echo "$RESPONSE" | grep -o '"message":"[^"]*"' | cut -d'"' -f4)
         echo "$error_msg"
-        UPDATE_RESULTS+=("✗ $record_name ($CF_RECORD_TYPE): ${ACTION}失败 - $error_msg")
+        UPDATE_RESULTS+=("✗ $record_name ($record_type): ${ACTION}失败 - $error_msg")
         return 1
     fi
 }
@@ -455,9 +447,7 @@ _UPDATE_ALL_DNS() {
             done
 
             if [[ -n "$ipv4" ]]; then
-                CF_RECORD_TYPE="A"
-                BEST_IP="$ipv4"
-                if _UPDATE_SINGLE_DNS "$record_name"; then
+                if _UPDATE_SINGLE_DNS "$record_name" "A" "$ipv4"; then
                     ((success_count++))
                 else
                     ((fail_count++))
@@ -474,9 +464,7 @@ _UPDATE_ALL_DNS() {
             done
 
             if [[ -n "$ipv6" ]]; then
-                CF_RECORD_TYPE="AAAA"
-                BEST_IP="$ipv6"
-                if _UPDATE_SINGLE_DNS "$record_name"; then
+                if _UPDATE_SINGLE_DNS "$record_name" "AAAA" "$ipv6"; then
                     ((success_count++))
                 else
                     ((fail_count++))
@@ -485,8 +473,15 @@ _UPDATE_ALL_DNS() {
         done
     else
         # 单一类型记录更新
+        local record_type
+        if [[ "$CFST_TEST_MODE" == "v6" ]]; then
+            record_type="AAAA"
+        else
+            record_type="A"
+        fi
+
         for record_name in $CF_RECORD_NAMES; do
-            if _UPDATE_SINGLE_DNS "$record_name"; then
+            if _UPDATE_SINGLE_DNS "$record_name" "$record_type" "$BEST_IP"; then
                 ((success_count++))
             else
                 ((fail_count++))

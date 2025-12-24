@@ -138,20 +138,16 @@ CF_ZONE_ID="your_zone_id_here"
 # 要更新的域名（支持多个域名，空格分隔）
 CF_RECORD_NAMES="test1.example.com test2.example.com"
 
-# DNS 记录类型（A=IPv4, AAAA=IPv6）
-CF_RECORD_TYPE="A"
-
 # ========== 测速配置 ==========
 # CloudflareSpeedTest 测速参数
 # -n: 测速线程数量 -t: 延迟测速次数 -sl: 下载速度下限(MB/s)
 CFST_PARAMS="-n 200 -t 4 -sl 5"
 
-# 测速模式（auto/v4/v6/both）
-# auto: 根据 CF_RECORD_TYPE 自动选择
-# v4: 仅测速 IPv4
-# v6: 仅测速 IPv6
-# both: 同时测速 IPv4 和 IPv6
-CFST_TEST_MODE="auto"
+# 测速模式（同时决定 DNS 记录类型）
+# v4: 仅测速 IPv4,更新 A 记录
+# v6: 仅测速 IPv6,更新 AAAA 记录
+# both: 同时测速 IPv4 和 IPv6,同时更新 A 和 AAAA 记录
+CFST_TEST_MODE="v4"
 
 # 跳过测速（使用已保存的测速结果）
 # true: 跳过测速，使用上次结果
@@ -189,7 +185,7 @@ DATA_DIR=""
 CFST_PARAMS="-n 200 -t 4 -sl 5"
 
 # 测速模式
-CFST_TEST_MODE="auto"  # auto/v4/v6/both
+CFST_TEST_MODE="v4"  # v4/v6/both
 
 # 跳过测速（使用已保存结果）
 SKIP_SPEED_TEST="false"
@@ -202,10 +198,9 @@ SKIP_SPEED_TEST="false"
 - `-dn` 下载测速数量（默认10）
 
 **测速模式说明：**
-- `auto`：根据 `CF_RECORD_TYPE` 自动选择（默认）
-- `v4`：仅测速 IPv4
-- `v6`：仅测速 IPv6
-- `both`：同时测速 IPv4 和 IPv6
+- `v4`：仅测速 IPv4,更新 A 记录（默认）
+- `v6`：仅测速 IPv6,更新 AAAA 记录
+- `both`：同时测速 IPv4 和 IPv6,同时更新 A 和 AAAA 记录
 
 **跳过测速说明：**
 
@@ -493,9 +488,8 @@ launchctl load ~/Library/LaunchAgents/com.cfst.ddns.plist
 1. **首次使用建议**：先手动执行一次，确认配置正确
 2. **API Token 权限**：确保 Token 有 DNS 编辑权限
 3. **测速环境**：关闭代理软件，否则测速结果可能不准确
-4. **IP 类型匹配**：IPv4 使用 A 记录，IPv6 使用 AAAA 记录
-5. **DNS 记录**：如果域名记录不存在，脚本会自动创建
-6. **Proxied 设置**：脚本默认关闭 Cloudflare 代理（proxied: false），如需开启请修改脚本
+4. **DNS 记录**：如果域名记录不存在，脚本会自动创建
+5. **Proxied 设置**：脚本默认关闭 Cloudflare 代理（proxied: false），如需开启请修改脚本
 
 ## 故障排查
 

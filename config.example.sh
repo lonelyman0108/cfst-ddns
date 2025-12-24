@@ -30,10 +30,6 @@ CF_ZONE_ID="your_zone_id_here"
 # 示例：CF_RECORD_NAMES="test1.example.com test2.example.com test3.example.com"
 CF_RECORD_NAMES="test.example.com"
 
-# DNS 记录类型
-# A=IPv4, AAAA=IPv6
-CF_RECORD_TYPE="A"
-
 # =========================
 # 测速配置
 # =========================
@@ -54,12 +50,11 @@ CF_RECORD_TYPE="A"
 # -dt: 下载测速时间，单位秒（默认10秒）
 CFST_PARAMS="-n 200 -t 4"
 
-# 测速模式
-# auto: 根据 CF_RECORD_TYPE 自动选择（默认）
-# v4: 仅测速 IPv4
-# v6: 仅测速 IPv6
-# both: 同时测速 IPv4 和 IPv6
-CFST_TEST_MODE="auto"
+# 测速模式（同时决定 DNS 记录类型）
+# v4: 仅测速 IPv4,更新 A 记录（默认）
+# v6: 仅测速 IPv6,更新 AAAA 记录
+# both: 同时测速 IPv4 和 IPv6,同时更新 A 和 AAAA 记录
+CFST_TEST_MODE="v4"
 
 # 是否跳过测速（使用已有测速结果）
 # true: 跳过测速，使用上次保存的结果（快速测试其他步骤）
