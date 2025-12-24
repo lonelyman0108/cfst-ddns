@@ -4,11 +4,12 @@ CloudflareSpeedTest DDNS 自动更新脚本
 
 ## 功能说明
 
-自动执行 CloudflareSpeedTest 测速，并将最优 IP 通过 Cloudflare API 更新到指定域名的 DNS 记录。
+自动执行 CloudflareSpeedTest 测速，并将最优 IP 通过 DNS API 更新到指定域名的 DNS 记录。
 
 ### 主要特性
 
 - ✅ 自动测速获取最优 Cloudflare IP
+- ✅ **支持多个 DNS 提供商**（Cloudflare、DNSPod/腾讯云）
 - ✅ 支持多域名同时更新
 - ✅ 支持 IPv4/IPv6 双栈测速和更新
 - ✅ 支持多种通知方式（Bark、Telegram）
@@ -87,7 +88,9 @@ vim config.sh
 
 ## 详细使用步骤
 
-### 1. 获取 Cloudflare API 凭证
+### 1. 选择 DNS 提供商并获取 API 凭证
+
+#### 选项 A：使用 Cloudflare
 
 **方式一：使用 API Token（推荐）**
 
@@ -105,13 +108,21 @@ vim config.sh
 2. My Profile → API Tokens → Global API Key
 3. 点击 "View" 并复制
 
-### 2. 获取 Zone ID
+**获取 Zone ID：**
 
 1. 进入 Cloudflare Dashboard
 2. 选择你的域名
 3. 右侧 "API" 区域可以看到 Zone ID
 
-### 3. 配置脚本
+#### 选项 B：使用 DNSPod（腾讯云）
+
+1. 登录 [腾讯云控制台](https://console.cloud.tencent.com/)
+2. 进入 [访问管理 → 访问密钥 → API 密钥管理](https://console.cloud.tencent.com/cam/capi)
+3. 创建或查看密钥，获取：
+   - **SecretId**
+   - **SecretKey**
+
+### 2. 配置脚本
 
 **推荐方式：使用配置文件（避免敏感信息泄露）**
 
@@ -125,7 +136,15 @@ vim config.sh  # 或使用其他编辑器
 
 **配置文件示例（[config.example.sh](config.example.sh)）：**
 
+#### Cloudflare 配置示例
+
 ```bash
+# ========== DNS 提供商选择 ==========
+DNS_PROVIDER="cloudflare"
+
+# ========== 要更新的域名列表 ==========
+DNS_RECORD_NAMES="test1.example.com test2.example.com"
+
 # ========== Cloudflare API 配置 ==========
 # 方式一：使用 API Token（推荐）
 CF_API_TOKEN="your_api_token_here"
@@ -135,11 +154,26 @@ CF_ZONE_ID="your_zone_id_here"
 # CF_API_EMAIL="your_email@example.com"
 # CF_API_KEY="your_global_api_key"
 # CF_ZONE_ID="your_zone_id_here"
+```
 
-# ========== DNS 记录配置 ==========
-# 要更新的域名（支持多个域名，空格分隔）
-CF_RECORD_NAMES="test1.example.com test2.example.com"
+#### DNSPod (腾讯云) 配置示例
 
+```bash
+# ========== DNS 提供商选择 ==========
+DNS_PROVIDER="dnspod"
+
+# ========== 要更新的域名列表 ==========
+# 注意：DNSPod 会自动解析主域名和子域名
+DNS_RECORD_NAMES="test.example.com www.example.com example.com"
+
+# ========== DNSPod API 配置 ==========
+DNSPOD_SECRET_ID="your_secret_id_here"
+DNSPOD_SECRET_KEY="your_secret_key_here"
+```
+
+#### 通用配置（所有提供商）
+
+```bash
 # ========== 测速配置 ==========
 # CloudflareSpeedTest 测速参数
 # -n: 测速线程数量 -t: 延迟测速次数 -sl: 下载速度下限(MB/s)
@@ -178,7 +212,7 @@ DATA_DIR=""
 
 编辑 [cfst_ddns.sh](cfst_ddns.sh:29-34) 文件的默认配置区域。
 
-### 4. 可选：调整测速参数
+### 3. 可选：调整测速参数
 
 在 `config.sh` 中修改测速相关配置：
 
@@ -210,7 +244,7 @@ SKIP_SPEED_TEST="false"
 
 设置 `SKIP_SPEED_TEST="true"` 可跳过测速，直接使用上次保存的结果，方便快速测试其他步骤（如 DNS 更新、通知等）。
 
-### 5. 配置通知（可选）
+### 4. 配置通知（可选）
 
 脚本支持多种通知方式，可以同时启用。
 
@@ -242,7 +276,7 @@ TG_CHAT_ID="123456789"
 4. 访问 `https://api.telegram.org/bot<你的Token>/getUpdates` 获取 Chat ID
 5. 填入配置文件
 
-### 6. 运行脚本
+### 5. 运行脚本
 
 #### 本地运行
 
@@ -539,6 +573,22 @@ launchctl load ~/Library/LaunchAgents/com.cfst.ddns.plist
 7. 显示执行结果
 
 ## 注意事项
+
+### DNS 提供商特性
+
+#### Cloudflare
+- 需要配置 Zone ID 和 API Token/Key
+- 支持 API Token（推荐）和 Global API Key 两种认证方式
+- 所有记录必须在同一个 Zone 下
+
+#### DNSPod (腾讯云)
+- 使用腾讯云 API v3 签名方法（TC3-HMAC-SHA256）
+- 自动解析主域名和子域名（例如：`test.example.com` → 主域名 `example.com`，子域名 `test`）
+- 支持裸域名（例如：`example.com` → 主域名 `example.com`，子域名 `@`）
+- 需要在腾讯云控制台获取 SecretId 和 SecretKey
+- **重要**: 不同主域名需要分别执行脚本（腾讯云 DNSPod API 限制）
+
+### 通用注意事项
 
 1. **首次使用建议**：先手动执行一次，确认配置正确
 2. **API Token 权限**：确保 Token 有 DNS 编辑权限

@@ -9,6 +9,20 @@
 # 3. config.sh 会被 .gitignore 忽略，不会泄露敏感信息
 
 # =========================
+# DNS 提供商选择
+# =========================
+# 支持的提供商：cloudflare, dnspod
+DNS_PROVIDER="cloudflare"
+
+# =========================
+# 要更新的域名列表（空格分隔，支持多个域名）
+# =========================
+# Cloudflare 示例：DNS_RECORD_NAMES="test1.example.com test2.example.com"
+# DNSPod 示例：DNS_RECORD_NAMES="test1.example.com test2.example.com example.com"
+# 注意：对于DNSPod，会自动解析主域名和子域名
+DNS_RECORD_NAMES="test.example.com"
+
+# =========================
 # Cloudflare API 配置
 # =========================
 
@@ -22,13 +36,19 @@ CF_API_TOKEN=""
 CF_API_KEY=""
 CF_EMAIL=""
 
-# Zone ID 和域名配置
+# Zone ID 配置
 # Zone ID 获取：Cloudflare Dashboard → 选择域名 → 右侧 API 区域
 CF_ZONE_ID="your_zone_id_here"
 
-# 要更新的域名列表（空格分隔，支持多个域名）
-# 示例：CF_RECORD_NAMES="test1.example.com test2.example.com test3.example.com"
-CF_RECORD_NAMES="test.example.com"
+# =========================
+# DNSPod API 配置（腾讯云）
+# =========================
+
+# DNSPod API 密钥对
+# 获取方式：腾讯云控制台 → 访问管理 → 访问密钥 → API密钥管理
+# https://console.cloud.tencent.com/cam/capi
+DNSPOD_SECRET_ID=""
+DNSPOD_SECRET_KEY=""
 
 # =========================
 # 测速配置
