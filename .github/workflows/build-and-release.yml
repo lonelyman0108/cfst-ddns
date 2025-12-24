@@ -1,16 +1,9 @@
-name: Build and Push Docker Image
+name: Build Docker Image and Create Release
 
 on:
   push:
-    # branches:
-    #   - main
-    #   - master
     tags:
       - 'v*'
-  # pull_request:
-  #   branches:
-  #     - main
-  #     - master
   workflow_dispatch:
 
 env:
@@ -69,3 +62,45 @@ jobs:
 
       - name: Image digest
         run: echo "Image pushed with digest ${{ steps.build-and-push.outputs.digest }}"
+
+  create-release:
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build-and-push
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: Release ${{ steps.version.outputs.version }}
+          body: |
+            ## Docker Images
+
+            This release has been automatically built and pushed to Docker Hub:
+
+            - `${{ env.DOCKER_IMAGE }}:${{ steps.version.outputs.version }}`
+            - `${{ env.DOCKER_IMAGE }}:latest`
+
+            ### Multi-platform support
+            - linux/amd64
+            - linux/arm64
+            - linux/arm/v7
+
+            ### Pull the image
+            ```bash
+            docker pull ${{ env.DOCKER_IMAGE }}:${{ steps.version.outputs.version }}
+            ```
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
