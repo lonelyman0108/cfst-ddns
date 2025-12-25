@@ -108,40 +108,49 @@ jobs:
         id: version
         run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          VERSION_NUMBER="${VERSION#v}"
+
+          # 从 CHANGELOG.md 提取当前版本的更新日志
+          if [ -f "CHANGELOG.md" ]; then
+            # 提取从 [版本号] 到下一个 [版本号] 之间的内容
+            CHANGELOG=$(sed -n "/## \[${VERSION_NUMBER}\]/,/## \[/p" CHANGELOG.md | sed '$d' | tail -n +2)
+
+            # 如果没有找到版本号，尝试提取 Unreleased 部分
+            if [ -z "$CHANGELOG" ]; then
+              CHANGELOG=$(sed -n '/## \[Unreleased\]/,/## \[/p' CHANGELOG.md | sed '$d' | tail -n +2)
+            fi
+
+            # 如果还是没有，使用默认消息
+            if [ -z "$CHANGELOG" ]; then
+              CHANGELOG="Please check CHANGELOG.md for details."
+            fi
+          else
+            CHANGELOG="No changelog available."
+          fi
+
+          # 保存到文件以避免多行问题
+          echo "$CHANGELOG" > /tmp/changelog.txt
+
+          # 生成完整的 Release Body
+          cat > /tmp/release_body.md << 'EOF'
+          ## What's Changed
+
+          EOF
+          cat /tmp/changelog.txt >> /tmp/release_body.md
+          cat >> /tmp/release_body.md << 'EOF'
+          
+          EOF
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ steps.version.outputs.version }}
-          name: Release ${{ steps.version.outputs.version }}
-          body: |
-            ## Docker Images
-
-            This release has been automatically built and pushed to Docker Hub with two variants:
-
-            ### Standard Image (Runtime Download)
-            CloudflareSpeedTest is downloaded at container startup:
-            - `${{ env.DOCKER_IMAGE }}:${{ steps.version.outputs.version }}`
-            - `${{ env.DOCKER_IMAGE }}:latest`
-
-            ### Bundled Image (Embedded cfst)
-            CloudflareSpeedTest is embedded during build time:
-            - `${{ env.DOCKER_IMAGE }}:${{ steps.version.outputs.version }}-bundled`
-            - `${{ env.DOCKER_IMAGE }}:latest-bundled`
-
-            ### Multi-platform support
-            - linux/amd64
-            - linux/arm64
-            - linux/arm/v7
-
-            ### Pull the image
-            Standard version:
-            ```bash
-            docker pull ${{ env.DOCKER_IMAGE }}:${{ steps.version.outputs.version }}
-            ```
-
-            Bundled version:
-            ```bash
-            docker pull ${{ env.DOCKER_IMAGE }}:${{ steps.version.outputs.version }}-bundled
-            ```
+          name: ${{ steps.version.outputs.version }}
+          body_path: /tmp/release_body.md
           draft: false
           prerelease: false
+          generate_release_notes: true
