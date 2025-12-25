@@ -138,13 +138,14 @@ vim config.sh
 2. 选择你的域名
 3. 右侧 "API" 区域可以看到 Zone ID
 
-#### 选项 B：使用 DNSPod（腾讯云）
+#### 选项 B：使用 DNSPod
 
-1. 登录 [腾讯云控制台](https://console.cloud.tencent.com/)
-2. 进入 [访问管理 → 访问密钥 → API 密钥管理](https://console.cloud.tencent.com/cam/capi)
-3. 创建或查看密钥，获取：
-   - **SecretId**
-   - **SecretKey**
+1. 登录 [DNSPod 控制台](https://console.dnspod.cn/)
+2. 进入 [用户中心 → 安全设置 → API Token](https://console.dnspod.cn/account/token/token)
+3. 创建 Token，获取：
+   - **ID**（数字ID）
+   - **Token**（字符串）
+4. 将两者组合为 `ID,Token` 格式（例如：`12345,1234567890abcdef1234567890abcdef`）
 
 ### 2. 配置脚本
 
@@ -180,7 +181,7 @@ CF_ZONE_ID="your_zone_id_here"
 # CF_ZONE_ID="your_zone_id_here"
 ```
 
-#### DNSPod (腾讯云) 配置示例
+#### DNSPod 配置示例
 
 ```bash
 # ========== DNS 提供商选择 ==========
@@ -191,8 +192,8 @@ DNS_PROVIDER="dnspod"
 DNS_RECORD_NAMES="test.example.com www.example.com example.com"
 
 # ========== DNSPod API 配置 ==========
-DNSPOD_SECRET_ID="your_secret_id_here"
-DNSPOD_SECRET_KEY="your_secret_key_here"
+# 格式：ID,Token（例如：12345,1234567890abcdef1234567890abcdef）
+DNSPOD_TOKEN="your_id,your_token"
 ```
 
 #### 通用配置（所有提供商）
@@ -636,12 +637,12 @@ launchctl load ~/Library/LaunchAgents/com.cfst.ddns.plist
 - 支持 API Token（推荐）和 Global API Key 两种认证方式
 - 所有记录必须在同一个 Zone 下
 
-#### DNSPod (腾讯云)
-- 使用腾讯云 API v3 签名方法（TC3-HMAC-SHA256）
+#### DNSPod
+- 使用简化的 DNSPod Token API（`dnsapi.cn`）
 - 自动解析主域名和子域名（例如：`test.example.com` → 主域名 `example.com`，子域名 `test`）
 - 支持裸域名（例如：`example.com` → 主域名 `example.com`，子域名 `@`）
-- 需要在腾讯云控制台获取 SecretId 和 SecretKey
-- **重要**: 不同主域名需要分别执行脚本（腾讯云 DNSPod API 限制）
+- 只需配置一个 Token（格式：`ID,Token`）
+- **重要**: 不同主域名需要分别执行脚本（DNSPod API 限制）
 
 ### 通用注意事项
 

@@ -41,14 +41,14 @@ CF_EMAIL=""
 CF_ZONE_ID="your_zone_id_here"
 
 # =========================
-# DNSPod API 配置（腾讯云）
+# DNSPod API 配置
 # =========================
 
-# DNSPod API 密钥对
-# 获取方式：腾讯云控制台 → 访问管理 → 访问密钥 → API密钥管理
-# https://console.cloud.tencent.com/cam/capi
-DNSPOD_SECRET_ID=""
-DNSPOD_SECRET_KEY=""
+# DNSPod API Token
+# 获取方式：DNSPod 控制台 → 用户中心 → 安全设置 → API Token
+# https://console.dnspod.cn/account/token/token
+# 格式：ID,Token (例如: 12345,1234567890abcdef1234567890abcdef)
+DNSPOD_TOKEN=""
 
 # =========================
 # 测速配置

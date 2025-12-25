@@ -38,8 +38,7 @@ CF_EMAIL="${CF_EMAIL:-}"                      # Cloudflare 账号邮箱
 CF_ZONE_ID="${CF_ZONE_ID:-}"                  # Zone ID
 
 # DNSPod API 配置
-DNSPOD_SECRET_ID="${DNSPOD_SECRET_ID:-}"      # DNSPod Secret ID
-DNSPOD_SECRET_KEY="${DNSPOD_SECRET_KEY:-}"    # DNSPod Secret Key
+DNSPOD_TOKEN="${DNSPOD_TOKEN:-}"                # DNSPod Token (ID,Token)
 
 # CFST 测速配置
 CFST_BIN="${CFST_BIN:-${SCRIPT_DIR}/cfst/cfst}"
@@ -101,70 +100,18 @@ _DNSPOD_PARSE_DOMAIN() {
     fi
 }
 
-# DNSPod API v3 签名函数 (TC3-HMAC-SHA256)
-_DNSPOD_SIGN() {
-    local secret_key="$1"
-    local service="dnspod"
-    local host="dnspod.tencentcloudapi.com"
-    local action="$2"
-    local request_payload="$3"
-
-    # 获取当前时间戳
-    local timestamp=$(date +%s)
-    local date_utc=$(date -u -d "@$timestamp" +%Y-%m-%d 2>/dev/null || date -u -r "$timestamp" +%Y-%m-%d)
-
-    # 1. 拼接规范请求串
-    local http_request_method="POST"
-    local canonical_uri="/"
-    local canonical_querystring=""
-    local canonical_headers="content-type:application/json; charset=utf-8\nhost:${host}\n"
-    local signed_headers="content-type;host"
-
-    # 计算请求正文的 SHA256 哈希
-    local hashed_request_payload=$(echo -n "$request_payload" | openssl dgst -sha256 -hex | awk '{print $2}')
-
-    local canonical_request="${http_request_method}\n${canonical_uri}\n${canonical_querystring}\n${canonical_headers}\n${signed_headers}\n${hashed_request_payload}"
-
-    # 2. 拼接待签名字符串
-    local algorithm="TC3-HMAC-SHA256"
-    local credential_scope="${date_utc}/${service}/tc3_request"
-    local hashed_canonical_request=$(echo -n -e "$canonical_request" | openssl dgst -sha256 -hex | awk '{print $2}')
-
-    local string_to_sign="${algorithm}\n${timestamp}\n${credential_scope}\n${hashed_canonical_request}"
-
-    # 3. 计算签名
-    local secret_date=$(echo -n "${date_utc}" | openssl dgst -sha256 -hmac "TC3${secret_key}" -binary)
-    local secret_service=$(echo -n "${service}" | openssl dgst -sha256 -mac HMAC -macopt "hexkey:$(echo -n "$secret_date" | xxd -p -c 256)" -binary)
-    local secret_signing=$(echo -n "tc3_request" | openssl dgst -sha256 -mac HMAC -macopt "hexkey:$(echo -n "$secret_service" | xxd -p -c 256)" -binary)
-    local signature=$(echo -n -e "$string_to_sign" | openssl dgst -sha256 -mac HMAC -macopt "hexkey:$(echo -n "$secret_signing" | xxd -p -c 256)" | awk '{print $2}')
-
-    # 4. 拼接 Authorization
-    local authorization="${algorithm} Credential=${DNSPOD_SECRET_ID}/${credential_scope}, SignedHeaders=${signed_headers}, Signature=${signature}"
-
-    # 导出变量供调用
-    echo "${authorization}|${timestamp}"
-}
-
 # DNSPod API 请求函数
 _DNSPOD_API_REQUEST() {
     local action="$1"
-    local request_payload="$2"
+    shift
+    local params="$@"
 
-    # 获取签名和时间戳
-    local sign_result=$(_DNSPOD_SIGN "$DNSPOD_SECRET_KEY" "$action" "$request_payload")
-    local authorization=$(echo "$sign_result" | cut -d'|' -f1)
-    local timestamp=$(echo "$sign_result" | cut -d'|' -f2)
+    # 构建请求参数
+    local request_params="login_token=${DNSPOD_TOKEN}&format=json&${params}"
 
     # 发送 API 请求
-    local response=$(curl -s -X POST "https://dnspod.tencentcloudapi.com" \
-        -H "Authorization: ${authorization}" \
-        -H "Content-Type: application/json; charset=utf-8" \
-        -H "Host: dnspod.tencentcloudapi.com" \
-        -H "X-TC-Action: ${action}" \
-        -H "X-TC-Timestamp: ${timestamp}" \
-        -H "X-TC-Version: 2021-03-23" \
-        -H "X-TC-Region: " \
-        -d "$request_payload")
+    local response=$(curl -s -X POST "https://dnsapi.cn/${action}" \
+        -d "$request_params")
 
     echo "$response"
 }
@@ -182,33 +129,30 @@ _DNSPOD_GET_RECORD() {
     _BLUE "\n=== 获取 DNSPod 记录: ${full_domain} ($record_type) ==="
     _BLUE "主域名: $main_domain, 子域名: $subdomain"
 
-    local payload=$(cat <<EOF
-{
-  "Domain": "${main_domain}",
-  "Subdomain": "${subdomain}",
-  "RecordType": "${record_type}",
-  "Limit": 1
-}
-EOF
-)
+    # 构建请求参数
+    local params="domain=${main_domain}&sub_domain=${subdomain}&record_type=${record_type}"
 
-    local response=$(_DNSPOD_API_REQUEST "DescribeRecordList" "$payload")
+    local response=$(_DNSPOD_API_REQUEST "Record.List" "$params")
 
-    # 检查响应
-    local error=$(echo "$response" | jq -r '.Response.Error.Code // empty' 2>/dev/null)
-    if [[ -n "$error" ]]; then
-        _RED "错误: API 请求失败"
-        echo "$response" | jq -r '.Response.Error.Message' 2>/dev/null
+    # 检查响应状态
+    local status_code=$(echo "$response" | grep -o '"code":"[^"]*"' | head -1 | cut -d'"' -f4)
+
+    # status_code "1" 表示成功，"10" 表示记录列表为空（也视为正常）
+    if [[ "$status_code" != "1" ]] && [[ "$status_code" != "10" ]]; then
+        local message=$(echo "$response" | grep -o '"message":"[^"]*"' | head -1 | cut -d'"' -f4)
+        _RED "错误: API 请求失败 (code: $status_code)"
+        _RED "消息: $message"
         return 1
     fi
 
-    # 获取记录信息
-    DNSPOD_RECORD_ID=$(echo "$response" | jq -r '.Response.RecordList[0].RecordId // empty' 2>/dev/null)
-    CURRENT_IP=$(echo "$response" | jq -r '.Response.RecordList[0].Value // empty' 2>/dev/null)
+    # 获取记录信息（使用 grep 而不是 jq，避免依赖）
+    DNSPOD_RECORD_ID=$(echo "$response" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+    CURRENT_IP=$(echo "$response" | grep -o '"value":"[^"]*"' | head -1 | cut -d'"' -f4)
     DNSPOD_MAIN_DOMAIN="$main_domain"
     DNSPOD_SUBDOMAIN="$subdomain"
 
-    if [[ -z "$DNSPOD_RECORD_ID" ]]; then
+    # status_code "10" 或者 RECORD_ID 为空，表示记录不存在
+    if [[ -z "$DNSPOD_RECORD_ID" ]] || [[ "$status_code" == "10" ]]; then
         _YELLOW "警告: DNS 记录不存在，将创建新记录"
         CREATE_NEW=true
     else
@@ -226,25 +170,17 @@ _DNSPOD_CREATE_RECORD() {
 
     _BLUE "创建新的 DNSPod 记录..."
 
-    local payload=$(cat <<EOF
-{
-  "Domain": "${DNSPOD_MAIN_DOMAIN}",
-  "SubDomain": "${DNSPOD_SUBDOMAIN}",
-  "RecordType": "${record_type}",
-  "RecordLine": "默认",
-  "Value": "${value}",
-  "TTL": 600
-}
-EOF
-)
+    # 构建请求参数
+    local params="domain=${DNSPOD_MAIN_DOMAIN}&sub_domain=${DNSPOD_SUBDOMAIN}&record_type=${record_type}&record_line=默认&value=${value}&ttl=600"
 
-    local response=$(_DNSPOD_API_REQUEST "CreateRecord" "$payload")
+    local response=$(_DNSPOD_API_REQUEST "Record.Create" "$params")
 
-    # 检查响应
-    local error=$(echo "$response" | jq -r '.Response.Error.Code // empty' 2>/dev/null)
-    if [[ -n "$error" ]]; then
-        _RED "创建失败！"
-        echo "$response" | jq -r '.Response.Error.Message' 2>/dev/null
+    # 检查响应状态
+    local status_code=$(echo "$response" | grep -o '"code":"[^"]*"' | head -1 | cut -d'"' -f4)
+    if [[ "$status_code" != "1" ]]; then
+        local message=$(echo "$response" | grep -o '"message":"[^"]*"' | head -1 | cut -d'"' -f4)
+        _RED "创建失败！(code: $status_code)"
+        _RED "消息: $message"
         return 1
     fi
 
@@ -260,26 +196,17 @@ _DNSPOD_MODIFY_RECORD() {
 
     _BLUE "修改现有 DNSPod 记录..."
 
-    local payload=$(cat <<EOF
-{
-  "Domain": "${DNSPOD_MAIN_DOMAIN}",
-  "SubDomain": "${DNSPOD_SUBDOMAIN}",
-  "RecordType": "${record_type}",
-  "RecordLine": "默认",
-  "Value": "${value}",
-  "RecordId": ${record_id},
-  "TTL": 600
-}
-EOF
-)
+    # 构建请求参数
+    local params="domain=${DNSPOD_MAIN_DOMAIN}&record_id=${record_id}&sub_domain=${DNSPOD_SUBDOMAIN}&record_type=${record_type}&record_line=默认&value=${value}&ttl=600"
 
-    local response=$(_DNSPOD_API_REQUEST "ModifyRecord" "$payload")
+    local response=$(_DNSPOD_API_REQUEST "Record.Modify" "$params")
 
-    # 检查响应
-    local error=$(echo "$response" | jq -r '.Response.Error.Code // empty' 2>/dev/null)
-    if [[ -n "$error" ]]; then
-        _RED "修改失败！"
-        echo "$response" | jq -r '.Response.Error.Message' 2>/dev/null
+    # 检查响应状态
+    local status_code=$(echo "$response" | grep -o '"code":"[^"]*"' | head -1 | cut -d'"' -f4)
+    if [[ "$status_code" != "1" ]]; then
+        local message=$(echo "$response" | grep -o '"message":"[^"]*"' | head -1 | cut -d'"' -f4)
+        _RED "修改失败！(code: $status_code)"
+        _RED "消息: $message"
         return 1
     fi
 
@@ -367,13 +294,14 @@ _CHECK_CONFIG() {
     # 根据 DNS 提供商检查相应的配置
     if [[ "$DNS_PROVIDER" == "dnspod" ]]; then
         # DNSPod 配置检查
-        if [[ -z "$DNSPOD_SECRET_ID" ]] || [[ -z "$DNSPOD_SECRET_KEY" ]]; then
-            _RED "错误: 请配置 DNSPOD_SECRET_ID 和 DNSPOD_SECRET_KEY"
-            _YELLOW "获取方式: 腾讯云控制台 → 访问管理 → 访问密钥 → API密钥管理"
-            _YELLOW "https://console.cloud.tencent.com/cam/capi"
+        if [[ -z "$DNSPOD_TOKEN" ]]; then
+            _RED "错误: 请配置 DNSPOD_TOKEN"
+            _YELLOW "获取方式: DNSPod 控制台 → 用户中心 → 安全设置 → API Token"
+            _YELLOW "https://console.dnspod.cn/account/token/token"
+            _YELLOW "格式: ID,Token (例如: 12345,1234567890abcdef1234567890abcdef)"
             exit 1
         fi
-        _GREEN "DNS 提供商: DNSPod (腾讯云)"
+        _GREEN "DNS 提供商: DNSPod"
     elif [[ "$DNS_PROVIDER" == "cloudflare" ]]; then
         # Cloudflare 配置检查
         if [[ -z "$CF_ZONE_ID" ]]; then
