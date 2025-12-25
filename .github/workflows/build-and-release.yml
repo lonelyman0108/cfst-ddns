@@ -30,7 +30,7 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Extract metadata (tags, labels)
+      - name: Extract metadata (tags, labels) for standard image
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -47,19 +47,51 @@ jobs:
             # 添加 commit SHA 短标签（仅手动触发）
             type=sha,prefix=dev-,enable=${{ github.event_name == 'workflow_dispatch' }}
 
-      - name: Build and push
+      - name: Extract metadata (tags, labels) for bundled image
+        id: meta-bundled
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKER_IMAGE }}
+          tags: |
+            # 为 tag 推送生成版本标签（添加 -bundled 后缀）
+            type=semver,pattern={{version}},suffix=-bundled
+            type=semver,pattern={{major}}.{{minor}},suffix=-bundled
+            type=semver,pattern={{major}},suffix=-bundled
+            # 为主分支推送生成 latest-bundled 标签
+            type=raw,value=latest-bundled,enable={{is_default_branch}}
+            # 手动触发时使用 dev-bundled 标签
+            type=raw,value=dev-bundled,enable=${{ github.event_name == 'workflow_dispatch' }}
+            # 添加 commit SHA 短标签（仅手动触发）
+            type=sha,prefix=dev-bundled-,enable=${{ github.event_name == 'workflow_dispatch' }}
+
+      - name: Build and push standard image
         uses: docker/build-push-action@v5
         with:
           context: .
+          file: ./Dockerfile
           platforms: linux/amd64,linux/arm64,linux/arm/v7
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=standard
+          cache-to: type=gha,mode=max,scope=standard
+
+      - name: Build and push bundled image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.bundled
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta-bundled.outputs.tags }}
+          labels: ${{ steps.meta-bundled.outputs.labels }}
+          cache-from: type=gha,scope=bundled
+          cache-to: type=gha,mode=max,scope=bundled
 
       - name: Image digest
-        run: echo "Image pushed with digest ${{ steps.build-and-push.outputs.digest }}"
+        run: |
+          echo "Standard image pushed"
+          echo "Bundled image pushed"
 
   create-release:
     runs-on: ubuntu-latest
@@ -84,10 +116,17 @@ jobs:
           body: |
             ## Docker Images
 
-            This release has been automatically built and pushed to Docker Hub:
+            This release has been automatically built and pushed to Docker Hub with two variants:
 
+            ### Standard Image (Runtime Download)
+            CloudflareSpeedTest is downloaded at container startup:
             - `${{ env.DOCKER_IMAGE }}:${{ steps.version.outputs.version }}`
             - `${{ env.DOCKER_IMAGE }}:latest`
+
+            ### Bundled Image (Embedded cfst)
+            CloudflareSpeedTest is embedded during build time:
+            - `${{ env.DOCKER_IMAGE }}:${{ steps.version.outputs.version }}-bundled`
+            - `${{ env.DOCKER_IMAGE }}:latest-bundled`
 
             ### Multi-platform support
             - linux/amd64
@@ -95,8 +134,14 @@ jobs:
             - linux/arm/v7
 
             ### Pull the image
+            Standard version:
             ```bash
             docker pull ${{ env.DOCKER_IMAGE }}:${{ steps.version.outputs.version }}
+            ```
+
+            Bundled version:
+            ```bash
+            docker pull ${{ env.DOCKER_IMAGE }}:${{ steps.version.outputs.version }}-bundled
             ```
           draft: false
           prerelease: false

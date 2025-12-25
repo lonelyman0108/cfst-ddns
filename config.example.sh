@@ -9,6 +9,20 @@
 # 3. config.sh 会被 .gitignore 忽略，不会泄露敏感信息
 
 # =========================
+# DNS 提供商选择
+# =========================
+# 支持的提供商：cloudflare, dnspod
+DNS_PROVIDER="cloudflare"
+
+# =========================
+# 要更新的域名列表（空格分隔，支持多个域名）
+# =========================
+# Cloudflare 示例：DNS_RECORD_NAMES="test1.example.com test2.example.com"
+# DNSPod 示例：DNS_RECORD_NAMES="test1.example.com test2.example.com example.com"
+# 注意：对于DNSPod，会自动解析主域名和子域名
+DNS_RECORD_NAMES="test.example.com"
+
+# =========================
 # Cloudflare API 配置
 # =========================
 
@@ -22,13 +36,19 @@ CF_API_TOKEN=""
 CF_API_KEY=""
 CF_EMAIL=""
 
-# Zone ID 和域名配置
+# Zone ID 配置
 # Zone ID 获取：Cloudflare Dashboard → 选择域名 → 右侧 API 区域
 CF_ZONE_ID="your_zone_id_here"
 
-# 要更新的域名列表（空格分隔，支持多个域名）
-# 示例：CF_RECORD_NAMES="test1.example.com test2.example.com test3.example.com"
-CF_RECORD_NAMES="test.example.com"
+# =========================
+# DNSPod API 配置
+# =========================
+
+# DNSPod API Token
+# 获取方式：DNSPod 控制台 → 用户中心 → 安全设置 → API Token
+# https://console.dnspod.cn/account/token/token
+# 格式：ID,Token (例如: 12345,1234567890abcdef1234567890abcdef)
+DNSPOD_TOKEN=""
 
 # =========================
 # 测速配置
@@ -69,11 +89,11 @@ SKIP_SPEED_TEST="false"
 # 下载配置
 # =========================
 
-# GitHub 镜像站点（可选，加速下载 CloudflareSpeedTest）
-# 留空使用官方 GitHub，或使用以下镜像站点之一：
-# GITHUB_MIRROR="https://ghproxy.com/https://github.com"
-# GITHUB_MIRROR="https://mirror.ghproxy.com/https://github.com"
-# GITHUB_MIRROR="https://gh.api.99988866.xyz/https://github.com"
+# GitHub 镜像站点（用于加速下载 CloudflareSpeedTest）
+# 留空则使用官方 GitHub，国内服务器建议配置镜像站点
+# 注意：由于镜像站点可用性会变化，请根据实际情况选择
+# 镜像站点示例：
+# GITHUB_MIRROR="https://你的镜像站点"
 GITHUB_MIRROR=""
 
 # =========================

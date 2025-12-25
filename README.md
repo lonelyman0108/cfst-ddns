@@ -4,11 +4,12 @@ CloudflareSpeedTest DDNS 自动更新脚本
 
 ## 功能说明
 
-自动执行 CloudflareSpeedTest 测速，并将最优 IP 通过 Cloudflare API 更新到指定域名的 DNS 记录。
+自动执行 CloudflareSpeedTest 测速，并将最优 IP 通过 DNS API 更新到指定域名的 DNS 记录。
 
 ### 主要特性
 
 - ✅ 自动测速获取最优 Cloudflare IP
+- ✅ **支持多个 DNS 提供商**（Cloudflare、DNSPod/腾讯云）
 - ✅ 支持多域名同时更新
 - ✅ 支持 IPv4/IPv6 双栈测速和更新
 - ✅ 支持多种通知方式（Bark、Telegram）
@@ -44,9 +45,26 @@ docker-compose logs -f cfst-ddns
 ```
 
 **可用镜像标签：**
-- `lonelyman0108/cfst-ddns:latest` - 最新版本（主分支）
-- `lonelyman0108/cfst-ddns:v1.0.0` - 特定版本（语义化版本）
-- `lonelyman0108/cfst-ddns:main` - 主分支最新构建
+- `lonelyman0108/cfst-ddns:latest` - 最新版本（运行时下载 cfst）
+- `lonelyman0108/cfst-ddns:latest-bundled` - 最新版本（预内置 cfst）
+- `lonelyman0108/cfst-ddns:v1.0.0` - 特定版本（运行时下载 cfst）
+- `lonelyman0108/cfst-ddns:v1.0.0-bundled` - 特定版本（预内置 cfst）
+
+**镜像版本说明：**
+
+本项目提供两种 Docker 镜像变体：
+
+1. **标准版本** (`latest`, `v1.0.0`)
+   - CloudflareSpeedTest 在容器首次启动时下载
+   - 镜像体积更小
+   - 适合网络环境良好的场景
+   - 可通过 `GITHUB_MIRROR` 环境变量使用镜像站点
+
+2. **捆绑版本** (`latest-bundled`, `v1.0.0-bundled`)
+   - CloudflareSpeedTest 在镜像构建时已内置
+   - 镜像体积稍大，但启动更快
+   - 无需网络下载，开箱即用
+   - **推荐用于生产环境或网络受限场景**
 
 ### 方式二：从源码构建 Docker 镜像
 
@@ -60,10 +78,17 @@ mkdir -p data
 cp config.example.sh data/config.sh
 vim data/config.sh  # 编辑配置
 
-# 3. 启动定时任务（每6小时执行一次）
+# 3. 构建镜像（选择一种）
+# 标准版本（运行时下载 cfst）
+docker build -f Dockerfile -t cfst-ddns:latest .
+
+# 捆绑版本（构建时内置 cfst）
+docker build -f Dockerfile.bundled -t cfst-ddns:latest .
+
+# 4. 启动定时任务（每6小时执行一次）
 docker-compose up -d
 
-# 4. 查看日志
+# 5. 查看日志
 docker-compose logs -f cfst-ddns
 ```
 
@@ -87,7 +112,9 @@ vim config.sh
 
 ## 详细使用步骤
 
-### 1. 获取 Cloudflare API 凭证
+### 1. 选择 DNS 提供商并获取 API 凭证
+
+#### 选项 A：使用 Cloudflare
 
 **方式一：使用 API Token（推荐）**
 
@@ -105,13 +132,22 @@ vim config.sh
 2. My Profile → API Tokens → Global API Key
 3. 点击 "View" 并复制
 
-### 2. 获取 Zone ID
+**获取 Zone ID：**
 
 1. 进入 Cloudflare Dashboard
 2. 选择你的域名
 3. 右侧 "API" 区域可以看到 Zone ID
 
-### 3. 配置脚本
+#### 选项 B：使用 DNSPod
+
+1. 登录 [DNSPod 控制台](https://console.dnspod.cn/)
+2. 进入 [用户中心 → 安全设置 → API Token](https://console.dnspod.cn/account/token/token)
+3. 创建 Token，获取：
+   - **ID**（数字ID）
+   - **Token**（字符串）
+4. 将两者组合为 `ID,Token` 格式（例如：`12345,1234567890abcdef1234567890abcdef`）
+
+### 2. 配置脚本
 
 **推荐方式：使用配置文件（避免敏感信息泄露）**
 
@@ -125,7 +161,15 @@ vim config.sh  # 或使用其他编辑器
 
 **配置文件示例（[config.example.sh](config.example.sh)）：**
 
+#### Cloudflare 配置示例
+
 ```bash
+# ========== DNS 提供商选择 ==========
+DNS_PROVIDER="cloudflare"
+
+# ========== 要更新的域名列表 ==========
+DNS_RECORD_NAMES="test1.example.com test2.example.com"
+
 # ========== Cloudflare API 配置 ==========
 # 方式一：使用 API Token（推荐）
 CF_API_TOKEN="your_api_token_here"
@@ -135,11 +179,26 @@ CF_ZONE_ID="your_zone_id_here"
 # CF_API_EMAIL="your_email@example.com"
 # CF_API_KEY="your_global_api_key"
 # CF_ZONE_ID="your_zone_id_here"
+```
 
-# ========== DNS 记录配置 ==========
-# 要更新的域名（支持多个域名，空格分隔）
-CF_RECORD_NAMES="test1.example.com test2.example.com"
+#### DNSPod 配置示例
 
+```bash
+# ========== DNS 提供商选择 ==========
+DNS_PROVIDER="dnspod"
+
+# ========== 要更新的域名列表 ==========
+# 注意：DNSPod 会自动解析主域名和子域名
+DNS_RECORD_NAMES="test.example.com www.example.com example.com"
+
+# ========== DNSPod API 配置 ==========
+# 格式：ID,Token（例如：12345,1234567890abcdef1234567890abcdef）
+DNSPOD_TOKEN="your_id,your_token"
+```
+
+#### 通用配置（所有提供商）
+
+```bash
 # ========== 测速配置 ==========
 # CloudflareSpeedTest 测速参数
 # -n: 测速线程数量 -t: 延迟测速次数 -sl: 下载速度下限(MB/s)
@@ -178,7 +237,7 @@ DATA_DIR=""
 
 编辑 [cfst_ddns.sh](cfst_ddns.sh:29-34) 文件的默认配置区域。
 
-### 4. 可选：调整测速参数
+### 3. 可选：调整测速参数
 
 在 `config.sh` 中修改测速相关配置：
 
@@ -210,7 +269,7 @@ SKIP_SPEED_TEST="false"
 
 设置 `SKIP_SPEED_TEST="true"` 可跳过测速，直接使用上次保存的结果，方便快速测试其他步骤（如 DNS 更新、通知等）。
 
-### 5. 配置通知（可选）
+### 4. 配置通知（可选）
 
 脚本支持多种通知方式，可以同时启用。
 
@@ -242,7 +301,7 @@ TG_CHAT_ID="123456789"
 4. 访问 `https://api.telegram.org/bot<你的Token>/getUpdates` 获取 Chat ID
 5. 填入配置文件
 
-### 6. 运行脚本
+### 5. 运行脚本
 
 #### 本地运行
 
@@ -346,14 +405,24 @@ export GITHUB_MIRROR="https://你的镜像站点"  # 可选
 
 ### 使用预构建镜像（推荐）
 
-项目提供了多架构 Docker 镜像，自动构建并发布到 Docker Hub：
+项目提供了两种 Docker 镜像变体，均支持多架构，自动构建并发布到 Docker Hub：
 
+**1. 标准版本（运行时下载 cfst）**
 ```bash
 # 拉取最新镜像
 docker pull lonelyman0108/cfst-ddns:latest
 
 # 或拉取特定版本
 docker pull lonelyman0108/cfst-ddns:v1.0.0
+```
+
+**2. 捆绑版本（构建时内置 cfst，推荐）**
+```bash
+# 拉取最新捆绑镜像
+docker pull lonelyman0108/cfst-ddns:latest-bundled
+
+# 或拉取特定版本的捆绑镜像
+docker pull lonelyman0108/cfst-ddns:v1.0.0-bundled
 ```
 
 **支持的架构：**
@@ -367,21 +436,42 @@ Docker 会自动选择适合你系统的架构镜像。
 
 如果需要自己构建镜像：
 
+**标准版本（运行时下载 cfst）：**
 ```bash
 # 本地构建
-docker build -t cfst-ddns:latest .
+docker build -f Dockerfile -t cfst-ddns:latest .
 
 # 使用 docker-compose 构建
 docker-compose build
 ```
 
+**捆绑版本（构建时内置 cfst）：**
+```bash
+# 本地构建
+docker build -f Dockerfile.bundled -t cfst-ddns:latest .
+
+# 使用构建参数指定镜像站点（可选）
+docker build -f Dockerfile.bundled \
+  --build-arg GITHUB_MIRROR="https://你的镜像站点" \
+  -t cfst-ddns:latest .
+
+# 使用构建参数指定 cfst 版本（可选）
+docker build -f Dockerfile.bundled \
+  --build-arg CFST_VERSION="v2.2.5" \
+  -t cfst-ddns:latest .
+```
+
 ### CI/CD 自动构建
 
-项目使用 GitHub Actions 自动构建和推送 Docker 镜像到 Docker Hub。
+项目使用 GitHub Actions 自动构建和推送两种 Docker 镜像变体到 Docker Hub。
 
 **自动触发条件：**
-- 推送代码到 `main` 或 `master` 分支 → 生成 `latest` 标签
-- 推送 Git 标签（如 `v1.0.0`） → 生成版本标签（`1.0.0`、`1.0`、`1`）
+- 推送 Git 标签（如 `v1.0.0`） → 生成版本标签
+  - 标准版本：`1.0.0`、`1.0`、`1`、`latest`
+  - 捆绑版本：`1.0.0-bundled`、`1.0-bundled`、`1-bundled`、`latest-bundled`
+- 手动触发（workflow_dispatch） → 生成开发标签
+  - 标准版本：`dev`、`dev-{sha}`
+  - 捆绑版本：`dev-bundled`、`dev-bundled-{sha}`
 - 创建 Pull Request → 仅构建不推送
 
 **如需自己配置 CI/CD：**
@@ -539,6 +629,22 @@ launchctl load ~/Library/LaunchAgents/com.cfst.ddns.plist
 7. 显示执行结果
 
 ## 注意事项
+
+### DNS 提供商特性
+
+#### Cloudflare
+- 需要配置 Zone ID 和 API Token/Key
+- 支持 API Token（推荐）和 Global API Key 两种认证方式
+- 所有记录必须在同一个 Zone 下
+
+#### DNSPod
+- 使用简化的 DNSPod Token API（`dnsapi.cn`）
+- 自动解析主域名和子域名（例如：`test.example.com` → 主域名 `example.com`，子域名 `test`）
+- 支持裸域名（例如：`example.com` → 主域名 `example.com`，子域名 `@`）
+- 只需配置一个 Token（格式：`ID,Token`）
+- **重要**: 不同主域名需要分别执行脚本（DNSPod API 限制）
+
+### 通用注意事项
 
 1. **首次使用建议**：先手动执行一次，确认配置正确
 2. **API Token 权限**：确保 Token 有 DNS 编辑权限
