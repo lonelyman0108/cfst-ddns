@@ -40,8 +40,8 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
-            # 为主分支推送生成 latest 标签
-            type=raw,value=latest,enable={{is_default_branch}}
+            # 为 tag 推送生成 latest 标签
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
             # 手动触发时使用 dev 标签
             type=raw,value=dev,enable=${{ github.event_name == 'workflow_dispatch' }}
             # 添加 commit SHA 短标签（仅手动触发）
@@ -57,8 +57,8 @@ jobs:
             type=semver,pattern={{version}},suffix=-bundled
             type=semver,pattern={{major}}.{{minor}},suffix=-bundled
             type=semver,pattern={{major}},suffix=-bundled
-            # 为主分支推送生成 latest-bundled 标签
-            type=raw,value=latest-bundled,enable={{is_default_branch}}
+            # 为 tag 推送生成 latest-bundled 标签
+            type=raw,value=latest-bundled,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
             # 手动触发时使用 dev-bundled 标签
             type=raw,value=dev-bundled,enable=${{ github.event_name == 'workflow_dispatch' }}
             # 添加 commit SHA 短标签（仅手动触发）
