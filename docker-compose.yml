@@ -44,7 +44,7 @@ services:
 
     volumes:
       - ./data:/app/data
-      - ./cfst:/app/cfst
+      # - ./cfst:/app/cfst
       - ./logs:/var/log
 
     # 自动重启策略
