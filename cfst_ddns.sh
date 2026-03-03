@@ -145,9 +145,10 @@ _DNSPOD_GET_RECORD() {
         return 1
     fi
 
-    # 获取记录信息（使用 grep 而不是 jq，避免依赖）
-    DNSPOD_RECORD_ID=$(echo "$response" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
-    CURRENT_IP=$(echo "$response" | grep -o '"value":"[^"]*"' | head -1 | cut -d'"' -f4)
+    # 只在 records 数组中提取记录信息，避免误取 domain.id
+    local records_payload=$(echo "$response" | grep -o '"records":\[[^]]*\]')
+    DNSPOD_RECORD_ID=$(echo "$records_payload" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+    CURRENT_IP=$(echo "$records_payload" | grep -o '"value":"[^"]*"' | head -1 | cut -d'"' -f4)
     DNSPOD_MAIN_DOMAIN="$main_domain"
     DNSPOD_SUBDOMAIN="$subdomain"
 
@@ -195,6 +196,7 @@ _DNSPOD_MODIFY_RECORD() {
     local record_id="$3"
 
     _BLUE "修改现有 DNSPod 记录..."
+    _BLUE "记录参数: domain=${DNSPOD_MAIN_DOMAIN}, sub_domain=${DNSPOD_SUBDOMAIN}, type=${record_type}, record_id=${record_id}, value=${value}"
 
     # 构建请求参数
     local params="domain=${DNSPOD_MAIN_DOMAIN}&record_id=${record_id}&sub_domain=${DNSPOD_SUBDOMAIN}&record_type=${record_type}&record_line=默认&value=${value}&ttl=600"
@@ -207,6 +209,8 @@ _DNSPOD_MODIFY_RECORD() {
         local message=$(echo "$response" | grep -o '"message":"[^"]*"' | head -1 | cut -d'"' -f4)
         _RED "修改失败！(code: $status_code)"
         _RED "消息: $message"
+        _YELLOW "调试: 传入 record_id=${record_id}"
+        _YELLOW "调试: API 响应: $response"
         return 1
     fi
 
