@@ -1,123 +1,73 @@
-FROM alpine:latest
+# syntax=docker/dockerfile:1
+#
+# 构建目标：
+#   standard（默认）：首次启动时自动下载 cfst（国内网络请在设置中配置 GitHub 镜像）
+#   bundled         ：镜像内预置 cfst，离线可用
+#
+#   docker build -t cfst-ddns .
+#   docker build --target bundled -t cfst-ddns:bundled .
 
-# 安装必要的依赖
-RUN apk add --no-cache \
-    bash \
-    curl \
-    jq \
-    ca-certificates \
-    tzdata
+# ---------- 前端 ----------
+FROM --platform=$BUILDPLATFORM node:22-alpine AS web
+WORKDIR /src/web
+RUN corepack enable
+COPY web/package.json web/pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+COPY web/ ./
+RUN pnpm build
 
-# 设置时区
-ENV TZ=Asia/Shanghai
+# ---------- 后端（交叉编译，无 CGO） ----------
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
+ARG TARGETOS TARGETARCH TARGETVARIANT
+ARG VERSION=dev
+ARG COMMIT=none
+ARG BUILD_TIME=unknown
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY cmd ./cmd
+COPY internal ./internal
+COPY web/embed.go ./web/embed.go
+COPY --from=web /src/web/dist ./web/dist
+RUN export CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH; \
+    if [ "$TARGETARCH" = "arm" ]; then export GOARM="${TARGETVARIANT#v}"; fi; \
+    go build -trimpath \
+      -ldflags "-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.buildTime=${BUILD_TIME}" \
+      -o /out/cfst-ddns ./cmd/cfst-ddns
 
-# 创建工作目录
+# ---------- 预置 cfst（仅 bundled 使用） ----------
+FROM --platform=$BUILDPLATFORM alpine:3.22 AS cfst
+ARG TARGETARCH TARGETVARIANT
+ARG CFST_VERSION=v2.3.5
+RUN set -eux; \
+    case "$TARGETARCH" in \
+      arm) arch="armv${TARGETVARIANT#v}" ;; \
+      *)   arch="$TARGETARCH" ;; \
+    esac; \
+    mkdir -p /opt/cfst; \
+    wget -qO- "https://github.com/XIU2/CloudflareSpeedTest/releases/download/${CFST_VERSION}/cfst_linux_${arch}.tar.gz" \
+      | tar -xz -C /opt/cfst; \
+    [ -f /opt/cfst/cfst ] || mv /opt/cfst/CloudflareST /opt/cfst/cfst; \
+    chmod +x /opt/cfst/cfst; \
+    echo "$CFST_VERSION" > /opt/cfst/VERSION
+
+# ---------- 运行时 ----------
+FROM alpine:3.22 AS runtime
+RUN apk add --no-cache ca-certificates tzdata
+ENV TZ=Asia/Shanghai \
+    CFST_DDNS_LISTEN=:8080 \
+    CFST_DDNS_DATA=/app/data
+COPY --from=build /out/cfst-ddns /usr/local/bin/cfst-ddns
 WORKDIR /app
-
-# 复制脚本文件
-COPY cfst_ddns.sh /app/
-COPY install.sh /app/
-COPY config.example.sh /app/
-
-# 设置执行权限
-RUN chmod +x /app/cfst_ddns.sh /app/install.sh
-
-# 创建 cfst 目录（安装脚本会下载到这里）
-RUN mkdir -p /app/cfst
-
-# 创建数据目录（用于持久化测速结果和配置）
-RUN mkdir -p /app/data
-
-# 环境变量：GitHub 镜像站点（可选）
-ENV GITHUB_MIRROR=""
-
-# 环境变量：CloudflareSpeedTest 版本号（可选,当 API 访问失败时使用）
-ENV CFST_VERSION=""
-
-# 环境变量：是否在启动时自动安装 cfst
-ENV AUTO_INSTALL_CFST="true"
-
-# 环境变量：数据目录（用于持久化测速结果）
-ENV DATA_DIR="/app/data"
-
-# 环境变量：是否启用定时任务
-ENV ENABLE_CRON="false"
-
-# 环境变量：定时任务执行频率（cron 表达式）
-ENV CRON_SCHEDULE="0 */6 * * *"
-
-# 环境变量：日志文件大小限制（字节），超过此大小自动轮转
-ENV LOG_MAX_SIZE="10485760"
-
-# 创建日志轮转脚本
-RUN echo '#!/bin/bash' > /app/rotate_log.sh && \
-    echo 'LOG_FILE="/var/log/cfst-ddns.log"' >> /app/rotate_log.sh && \
-    echo 'MAX_SIZE=${LOG_MAX_SIZE:-10485760}  # 默认 10MB' >> /app/rotate_log.sh && \
-    echo 'if [[ -f "$LOG_FILE" ]]; then' >> /app/rotate_log.sh && \
-    echo '    SIZE=$(stat -c%s "$LOG_FILE" 2>/dev/null || stat -f%z "$LOG_FILE" 2>/dev/null || echo 0)' >> /app/rotate_log.sh && \
-    echo '    if [[ $SIZE -gt $MAX_SIZE ]]; then' >> /app/rotate_log.sh && \
-    echo '        mv "$LOG_FILE" "$LOG_FILE.old"' >> /app/rotate_log.sh && \
-    echo '        touch "$LOG_FILE"' >> /app/rotate_log.sh && \
-    echo '        echo "$(date "+%Y-%m-%d %H:%M:%S") - 日志已轮转" > "$LOG_FILE"' >> /app/rotate_log.sh && \
-    echo '        # 只保留最新的旧日志' >> /app/rotate_log.sh && \
-    echo '        rm -f "$LOG_FILE.old.old"' >> /app/rotate_log.sh && \
-    echo '        [[ -f "$LOG_FILE.old" ]] && mv "$LOG_FILE.old" "$LOG_FILE.old.old" 2>/dev/null || true' >> /app/rotate_log.sh && \
-    echo '    fi' >> /app/rotate_log.sh && \
-    echo 'fi' >> /app/rotate_log.sh && \
-    chmod +x /app/rotate_log.sh
-
-# 创建启动脚本
-RUN echo '#!/bin/bash' > /app/entrypoint.sh && \
-    echo 'set -e' >> /app/entrypoint.sh && \
-    echo '' >> /app/entrypoint.sh && \
-    echo '# 检查配置文件是否存在' >> /app/entrypoint.sh && \
-    echo 'if [[ ! -f /app/data/config.sh ]]; then' >> /app/entrypoint.sh && \
-    echo '    echo "========================================"' >> /app/entrypoint.sh && \
-    echo '    echo "错误: 未找到配置文件"' >> /app/entrypoint.sh && \
-    echo '    echo "========================================"' >> /app/entrypoint.sh && \
-    echo '    echo ""' >> /app/entrypoint.sh && \
-    echo '    echo "请按以下步骤配置："' >> /app/entrypoint.sh && \
-    echo '    echo "1. 创建配置文件: cp config.example.sh data/config.sh"' >> /app/entrypoint.sh && \
-    echo '    echo "2. 编辑配置文件: vim data/config.sh"' >> /app/entrypoint.sh && \
-    echo '    echo "3. 填入 Cloudflare API 凭证和域名信息"' >> /app/entrypoint.sh && \
-    echo '    echo ""' >> /app/entrypoint.sh && \
-    echo '    echo "配置文件应位于: ./data/config.sh"' >> /app/entrypoint.sh && \
-    echo '    echo "========================================"' >> /app/entrypoint.sh && \
-    echo '    exit 1' >> /app/entrypoint.sh && \
-    echo 'fi' >> /app/entrypoint.sh && \
-    echo '' >> /app/entrypoint.sh && \
-    echo '# 创建配置文件软链接' >> /app/entrypoint.sh && \
-    echo 'if [[ ! -f /app/config.sh ]]; then' >> /app/entrypoint.sh && \
-    echo '    echo "使用配置文件: /app/data/config.sh"' >> /app/entrypoint.sh && \
-    echo '    ln -s /app/data/config.sh /app/config.sh' >> /app/entrypoint.sh && \
-    echo 'fi' >> /app/entrypoint.sh && \
-    echo '' >> /app/entrypoint.sh && \
-    echo '# 如果启用自动安装且 cfst 不存在，则运行安装脚本' >> /app/entrypoint.sh && \
-    echo 'if [[ "$AUTO_INSTALL_CFST" == "true" ]] && [[ ! -f /app/cfst/cfst ]]; then' >> /app/entrypoint.sh && \
-    echo '    echo "正在安装 CloudflareSpeedTest..."' >> /app/entrypoint.sh && \
-    echo '    cd /app && ./install.sh' >> /app/entrypoint.sh && \
-    echo 'fi' >> /app/entrypoint.sh && \
-    echo '' >> /app/entrypoint.sh && \
-    echo '# 判断是否启用定时任务' >> /app/entrypoint.sh && \
-    echo 'if [[ "$ENABLE_CRON" == "true" ]]; then' >> /app/entrypoint.sh && \
-    echo '    echo "========================================"' >> /app/entrypoint.sh && \
-    echo '    echo "启用定时任务模式"' >> /app/entrypoint.sh && \
-    echo '    echo "========================================"' >> /app/entrypoint.sh && \
-    echo '    echo "定时任务设置: ${CRON_SCHEDULE}"' >> /app/entrypoint.sh && \
-    echo '    # 设置定时任务：执行脚本前先轮转日志' >> /app/entrypoint.sh && \
-    echo '    echo "${CRON_SCHEDULE} /app/rotate_log.sh && cd /app && ./cfst_ddns.sh 2>&1 | tee -a /var/log/cfst-ddns.log > /proc/1/fd/1" | crontab -' >> /app/entrypoint.sh && \
-    echo '    echo "定时任务已设置，crond 启动中..."' >> /app/entrypoint.sh && \
-    echo '    exec crond -f -l 2' >> /app/entrypoint.sh && \
-    echo 'else' >> /app/entrypoint.sh && \
-    echo '    echo "========================================"' >> /app/entrypoint.sh && \
-    echo '    echo "单次执行模式"' >> /app/entrypoint.sh && \
-    echo '    echo "========================================"' >> /app/entrypoint.sh && \
-    echo '    exec /app/cfst_ddns.sh' >> /app/entrypoint.sh && \
-    echo 'fi' >> /app/entrypoint.sh && \
-    chmod +x /app/entrypoint.sh
-
-# 挂载点
 VOLUME ["/app/data"]
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD ["cfst-ddns", "healthcheck"]
+ENTRYPOINT ["cfst-ddns"]
+CMD ["serve"]
 
-# 启动脚本
-ENTRYPOINT ["/app/entrypoint.sh"]
+FROM runtime AS bundled
+COPY --from=cfst /opt/cfst /opt/cfst
+ENV CFST_DDNS_BUNDLE_DIR=/opt/cfst
+
+# 默认目标放在最后
+FROM runtime AS standard
