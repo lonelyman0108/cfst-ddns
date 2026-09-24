@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import AppLogo from '@/components/AppLogo.vue'
 import { ChevronsUpDown, KeyRound, LogOut, Monitor, Moon, Search, Sun } from '@lucide/vue'
 import {
   Sidebar,
@@ -88,8 +89,8 @@ async function logout() {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" as-child>
               <router-link to="/">
-                <div class="bg-primary/10 flex aspect-square size-8 items-center justify-center rounded-lg">
-                  <img src="/favicon.svg" alt="" class="size-5" />
+                <div class="flex size-8 shrink-0 items-center justify-center">
+                  <AppLogo class="size-8" />
                 </div>
                 <div class="grid flex-1 text-left leading-tight">
                   <span class="truncate font-semibold">cfst-ddns</span>
