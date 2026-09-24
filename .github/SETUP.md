@@ -33,29 +33,20 @@
 > 5. 点击 "Generate" 并复制生成的 token
 > 6. 将 token 粘贴到 GitHub Secret 中
 
-### 3. 触发构建
+### 3. 触发规则
 
-配置完成后，以下操作会自动触发镜像构建：
-
-#### 自动触发
-- **推送到主分支**：推送代码到 `main` 或 `master` 分支会触发构建并推送 `latest` 标签
-- **创建标签**：推送 `v*` 格式的 Git 标签（如 `v1.0.0`）会构建版本化镜像
-- **Pull Request**：创建 PR 会触发构建但不会推送到 Docker Hub
-
-#### 手动触发
-在仓库的 Actions 页面，选择 "Build and Push Docker Image" 工作流，点击 "Run workflow" 手动触发。
+| 触发 | 运行内容 |
+|---|---|
+| 推送到 `main` / `dev` / `refactor/**`，或 Pull Request | 前端构建 + `go vet` + `go test`（不推送镜像） |
+| 推送 `v*` 标签 | 测试 → 多平台二进制 → 推送 standard/bundled 镜像 → 创建 GitHub Release（附二进制与 CHANGELOG 摘录） |
+| 手动触发（Actions 页面 Run workflow） | 测试 → 多平台二进制（Artifact）→ 推送 `dev` / `dev-bundled` 镜像 |
 
 ### 4. 镜像标签说明
 
-构建成功后，会生成以下标签：
-
-| 触发条件 | 生成的标签 | 示例 |
-|---------|-----------|------|
-| 推送到主分支 | `latest` | `lonelyman0108/cfst-ddns:latest` |
-| 推送标签 `v1.2.3` | `1.2.3`, `1.2`, `1`, `latest` | `lonelyman0108/cfst-ddns:1.2.3` |
-| 推送到分支 `dev` | `dev` | `lonelyman0108/cfst-ddns:dev` |
-| PR #42 | `pr-42` | `lonelyman0108/cfst-ddns:pr-42` |
-| Commit SHA | `main-abc1234` | `lonelyman0108/cfst-ddns:main-abc1234` |
+| 触发条件 | standard 标签 | bundled 标签（预置 cfst） |
+|---|---|---|
+| 推送标签 `v2.0.0` | `2.0.0`, `2.0`, `2`, `latest` | `2.0.0-bundled`, `2.0-bundled`, `2-bundled`, `latest-bundled` |
+| 手动触发 | `dev`, `dev-<sha>` | `dev-bundled`, `dev-bundled-<sha>` |
 
 ### 5. 支持的架构
 
@@ -72,23 +63,26 @@ Docker 会根据你的系统自动选择合适的架构。
 要发布新版本：
 
 ```bash
-# 1. 创建并推送 tag
-git tag -a v1.0.0 -m "Release version 1.0.0"
-git push origin v1.0.0
+# 1. 更新 CHANGELOG.md（可用 scripts/generate-changelog.sh 生成草稿）
+./scripts/generate-changelog.sh v2.0.0
 
-# 2. GitHub Actions 会自动构建并推送镜像
-# 3. 用户可以使用 lonelyman0108/cfst-ddns:v1.0.0 或 lonelyman0108/cfst-ddns:1.0.0
+# 2. 创建并推送 tag
+git tag -a v2.0.0 -m "Release v2.0.0"
+git push origin v2.0.0
+
+# 3. GitHub Actions 自动构建镜像与二进制并创建 Release
 ```
 
 ### 7. 查看构建状态
 
 1. 进入仓库的 "Actions" 标签页
-2. 查看 "Build and Push Docker Image" 工作流
+2. 查看 "Build and Release" 工作流
 3. 点击具体的运行记录查看详细日志
 
 ### 8. 故障排查
 
 #### 构建失败
+- 先确认 test 任务通过（前端 `pnpm build` 与 `go test`）
 - 检查 Dockerfile 语法是否正确
 - 查看 Actions 日志中的错误信息
 - 确认依赖项是否可用
