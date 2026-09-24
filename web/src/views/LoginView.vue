@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppLogo from '@/components/AppLogo.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
@@ -85,9 +86,7 @@ async function submit() {
 
     <div class="relative z-10 w-full max-w-sm">
       <div class="mb-8 flex flex-col items-center text-center">
-        <div class="bg-card mb-4 flex size-14 items-center justify-center rounded-2xl border shadow-sm">
-          <img src="/favicon.svg" alt="" class="size-9" />
-        </div>
+        <AppLogo class="shadow-primary/25 mb-4 size-14 rounded-[13px] shadow-lg" />
         <h1 class="text-2xl font-semibold tracking-[-0.01em]">cfst-ddns</h1>
         <p class="text-muted-foreground mt-1.5 text-sm">测速优选 Cloudflare IP，自动写入你的 DNS 记录</p>
       </div>
