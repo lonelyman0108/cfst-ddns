@@ -1,0 +1,93 @@
+package api
+
+import (
+	"net/http"
+	"os"
+	"runtime"
+	"strconv"
+	"time"
+
+	"github.com/gin-gonic/gin"
+
+	"github.com/lonelyman0108/cfst-ddns/internal/notify"
+	"github.com/lonelyman0108/cfst-ddns/internal/provider"
+)
+
+type credentials struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+func (s *Server) authStatus(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{"initialized": s.Store.Initialized()})
+}
+
+func (s *Server) authSetup(c *gin.Context) {
+	var req credentials
+	if !bind(c, &req) {
+		return
+	}
+	tok, err := s.Auth.Setup(req.Username, req.Password)
+	if err != nil {
+		fail(c, http.StatusBadRequest, err)
+		return
+	}
+	s.Log.Info("管理员账号已创建", "username", tok.Username)
+	c.JSON(http.StatusOK, tok)
+}
+
+func (s *Server) authLogin(c *gin.Context) {
+	var req credentials
+	if !bind(c, &req) {
+		return
+	}
+	tok, err := s.Auth.Login(c.ClientIP(), req.Username, req.Password)
+	if err != nil {
+		s.Log.Warn("登录失败", "ip", c.ClientIP(), "username", req.Username)
+		fail(c, http.StatusUnauthorized, err)
+		return
+	}
+	c.JSON(http.StatusOK, tok)
+}
+
+func (s *Server) authMe(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{"username": c.GetString("user")})
+}
+
+// authPassword 修改密码；旧令牌全部失效，响应中返回新令牌。
+func (s *Server) authPassword(c *gin.Context) {
+	var req struct {
+		OldPassword string `json:"oldPassword"`
+		NewPassword string `json:"newPassword"`
+	}
+	if !bind(c, &req) {
+		return
+	}
+	tok, err := s.Auth.ChangePassword(req.OldPassword, req.NewPassword)
+	if err != nil {
+		fail(c, http.StatusBadRequest, err)
+		return
+	}
+	s.Log.Info("管理员密码已修改")
+	c.JSON(http.StatusOK, gin.H{"ok": true, "token": tok.Token, "expiresAt": tok.ExpiresAt, "username": tok.Username})
+}
+
+func (s *Server) metaProviders(c *gin.Context) { c.JSON(http.StatusOK, provider.Metas()) }
+func (s *Server) metaNotifiers(c *gin.Context) { c.JSON(http.StatusOK, notify.Metas()) }
+
+func (s *Server) systemInfo(c *gin.Context) {
+	tz := os.Getenv("TZ")
+	if tz == "" {
+		tz = time.Local.String()
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"version": s.Build.Version, "commit": s.Build.Commit, "buildTime": s.Build.BuildTime,
+		"goVersion": runtime.Version(), "os": runtime.GOOS, "arch": runtime.GOARCH,
+		"dataDir": s.DataDir, "startedAt": s.StartedAt, "timezone": tz,
+	})
+}
+
+func (s *Server) systemLogs(c *gin.Context) {
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "500"))
+	c.JSON(http.StatusOK, gin.H{"lines": s.AppLog.Tail(limit)})
+}
