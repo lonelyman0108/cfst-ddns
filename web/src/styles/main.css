@@ -1,0 +1,222 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import './fonts.css';
+
+@custom-variant dark (&:is(.dark *));
+
+/* 色板：zinc 中性色 + Cloudflare 橙作为唯一强调色 */
+:root {
+  --radius: 0.625rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.141 0.005 285.823);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.141 0.005 285.823);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.141 0.005 285.823);
+  --primary: oklch(0.68 0.19 45);
+  --primary-foreground: oklch(0.99 0.01 60);
+  --secondary: oklch(0.967 0.001 286.375);
+  --secondary-foreground: oklch(0.21 0.006 285.885);
+  --muted: oklch(0.967 0.001 286.375);
+  --muted-foreground: oklch(0.552 0.016 285.938);
+  --accent: oklch(0.967 0.001 286.375);
+  --accent-foreground: oklch(0.21 0.006 285.885);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.92 0.004 286.32);
+  --input: oklch(0.92 0.004 286.32);
+  --ring: oklch(0.68 0.19 45);
+  --success: oklch(0.6 0.15 155);
+  --warning: oklch(0.72 0.16 75);
+  --info: oklch(0.6 0.15 250);
+  --chart-1: oklch(0.68 0.19 45);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.55 0.15 265);
+  --chart-4: oklch(0.72 0.16 90);
+  --chart-5: oklch(0.6 0.2 330);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.141 0.005 285.823);
+  --sidebar-primary: oklch(0.68 0.19 45);
+  --sidebar-primary-foreground: oklch(0.99 0.01 60);
+  --sidebar-accent: oklch(0.955 0.002 286.375);
+  --sidebar-accent-foreground: oklch(0.21 0.006 285.885);
+  --sidebar-border: oklch(0.92 0.004 286.32);
+  --sidebar-ring: oklch(0.68 0.19 45);
+  --term-bg: oklch(0.17 0.006 285.885);
+  --term-fg: oklch(0.9 0.005 286);
+}
+
+.dark {
+  --background: oklch(0.141 0.005 285.823);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.175 0.005 285.885);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.2 0.006 285.885);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.72 0.18 48);
+  --primary-foreground: oklch(0.18 0.03 45);
+  --secondary: oklch(0.274 0.006 286.033);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.274 0.006 286.033);
+  --muted-foreground: oklch(0.705 0.015 286.067);
+  --accent: oklch(0.274 0.006 286.033);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.72 0.18 48);
+  --success: oklch(0.72 0.15 155);
+  --warning: oklch(0.8 0.15 80);
+  --info: oklch(0.7 0.14 250);
+  --chart-1: oklch(0.72 0.18 48);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.65 0.16 265);
+  --chart-4: oklch(0.8 0.15 90);
+  --chart-5: oklch(0.65 0.2 330);
+  --sidebar: oklch(0.16 0.005 285.885);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.72 0.18 48);
+  --sidebar-primary-foreground: oklch(0.18 0.03 45);
+  --sidebar-accent: oklch(0.24 0.006 286.033);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.72 0.18 48);
+  --term-bg: oklch(0.12 0.004 285.885);
+  --term-fg: oklch(0.9 0.005 286);
+}
+
+@theme inline {
+  /* ---------- 字体 ----------
+   * 西文与数字使用打包的 Inter / JetBrains Mono（仅 latin 子集），中文回退到系统字体 */
+  --font-sans:
+    'Inter Variable', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei UI', 'Microsoft YaHei', 'Noto Sans SC', 'Source Han Sans SC', sans-serif, 'Apple Color Emoji',
+    'Segoe UI Emoji';
+  --font-mono:
+    'JetBrains Mono Variable', ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, 'Liberation Mono',
+    'Microsoft YaHei UI', monospace;
+
+  /* ---------- 字号（控制台基准 14px，最小 12px） ----------
+   * 覆盖 Tailwind 默认的 xs / sm 行高以适配中文；其余为语义化 token */
+  --text-xs: 12px; /* 辅助说明、help、时间戳、Badge */
+  --text-xs--line-height: 1.5;
+  --text-sm: 14px; /* 正文、表单、按钮、表格内容（shadcn 组件默认用 text-sm） */
+  --text-sm--line-height: 1.6;
+  --text-label: 13px; /* 表格表头、字段标签 */
+  --text-label--line-height: 1.5;
+  --text-code: 13px; /* IP、cron 等行内等宽内容 */
+  --text-code--line-height: 1.5;
+  --text-log: 13px; /* 日志面板 */
+  --text-log--line-height: 1.6;
+  --text-card-title: 15px; /* 卡片标题 */
+  --text-card-title--line-height: 1.4;
+  --text-page-title: 22px; /* 页面标题 h1（移动端 20px，见 .page-title） */
+  --text-page-title--line-height: 1.3;
+  --text-stat: 28px; /* 统计卡片大数字 */
+  --text-stat--line-height: 1.2;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-term: var(--term-bg);
+  --color-term-foreground: var(--term-fg);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html,
+  body,
+  #app {
+    height: 100%;
+  }
+  body {
+    @apply bg-background text-foreground text-sm antialiased;
+    font-feature-settings: 'cv11', 'ss01';
+    text-rendering: optimizeLegibility;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  /* 中文最高 600，避免 Windows 雅黑粗体发糊 */
+  b,
+  strong,
+  h1,
+  h2,
+  h3,
+  h4,
+  th:where(:not([class])) {
+    font-weight: 600;
+  }
+  /* 表格数字列对齐、刷新不跳动 */
+  table {
+    font-variant-numeric: tabular-nums;
+  }
+  code {
+    @apply bg-muted text-code rounded px-1 py-0.5 font-mono;
+  }
+}
+
+/* 页面标题：22px，移动端 20px */
+@utility page-title {
+  font-size: var(--text-page-title);
+  line-height: var(--text-page-title--line-height);
+  font-weight: 600;
+  @media (width < 40rem) {
+    font-size: 20px;
+  }
+}
+
+/* 统计大数字：28px，等宽数字，纯数字可略收字距 */
+@utility stat-number {
+  font-size: var(--text-stat);
+  line-height: var(--text-stat--line-height);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+@utility scrollbar-thin {
+  scrollbar-width: thin;
+}
+
+@keyframes indeterminate {
+  0% {
+    left: -35%;
+  }
+  100% {
+    left: 100%;
+  }
+}
