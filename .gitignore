@@ -1,49 +1,31 @@
-# 配置文件（包含敏感信息）
-config.sh
-data/config.sh
+# 运行数据（数据库、密钥、cfst、测速临时文件）
+data/
 
-# 测速结果文件
-result_ddns.txt
-result_ddns.txt.v4
-result_ddns.txt.v6
-result_hosts.txt
-nowip_hosts.txt
+# 构建产物
+/bin/
+/dist/
+/cfst-ddns
+/cfst-ddns.exe
 
-# 数据目录（运行时生成）
-data/*.txt
-data/*.log
+# 前端
+web/node_modules/
+web/dist/*
+!web/dist/.gitkeep
 
-# 日志文件
+# 旧版脚本的运行文件
+legacy/config.sh
+legacy/cfst/
+result_ddns.txt*
+
+# 日志与临时文件
 *.log
-logs/
-
-# CloudflareSpeedTest 可执行文件
-cfst/
-
-# macOS
-.DS_Store
-.AppleDouble
-.LSOverride
-
-# Windows
-Thumbs.db
-ehthumbs.db
-Desktop.ini
-
-# Linux
-*~
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# 临时文件
 *.tmp
 *.bak
-*.backup
 
-# Docker volumes
-docker-volumes/
+# 系统 / IDE
+.DS_Store
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/
+*.swp

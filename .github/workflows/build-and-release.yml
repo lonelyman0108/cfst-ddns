@@ -1,156 +1,219 @@
-name: Build Docker Image and Create Release
+name: Build and Release
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches: [main, dev, 'refactor/**']
+    tags: ['v*']
+  pull_request:
   workflow_dispatch:
 
 env:
   DOCKER_IMAGE: lonelyman0108/cfst-ddns
 
 jobs:
-  build-and-push:
+  # 前端构建 + 后端测试，所有触发都会运行
+  test:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: web/package.json
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Build frontend
+        working-directory: web
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Vet & test
+        run: |
+          go vet ./...
+          go test -race ./...
+
+      - name: Upload frontend dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+          retention-days: 1
+
+  # 多平台二进制，仅 tag 或手动触发
+  binaries:
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+
+      - name: Cross compile
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          [[ "$GITHUB_REF" == refs/tags/v* ]] || VERSION="dev-${GITHUB_SHA::7}"
+          LDFLAGS="-s -w -X main.version=${VERSION} -X main.commit=${GITHUB_SHA::7} -X main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          mkdir -p dist
+          for target in linux/amd64 linux/arm64 linux/armv7 linux/armv6 linux/386 linux/mips linux/mipsle \
+                        linux/mips64 linux/mips64le windows/amd64 windows/arm64 darwin/amd64 darwin/arm64; do
+            os="${target%/*}"; arch="${target#*/}"; goarm=""
+            if [[ "$arch" == armv* ]]; then goarm="${arch#armv}"; goarch=arm; else goarch="$arch"; fi
+            name="cfst-ddns_${VERSION}_${os}_${arch}"
+            bin="cfst-ddns"; [[ "$os" == windows ]] && bin="cfst-ddns.exe"
+            mkdir -p "build/$name"
+            CGO_ENABLED=0 GOOS=$os GOARCH=$goarch GOARM=$goarm GOMIPS=softfloat \
+              go build -trimpath -ldflags "$LDFLAGS" -o "build/$name/$bin" ./cmd/cfst-ddns
+            cp README.md "build/$name/"
+            if [[ "$os" == windows ]]; then
+              (cd build && zip -qr "../dist/$name.zip" "$name")
+            else
+              tar -C build -czf "dist/$name.tar.gz" "$name"
+            fi
+          done
+          (cd dist && sha256sum * > checksums.txt)
+          ls -lh dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binaries
+          path: dist/*
+
+  # Docker 镜像（standard + bundled），仅 tag 或手动触发
+  docker:
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
 
       - name: Login to Docker Hub
-        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Extract metadata (tags, labels) for standard image
+      - name: Build args
+        id: args
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          [[ "$GITHUB_REF" == refs/tags/v* ]] || VERSION="dev-${GITHUB_SHA::7}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      - name: Metadata (standard)
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.DOCKER_IMAGE }}
           tags: |
-            # 为 tag 推送生成版本标签
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
-            # 为 tag 推送生成 latest 标签
+            # 仅推送 tag 时生成 latest
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
-            # 手动触发时使用 dev 标签
+            # 手动触发时使用 dev 标签与 commit SHA 短标签
             type=raw,value=dev,enable=${{ github.event_name == 'workflow_dispatch' }}
-            # 添加 commit SHA 短标签（仅手动触发）
             type=sha,prefix=dev-,enable=${{ github.event_name == 'workflow_dispatch' }}
 
-      - name: Extract metadata (tags, labels) for bundled image
+      - name: Metadata (bundled)
         id: meta-bundled
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.DOCKER_IMAGE }}
           tags: |
-            # 为 tag 推送生成版本标签（添加 -bundled 后缀）
             type=semver,pattern={{version}},suffix=-bundled
             type=semver,pattern={{major}}.{{minor}},suffix=-bundled
             type=semver,pattern={{major}},suffix=-bundled
-            # 为 tag 推送生成 latest-bundled 标签
             type=raw,value=latest-bundled,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
-            # 手动触发时使用 dev-bundled 标签
             type=raw,value=dev-bundled,enable=${{ github.event_name == 'workflow_dispatch' }}
-            # 添加 commit SHA 短标签（仅手动触发）
             type=sha,prefix=dev-bundled-,enable=${{ github.event_name == 'workflow_dispatch' }}
 
-      - name: Build and push standard image
-        uses: docker/build-push-action@v5
+      - name: Build and push (standard)
+        uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./Dockerfile
+          target: standard
           platforms: linux/amd64,linux/arm64,linux/arm/v7
-          push: ${{ github.event_name != 'pull_request' }}
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.args.outputs.version }}
+            COMMIT=${{ github.sha }}
+            BUILD_TIME=${{ steps.args.outputs.time }}
           cache-from: type=gha,scope=standard
           cache-to: type=gha,mode=max,scope=standard
 
-      - name: Build and push bundled image
-        uses: docker/build-push-action@v5
+      - name: Build and push (bundled)
+        uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./Dockerfile.bundled
+          target: bundled
           platforms: linux/amd64,linux/arm64,linux/arm/v7
-          push: ${{ github.event_name != 'pull_request' }}
+          push: true
           tags: ${{ steps.meta-bundled.outputs.tags }}
           labels: ${{ steps.meta-bundled.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.args.outputs.version }}
+            COMMIT=${{ github.sha }}
+            BUILD_TIME=${{ steps.args.outputs.time }}
           cache-from: type=gha,scope=bundled
           cache-to: type=gha,mode=max,scope=bundled
 
-      - name: Image digest
-        run: |
-          echo "Standard image pushed"
-          echo "Bundled image pushed"
-
-  create-release:
-    runs-on: ubuntu-latest
+  release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: build-and-push
+    needs: [binaries, docker]
+    runs-on: ubuntu-latest
     permissions:
       contents: write
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Extract version from tag
-        id: version
-        run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-
-      - name: Generate release notes
-        id: release_notes
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          VERSION_NUMBER="${VERSION#v}"
-
-          # 从 CHANGELOG.md 提取当前版本的更新日志
-          if [ -f "CHANGELOG.md" ]; then
-            # 提取从 [版本号] 到下一个 [版本号] 之间的内容
-            CHANGELOG=$(sed -n "/## \[${VERSION_NUMBER}\]/,/## \[/p" CHANGELOG.md | sed '$d' | tail -n +2)
-
-            # 如果没有找到版本号，尝试提取 Unreleased 部分
-            if [ -z "$CHANGELOG" ]; then
-              CHANGELOG=$(sed -n '/## \[Unreleased\]/,/## \[/p' CHANGELOG.md | sed '$d' | tail -n +2)
-            fi
-
-            # 如果还是没有，使用默认消息
-            if [ -z "$CHANGELOG" ]; then
-              CHANGELOG="Please check CHANGELOG.md for details."
-            fi
-          else
-            CHANGELOG="No changelog available."
-          fi
-
-          # 保存到文件以避免多行问题
-          echo "$CHANGELOG" > /tmp/changelog.txt
-
-          # 生成完整的 Release Body
-          cat > /tmp/release_body.md << 'EOF'
-          ## What's Changed
-
-          EOF
-          cat /tmp/changelog.txt >> /tmp/release_body.md
-          cat >> /tmp/release_body.md << 'EOF'
-          
-          EOF
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
+      - uses: actions/download-artifact@v4
         with:
-          tag_name: ${{ steps.version.outputs.version }}
-          name: ${{ steps.version.outputs.version }}
-          body_path: /tmp/release_body.md
-          draft: false
-          prerelease: false
+          name: binaries
+          path: dist
+
+      - name: Release notes from CHANGELOG.md
+        run: |
+          VERSION_NUMBER="${GITHUB_REF_NAME#v}"
+          NOTES=$(sed -n "/## \[${VERSION_NUMBER}\]/,/## \[/p" CHANGELOG.md | sed '$d' | tail -n +2)
+          [ -n "$NOTES" ] || NOTES=$(sed -n '/## \[Unreleased\]/,/## \[/p' CHANGELOG.md | sed '$d' | tail -n +2)
+          [ -n "$NOTES" ] || NOTES="详见 CHANGELOG.md"
+          {
+            echo "## What's Changed"
+            echo
+            echo "$NOTES"
+            echo
+            echo "## Docker"
+            echo
+            echo '```bash'
+            echo "docker pull ${DOCKER_IMAGE}:${VERSION_NUMBER}"
+            echo "docker pull ${DOCKER_IMAGE}:${VERSION_NUMBER}-bundled   # 预置 cfst"
+            echo '```'
+          } > release_body.md
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          body_path: release_body.md
+          files: dist/*
           generate_release_notes: true

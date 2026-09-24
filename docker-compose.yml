@@ -1,84 +1,32 @@
-version: '3.8'
-
 services:
   cfst-ddns:
-    # 使用预构建的 Docker Hub 镜像
+    # 预置 cfst 的离线版本：lonelyman0108/cfst-ddns:latest-bundled
     image: lonelyman0108/cfst-ddns:latest
-
-    # 如果需要从源码构建，请注释上面的 image 行，取消注释下面两行
+    # 从源码构建：注释上面的 image，取消下面两行的注释
     # build: .
-    # image: cfst-ddns:latest
-
+    # image: cfst-ddns:local
     container_name: cfst-ddns
+    restart: unless-stopped
+
+    # 测速需要直接使用宿主机网络，否则延迟/速度会被 Docker 网络转发影响。
+    # 注意：Docker Desktop（Windows/macOS）不支持 host 网络，测速结果会失真。
+    network_mode: host
 
     environment:
       - TZ=Asia/Shanghai
-      - AUTO_INSTALL_CFST=true
-
-      # CloudflareSpeedTest 版本号（可选，当 GitHub API 访问失败时使用）
-      # - CFST_VERSION=v2.2.5
-
-      # GitHub 镜像站点（可选，加速下载 CloudflareSpeedTest）
-      # - GITHUB_MIRROR=https://你的镜像站点
-
-      # 启用定时任务模式
-      # 定时任务模式: ENABLE_CRON=true (配合 restart: unless-stopped)
-      # 单次执行模式: ENABLE_CRON=false (不需要 restart 策略)
-      - ENABLE_CRON=true
-
-      # 定时任务执行频率（cron 表达式）
-      # 仅在 ENABLE_CRON=true 时生效
-      # 默认: 每6小时执行一次
-      # 其他示例:
-      #   每天凌晨3点: 0 3 * * *
-      #   每小时: 0 * * * *
-      #   每12小时: 0 */12 * * *
-      #   每30分钟: */30 * * * *
-      - CRON_SCHEDULE=0 */6 * * *
-
-      # 应用日志文件大小限制（字节）
-      # 当日志文件超过此大小时自动轮转
-      # 默认: 10485760 (10MB)
-      # 常用值: 5242880 (5MB), 20971520 (20MB), 52428800 (50MB)
-      # - LOG_MAX_SIZE=10485760
+      # Web 界面监听地址（host 网络下即宿主机端口）
+      - CFST_DDNS_LISTEN=:8080
+      # 可选：首次启动时自动创建管理员（也可在网页中创建）
+      # - ADMIN_USERNAME=admin
+      # - ADMIN_PASSWORD=change-me
+      # 可选：配置加密密钥；不设置则自动生成 data/secret.key（请随数据一起备份）
+      # - CFST_DDNS_SECRET=
 
     volumes:
       - ./data:/app/data
-      - ./cfst:/app/cfst
-      - ./logs:/var/log
 
-    # 自动重启策略
-    # 定时任务模式需要此配置，单次执行模式请注释掉
-    restart: unless-stopped
-
-    network_mode: host
-
-    # Docker 容器日志配置
-    # 控制 Docker 容器输出（stdout/stderr）的日志大小
-    # max-size: 单个日志文件最大大小
-    # max-file: 保留的日志文件数量
-    # 总日志大小 = max-size × max-file (当前: 5m × 3 = 15MB)
     logging:
-      driver: "json-file"
+      driver: json-file
       options:
         max-size: "5m"
         max-file: "3"
-
-# ==================== 使用说明 ====================
-#
-# 方式一：定时任务模式（推荐，后台持续运行）
-#   docker-compose up -d
-#   - 容器会持续运行，按 CRON_SCHEDULE 定时执行
-#   - 使用 restart: unless-stopped 确保容器异常退出后自动重启
-#   - 查看日志: docker-compose logs -f cfst-ddns
-#
-# 方式二：单次执行模式
-#   1. 修改环境变量: ENABLE_CRON=false
-#   2. 注释掉 restart: unless-stopped
-#   3. 执行: docker-compose run --rm cfst-ddns
-#   - 执行完成后容器自动退出和删除
-#
-# 修改定时任务频率：
-#   编辑 CRON_SCHEDULE 环境变量，然后重启:
-#   docker-compose restart cfst-ddns
-#
