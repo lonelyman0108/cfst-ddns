@@ -115,7 +115,7 @@ data/cfst-ddns.db   data/secret.key   data/cfst/{cfst[.exe], ip.txt, ipv6.txt, *
 ### P7 部署与 CI — 🟡（已编写，待 CI 验证）
 - [x] 多阶段 Dockerfile（node 构建 → go 交叉编译 → alpine 运行），standard / bundled target，HEALTHCHECK
 - [x] docker-compose.yml
-- [x] GitHub Actions：前端构建 + Go 测试 + 多架构镜像 + Release 附带 13 个平台二进制
+- [x] GitHub Actions：前端构建 + Go 测试 + 多架构镜像 + Release 附带 9 个平台二进制（2.0.1 起移除 MIPS：纯 Go SQLite 不支持）
 - [x] 旧 Bash 文件移入 `legacy/`，删除 Dockerfile.bundled
 - 验证：本机无 Docker，仅能 CI 验证（⚠ 交付时标注"镜像未本地验证"）
 

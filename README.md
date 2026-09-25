@@ -1,6 +1,25 @@
-# cfst-ddns
+<p align="center">
+  <img src="docs/assets/logo.svg" width="96" alt="cfst-ddns logo">
+</p>
 
-使用 [CloudflareSpeedTest](https://github.com/XIU2/CloudflareSpeedTest) 定时测出最快的 Cloudflare IP，并自动写入你的 DNS 记录。带 Web 管理界面，打包为单个二进制或 Docker 镜像，路由器、NAS、ARM 小主机都能运行。
+<h1 align="center">cfst-ddns</h1>
+
+<p align="center">
+  Cloudflare 优选 IP 自动测速 + DDNS 更新，带 Web 管理界面
+</p>
+
+<p align="center">
+  <a href="https://github.com/lonelyman0108/cfst-ddns/releases/latest"><img src="https://img.shields.io/github/v/release/lonelyman0108/cfst-ddns?color=f3680f" alt="Release"></a>
+  <a href="https://hub.docker.com/r/lonelyman0108/cfst-ddns"><img src="https://img.shields.io/docker/pulls/lonelyman0108/cfst-ddns?color=f3680f" alt="Docker Pulls"></a>
+  <a href="https://github.com/lonelyman0108/cfst-ddns/actions/workflows/build-and-release.yml"><img src="https://img.shields.io/github/actions/workflow/status/lonelyman0108/cfst-ddns/build-and-release.yml?branch=main" alt="Build"></a>
+  <img src="https://img.shields.io/github/go-mod/go-version/lonelyman0108/cfst-ddns" alt="Go">
+</p>
+
+<p align="center">
+  <b>简体中文</b> · <a href="README.en.md">English</a>
+</p>
+
+使用 [CloudflareSpeedTest](https://github.com/XIU2/CloudflareSpeedTest) 定时测出最快的 Cloudflare IP，并自动写入你的 DNS 记录。带 Web 管理界面，打包为单个二进制或 Docker 镜像，x86 / ARM 的 NAS、软路由、小主机都能运行。
 
 > v2 是完全重写的版本。从 v1（Bash 脚本）升级请阅读 [迁移指南](docs/MIGRATION.md)。
 
@@ -44,7 +63,9 @@ docker compose up -d
 
 ### 二进制
 
-从 [Releases](https://github.com/lonelyman0108/cfst-ddns/releases) 下载对应平台的压缩包，解压后运行：
+从 [Releases](https://github.com/lonelyman0108/cfst-ddns/releases) 下载对应平台的压缩包。提供 Linux（amd64 / arm64 / armv7 / armv6 / 386）、Windows（amd64 / arm64）、macOS（amd64 / arm64）版本；暂不支持 MIPS（内置的纯 Go SQLite 不支持该架构）。
+
+解压后运行：
 
 ```bash
 ./cfst-ddns -listen :8080 -data ./data
@@ -122,7 +143,7 @@ docker build -t cfst-ddns .                    # standard
 docker build --target bundled -t cfst-ddns:b . # 预置 cfst
 ```
 
-项目结构见 [docs/PLAN.md](docs/PLAN.md)，接口约定见 [docs/API.md](docs/API.md)。
+项目结构见 [docs/PLAN.md](docs/PLAN.md)，接口约定见 [docs/API.md](docs/API.md)，提交与发布规范见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ### 新增 DNS 服务商或通知渠道
 

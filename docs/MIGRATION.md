@@ -8,7 +8,7 @@ v2 用 Go + Web 界面重写了项目，**不再读取** v1 的 `config.sh` 或�
 - **v2 完全重写**：Go 后端 + Vue 3 Web 界面，单二进制 / Docker 部署；旧版 Bash 脚本移至 `legacy/`
 - 配置改为网页管理并加密存入 SQLite，不再读取 `config.sh` 与旧环境变量（见 `docs/MIGRATION.md`）
 - 镜像合并为同一个多阶段 Dockerfile（`standard` / `bundled` 两个构建目标），新增 HEALTHCHECK
-- CI 新增前端构建、Go 测试与 13 个平台的二进制发布
+- CI 新增前端构建、Go 测试与 9 个平台的二进制发布（不含 MIPS）
 
 #### 新增
 - 多任务：独立的 cron、IP 类型、cfst 全参数、自定义 IP 段、跨账号多目标记录
