@@ -37,15 +37,19 @@
 
 | 触发 | 运行内容 |
 |---|---|
-| 推送到 `main` / `dev` / `refactor/**`，或 Pull Request | 前端构建 + `go vet` + `go test`（不推送镜像） |
-| 推送 `v*` 标签 | 测试 → 多平台二进制 → 推送 standard/bundled 镜像 → 创建 GitHub Release（附二进制与 CHANGELOG 摘录） |
+| Pull Request（目标 `main`，忽略纯文档改动） | 前端构建 + `go vet` + `go test`（不推送镜像） |
+| 推送 / 合并到 `main` | 测试 + release-please 更新 Release PR |
+| 合并 Release PR | 打 `v*` tag 并创建 Release → 多平台二进制 → 推送 standard/bundled 镜像 → 上传二进制到 Release |
+| 手动推送 `v*` 标签（兜底） | 同上，Release 说明由 GitHub 自动生成 |
 | 手动触发（Actions 页面 Run workflow） | 测试 → 多平台二进制（Artifact）→ 推送 `dev` / `dev-bundled` 镜像 |
+
+功能分支的推送不会触发构建；需要验证时开 PR 到 `main` 或手动触发。同一 PR 的新提交会取消旧的运行。
 
 ### 4. 镜像标签说明
 
 | 触发条件 | standard 标签 | bundled 标签（预置 cfst） |
 |---|---|---|
-| 推送标签 `v2.0.0` | `2.0.0`, `2.0`, `2`, `latest` | `2.0.0-bundled`, `2.0-bundled`, `2-bundled`, `latest-bundled` |
+| 发布 `v2.0.0` | `2.0.0`, `2.0`, `2`, `latest` | `2.0.0-bundled`, `2.0-bundled`, `2-bundled`, `latest-bundled` |
 | 手动触发 | `dev`, `dev-<sha>` | `dev-bundled`, `dev-bundled-<sha>` |
 
 ### 5. 支持的架构
@@ -60,18 +64,20 @@ Docker 会根据你的系统自动选择合适的架构。
 
 ### 6. 发布新版本
 
-要发布新版本：
+版本号与 CHANGELOG 由 [release-please](https://github.com/googleapis/release-please) 根据**约定式提交**自动生成，无需手动打 tag。
 
-```bash
-# 1. 更新 CHANGELOG.md（可用 scripts/generate-changelog.sh 生成草稿）
-./scripts/generate-changelog.sh v2.0.0
+**首次使用前**：仓库 Settings → Actions → General → Workflow permissions，勾选 **Allow GitHub Actions to create and approve pull requests**。
 
-# 2. 创建并推送 tag
-git tag -a v2.0.0 -m "Release v2.0.0"
-git push origin v2.0.0
+日常流程：
 
-# 3. GitHub Actions 自动构建镜像与二进制并创建 Release
-```
+1. 提交信息使用约定式格式：`feat:` 新功能（升 minor）、`fix:` 修复（升 patch）、`feat!:` 或正文含 `BREAKING CHANGE:` 不兼容改动（升 major）；`docs:` / `build:` / `refactor:` / `perf:` 会进入 CHANGELOG，`ci:` / `chore:` / `test:` 不会。
+2. 功能分支开 PR 合并到 `main`（建议 Squash merge，PR 标题即提交信息）。
+3. release-please 自动创建或更新 `chore(main): release x.y.z` PR，内含 CHANGELOG 与版本号改动。
+4. 想发版时合并这个 Release PR，工作流会自动打 tag、创建 Release、构建二进制与镜像。
+
+需要指定版本号时，在 `release-please-config.json` 中设置 `"release-as": "x.y.z"`，发版后删除（2.0.0 首发即如此）。
+
+> Release PR 由 `GITHUB_TOKEN` 创建，不会触发 PR 上的 CI；它只改 CHANGELOG 和版本号，合并后 `main` 上会照常测试。
 
 ### 7. 查看构建状态
 
