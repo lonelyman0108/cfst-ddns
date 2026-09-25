@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# 校验提交信息是否符合约定式提交（规范见 CONTRIBUTING.md）
+# 启用：git config core.hooksPath .githooks
+
+msg_file="$1"
+first_line=$(grep -v '^#' "$msg_file" | head -n 1)
+
+# git 自动生成的信息直接放行
+if [[ "$first_line" =~ ^(Merge|Revert|fixup!|squash!|amend!) ]]; then
+  exit 0
+fi
+
+types='feat|fix|perf|refactor|docs|build|ci|chore|test|style|revert'
+pattern="^(${types})(\([a-z0-9._/-]+\))?!?: [^ ].*"
+
+if [[ ! "$first_line" =~ $pattern ]]; then
+  cat >&2 <<MSG
+✗ 提交信息不符合约定式提交规范：
+    $first_line
+
+格式：<类型>[(作用域)][!]: <描述>
+类型：${types//|/ }
+示例：feat: 支持华为云 DNS
+      fix(notify): 修复钉钉签名错误
+      feat!: 配置存储改为 PostgreSQL
+详见 CONTRIBUTING.md
+MSG
+  exit 1
+fi
+
+if (( ${#first_line} > 100 )); then
+  echo "✗ 标题行过长（${#first_line} 字符，上限 100），细节请写在正文" >&2
+  exit 1
+fi

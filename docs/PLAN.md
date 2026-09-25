@@ -124,6 +124,7 @@ data/cfst-ddns.db   data/secret.key   data/cfst/{cfst[.exe], ip.txt, ipv6.txt, *
 - [x] `docs/MIGRATION.md`：旧环境变量 → 新 UI 位置对照
 - [x] CHANGELOG 更新（Unreleased）；.github/SETUP.md 同步
 - [x] 接入 release-please 自动生成 CHANGELOG 与发版；v2 变化一览移入 `docs/MIGRATION.md`；删除 `scripts/generate-changelog.sh`
+- [x] Git 规范：`CONTRIBUTING.md`、`CLAUDE.md`、PR 标题检查（`pr-title.yml`）、本地 `commit-msg` 钩子（`.githooks/`）
 
 ## 4. 验证记录
 
