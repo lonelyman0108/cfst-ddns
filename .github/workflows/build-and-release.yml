@@ -6,9 +6,9 @@ on:
   push:
     branches: [main]
     tags: ['v*']   # 兜底：手动推 tag 也能完整发布
+  # 不设 paths-ignore：test 是 main 的必需检查，被跳过会导致纯文档 PR 无法合并
   pull_request:
     branches: [main]
-    paths-ignore: ['**.md', 'docs/**', '.github/SETUP.md']
   workflow_dispatch:
 
 # 仅 PR 有新提交时取消旧运行；main 与 tag 上的运行可能正在发版，不能取消
