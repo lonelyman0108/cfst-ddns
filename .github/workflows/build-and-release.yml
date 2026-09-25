@@ -2,10 +2,18 @@ name: Build and Release
 
 on:
   push:
-    branches: [main, dev, 'refactor/**']
+    branches: [main]
     tags: ['v*']
+    paths-ignore: ['**.md', 'docs/**', '.github/SETUP.md']
   pull_request:
+    branches: [main]
+    paths-ignore: ['**.md', 'docs/**', '.github/SETUP.md']
   workflow_dispatch:
+
+# 同一分支/PR 新提交到来时取消旧的运行；tag 发布不取消
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 env:
   DOCKER_IMAGE: lonelyman0108/cfst-ddns
