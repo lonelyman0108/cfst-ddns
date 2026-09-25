@@ -64,28 +64,23 @@ Docker 会根据你的系统自动选择合适的架构。
 
 ### 6. 发布新版本
 
-版本号与 CHANGELOG 由 [release-please](https://github.com/googleapis/release-please) 根据**约定式提交**自动生成，无需手动打 tag。
+版本号与 CHANGELOG 由 [release-please](https://github.com/googleapis/release-please) 根据**约定式提交**自动生成，无需手动打 tag。提交与 PR 规范见 [CONTRIBUTING.md](../CONTRIBUTING.md)。
 
-**首次使用前**：仓库 Settings → Actions → General → Workflow permissions，勾选 **Allow GitHub Actions to create and approve pull requests**。
+1. 功能分支开 PR 合并到 `main`（Squash merge，PR 标题即提交信息）。
+2. release-please 自动创建或更新 `chore(main): release x.y.z` PR，内含 CHANGELOG 与版本号改动。
+3. 想发版时合并这个 Release PR，工作流会自动打 tag、创建 Release、构建二进制与镜像。
 
-日常流程：
+需要手动指定版本号时，在合并提交信息的**最后一行**加 `Release-As: x.y.z`（只影响下一次发版）。
 
-1. 提交信息使用约定式格式：`feat:` 新功能（升 minor）、`fix:` 修复（升 patch）、`feat!:` 或正文含 `BREAKING CHANGE:` 不兼容改动（升 major）；`docs:` / `build:` / `refactor:` / `perf:` 会进入 CHANGELOG，`ci:` / `chore:` / `test:` 不会。
-2. 功能分支开 PR 合并到 `main`（建议 Squash merge，PR 标题即提交信息）。
-3. release-please 自动创建或更新 `chore(main): release x.y.z` PR，内含 CHANGELOG 与版本号改动。
-4. 想发版时合并这个 Release PR，工作流会自动打 tag、创建 Release、构建二进制与镜像。
+#### 仓库设置（一次性）
 
-需要手动指定版本号时，在合并到 `main` 的提交信息**末尾**加一行 footer（只影响下一次发版，无需事后清理）：
+| 位置 | 设置 |
+|---|---|
+| Settings → Actions → General → Workflow permissions | 勾选 **Allow GitHub Actions to create and approve pull requests**（release-please 需要） |
+| Settings → General → Pull Requests | 只保留 **Allow squash merging**，默认提交信息选 **Pull request title**；勾选 **Automatically delete head branches** |
+| Settings → Rules → Rulesets（目标 `main`） | 勾选 **Require a pull request before merging**、**Require status checks to pass**（`test`、`Validate PR title`）、**Block force pushes**；Bypass list 加入 **Repository admin** |
 
-```
-chore: 发布 2.5.0
-
-Release-As: 2.5.0
-```
-
-Squash merge 时写在合并对话框的提交说明最后一行；Rebase / Merge commit 方式则写在任一提交的末尾即可。
-
-> Release PR 由 `GITHUB_TOKEN` 创建，不会触发 PR 上的 CI；它只改 CHANGELOG 和版本号，合并后 `main` 上会照常测试。
+> Release PR 由 `GITHUB_TOKEN` 创建，不会触发任何 workflow，因此必需的状态检查永远不会出现。合并它时需以管理员身份绕过规则（合并按钮下选择 bypass）。它只改 CHANGELOG 和版本号，合并后 `main` 上会照常测试。
 
 ### 7. 查看构建状态
 
