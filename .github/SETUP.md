@@ -37,7 +37,7 @@
 
 | 触发 | 运行内容 |
 |---|---|
-| Pull Request（目标 `main`，忽略纯文档改动） | 前端构建 + `go vet` + `go test`（不推送镜像） |
+| Pull Request（目标 `main`） | 前端构建 + `go vet` + `go test`（不推送镜像） |
 | 推送 / 合并到 `main` | 测试 + release-please 更新 Release PR |
 | 合并 Release PR | 打 `v*` tag 并创建 Release → 多平台二进制 → 推送 standard/bundled 镜像 → 上传二进制到 Release |
 | 手动推送 `v*` 标签（兜底） | 同上，Release 说明由 GitHub 自动生成 |
