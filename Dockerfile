@@ -39,16 +39,22 @@ RUN export CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH; \
 FROM --platform=$BUILDPLATFORM alpine:3.22 AS cfst
 ARG TARGETARCH TARGETVARIANT
 ARG CFST_VERSION=v2.3.5
-RUN set -eux; \
+# 压缩包内可能带一层目录，按文件名查找（旧版可执行文件名为 CloudflareST）
+RUN set -eux -o pipefail; \
     case "$TARGETARCH" in \
       arm) arch="armv${TARGETVARIANT#v}" ;; \
       *)   arch="$TARGETARCH" ;; \
     esac; \
-    mkdir -p /opt/cfst; \
+    mkdir -p /tmp/cfst /opt/cfst; \
     wget -qO- "https://github.com/XIU2/CloudflareSpeedTest/releases/download/${CFST_VERSION}/cfst_linux_${arch}.tar.gz" \
-      | tar -xz -C /opt/cfst; \
-    [ -f /opt/cfst/cfst ] || mv /opt/cfst/CloudflareST /opt/cfst/cfst; \
-    chmod +x /opt/cfst/cfst; \
+      | tar -xz -C /tmp/cfst; \
+    bin=$(find /tmp/cfst -type f \( -name cfst -o -name CloudflareST \) | head -n 1); \
+    [ -n "$bin" ]; \
+    install -m 755 "$bin" /opt/cfst/cfst; \
+    for f in ip.txt ipv6.txt; do \
+      p=$(find /tmp/cfst -type f -name "$f" | head -n 1); \
+      [ -z "$p" ] || cp "$p" /opt/cfst/; \
+    done; \
     echo "$CFST_VERSION" > /opt/cfst/VERSION
 
 # ---------- 运行时 ----------
