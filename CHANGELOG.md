@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 自 2.0.0 起由 [release-please](https://github.com/googleapis/release-please) 根据约定式提交自动生成。
 
+## [2.0.0](https://github.com/lonelyman0108/cfst-ddns/compare/v1.1.0...v2.0.0) (2026-09-25)
+
+
+### 新功能
+
+* Go 重写后端服务 ([878c037](https://github.com/lonelyman0108/cfst-ddns/commit/878c03706b2a54095bc8efe64ff5bae5d51c43c8))
+* shadcn-vue Web 管理界面 ([6db82c6](https://github.com/lonelyman0108/cfst-ddns/commit/6db82c6e82c01b613fe5b1654e0a0337c022b746))
+* 重绘品牌 logo ([bd30d1a](https://github.com/lonelyman0108/cfst-ddns/commit/bd30d1aa2d7ad98ecd0dd84a421d1d23250a48f9))
+
+
+### 文档
+
+* v2 文档 ([2df1b87](https://github.com/lonelyman0108/cfst-ddns/commit/2df1b874d51ede9142afe09fcd07904afcc08486))
+
+
+### 构建
+
+* 多阶段 Dockerfile 与 CI 重写，旧 Bash 脚本归档 ([ed4dcdf](https://github.com/lonelyman0108/cfst-ddns/commit/ed4dcdf579d3b62f2419ffe046dbf4a960d0e186))
+
+
+### CI
+
+* 改用 Release-As footer 指定首发版本 2.0.0 ([684ca57](https://github.com/lonelyman0108/cfst-ddns/commit/684ca570c308b3bae39b3e4f84c5d1553d5d0fe7))
+
 ## [1.1.0] - 2024-12-25
 
 ### Added
