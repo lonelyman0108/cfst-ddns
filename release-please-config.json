@@ -1,0 +1,26 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "packages": {
+    ".": {
+      "release-type": "go",
+      "package-name": "cfst-ddns",
+      "include-component-in-tag": false,
+      "release-as": "2.0.0",
+      "extra-files": [
+        { "type": "json", "path": "web/package.json", "jsonpath": "$.version" }
+      ],
+      "changelog-sections": [
+        { "type": "feat", "section": "新功能" },
+        { "type": "fix", "section": "问题修复" },
+        { "type": "perf", "section": "性能优化" },
+        { "type": "refactor", "section": "重构" },
+        { "type": "docs", "section": "文档" },
+        { "type": "build", "section": "构建" },
+        { "type": "ci", "section": "CI", "hidden": true },
+        { "type": "test", "section": "测试", "hidden": true },
+        { "type": "chore", "section": "其他", "hidden": true },
+        { "type": "style", "section": "样式", "hidden": true }
+      ]
+    }
+  }
+}

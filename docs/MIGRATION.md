@@ -2,6 +2,26 @@
 
 v2 用 Go + Web 界面重写了项目，**不再读取** v1 的 `config.sh` 或环境变量。所有配置都改为在网页中完成，保存在 `data/cfst-ddns.db`，其中的凭据会加密存储。迁移大约需要 5 分钟。
 
+## v2 变化一览
+
+#### 变更
+- **v2 完全重写**：Go 后端 + Vue 3 Web 界面，单二进制 / Docker 部署；旧版 Bash 脚本移至 `legacy/`
+- 配置改为网页管理并加密存入 SQLite，不再读取 `config.sh` 与旧环境变量（见 `docs/MIGRATION.md`）
+- 镜像合并为同一个多阶段 Dockerfile（`standard` / `bundled` 两个构建目标），新增 HEALTHCHECK
+- CI 新增前端构建、Go 测试与 13 个平台的二进制发布
+
+#### 新增
+- 多任务：独立的 cron、IP 类型、cfst 全参数、自定义 IP 段、跨账号多目标记录
+- DNS 服务商：腾讯云 DNSPod API 3.0、阿里云、华为云、GoDaddy（原有 Cloudflare、DNSPod）
+- 通知渠道：企业微信、钉钉、飞书、Server 酱、PushPlus、Gotify、ntfy、SMTP、自定义 Webhook（原有 Bark、Telegram）
+- 更新策略：IP 未变跳过、无结果保留原记录、Top-N 多记录负载均衡、线路 / TTL / Cloudflare 代理
+- 实时测速日志（SSE）、执行历史、仪表盘趋势图、cfst 版本管理与 IP 段编辑
+- Webhook 外部触发、配置备份与恢复、历史自动清理、`reset-password` 命令
+
+#### 修复
+- Telegram 消息未编码导致含 `&` 等字符时被截断
+- 测速无可用 IP 时可能写入空记录
+
 ## 1. 记录旧配置
 
 打开旧的 `config.sh` 或 `docker-compose.yml`，把下列值抄下来备用：

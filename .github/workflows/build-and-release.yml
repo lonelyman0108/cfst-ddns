@@ -1,24 +1,42 @@
 name: Build and Release
 
+# 发布流程：合并到 main → release-please 维护 Release PR（CHANGELOG + 版本号）
+#          → 合并 Release PR → 打 tag 并创建 Release → 本工作流构建二进制与镜像并上传
 on:
   push:
     branches: [main]
-    tags: ['v*']
-    paths-ignore: ['**.md', 'docs/**', '.github/SETUP.md']
+    tags: ['v*']   # 兜底：手动推 tag 也能完整发布
   pull_request:
     branches: [main]
     paths-ignore: ['**.md', 'docs/**', '.github/SETUP.md']
   workflow_dispatch:
 
-# 同一分支/PR 新提交到来时取消旧的运行；tag 发布不取消
+# 仅 PR 有新提交时取消旧运行；main 与 tag 上的运行可能正在发版，不能取消
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
 
 env:
   DOCKER_IMAGE: lonelyman0108/cfst-ddns
 
 jobs:
+  # 维护 Release PR；合并 Release PR 时打 tag 并创建 GitHub Release
+  release-please:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - id: release
+        uses: googleapis/release-please-action@v5
+
   # 前端构建 + 后端测试，所有触发都会运行
   test:
     runs-on: ubuntu-latest
@@ -57,10 +75,15 @@ jobs:
           path: web/dist
           retention-days: 1
 
-  # 多平台二进制，仅 tag 或手动触发
+  # 多平台二进制：发版或手动触发
   binaries:
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
-    needs: test
+    needs: [test, release-please]
+    if: >-
+      !cancelled() && needs.test.result == 'success' &&
+      (needs.release-please.outputs.release_created == 'true' ||
+       startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch')
+    env:
+      TAG: ${{ needs.release-please.outputs.tag_name || (startsWith(github.ref, 'refs/tags/v') && github.ref_name) || '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -74,8 +97,7 @@ jobs:
 
       - name: Cross compile
         run: |
-          VERSION="${GITHUB_REF_NAME}"
-          [[ "$GITHUB_REF" == refs/tags/v* ]] || VERSION="dev-${GITHUB_SHA::7}"
+          VERSION="${TAG:-dev-${GITHUB_SHA::7}}"
           LDFLAGS="-s -w -X main.version=${VERSION} -X main.commit=${GITHUB_SHA::7} -X main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           mkdir -p dist
           for target in linux/amd64 linux/arm64 linux/armv7 linux/armv6 linux/386 linux/mips linux/mipsle \
@@ -102,10 +124,15 @@ jobs:
           name: binaries
           path: dist/*
 
-  # Docker 镜像（standard + bundled），仅 tag 或手动触发
+  # Docker 镜像（standard + bundled）：发版或手动触发
   docker:
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
-    needs: test
+    needs: [test, release-please]
+    if: >-
+      !cancelled() && needs.test.result == 'success' &&
+      (needs.release-please.outputs.release_created == 'true' ||
+       startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch')
+    env:
+      TAG: ${{ needs.release-please.outputs.tag_name || (startsWith(github.ref, 'refs/tags/v') && github.ref_name) || '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -121,8 +148,7 @@ jobs:
       - name: Build args
         id: args
         run: |
-          VERSION="${GITHUB_REF_NAME}"
-          [[ "$GITHUB_REF" == refs/tags/v* ]] || VERSION="dev-${GITHUB_SHA::7}"
+          VERSION="${TAG:-dev-${GITHUB_SHA::7}}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
@@ -132,11 +158,11 @@ jobs:
         with:
           images: ${{ env.DOCKER_IMAGE }}
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            # 仅推送 tag 时生成 latest
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=semver,pattern={{version}},value=${{ env.TAG }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ env.TAG }}
+            type=semver,pattern={{major}},value=${{ env.TAG }}
+            # 仅发版时生成 latest
+            type=raw,value=latest,enable=${{ env.TAG != '' }}
             # 手动触发时使用 dev 标签与 commit SHA 短标签
             type=raw,value=dev,enable=${{ github.event_name == 'workflow_dispatch' }}
             type=sha,prefix=dev-,enable=${{ github.event_name == 'workflow_dispatch' }}
@@ -147,10 +173,10 @@ jobs:
         with:
           images: ${{ env.DOCKER_IMAGE }}
           tags: |
-            type=semver,pattern={{version}},suffix=-bundled
-            type=semver,pattern={{major}}.{{minor}},suffix=-bundled
-            type=semver,pattern={{major}},suffix=-bundled
-            type=raw,value=latest-bundled,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=semver,pattern={{version}},value=${{ env.TAG }},suffix=-bundled
+            type=semver,pattern={{major}}.{{minor}},value=${{ env.TAG }},suffix=-bundled
+            type=semver,pattern={{major}},value=${{ env.TAG }},suffix=-bundled
+            type=raw,value=latest-bundled,enable=${{ env.TAG != '' }}
             type=raw,value=dev-bundled,enable=${{ github.event_name == 'workflow_dispatch' }}
             type=sha,prefix=dev-bundled-,enable=${{ github.event_name == 'workflow_dispatch' }}
 
@@ -186,42 +212,41 @@ jobs:
           cache-from: type=gha,scope=bundled
           cache-to: type=gha,mode=max,scope=bundled
 
+  # 把二进制上传到 release-please 创建的 Release（手动推 tag 时先创建 Release）
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [binaries, docker]
+    needs: [release-please, binaries, docker]
+    if: >-
+      !cancelled() && needs.binaries.result == 'success' && needs.docker.result == 'success' &&
+      (needs.release-please.outputs.release_created == 'true' || startsWith(github.ref, 'refs/tags/v'))
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      TAG: ${{ needs.release-please.outputs.tag_name || github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
     steps:
-      - uses: actions/checkout@v4
-
       - uses: actions/download-artifact@v4
         with:
           name: binaries
           path: dist
 
-      - name: Release notes from CHANGELOG.md
+      - name: Upload assets
         run: |
-          VERSION_NUMBER="${GITHUB_REF_NAME#v}"
-          NOTES=$(sed -n "/## \[${VERSION_NUMBER}\]/,/## \[/p" CHANGELOG.md | sed '$d' | tail -n +2)
-          [ -n "$NOTES" ] || NOTES=$(sed -n '/## \[Unreleased\]/,/## \[/p' CHANGELOG.md | sed '$d' | tail -n +2)
-          [ -n "$NOTES" ] || NOTES="详见 CHANGELOG.md"
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --verify-tag --generate-notes
+          gh release upload "$TAG" dist/* --clobber
+
+      - name: Append Docker usage
+        run: |
+          V="${TAG#v}"
           {
-            echo "## What's Changed"
-            echo
-            echo "$NOTES"
+            gh release view "$TAG" --json body -q .body
             echo
             echo "## Docker"
             echo
             echo '```bash'
-            echo "docker pull ${DOCKER_IMAGE}:${VERSION_NUMBER}"
-            echo "docker pull ${DOCKER_IMAGE}:${VERSION_NUMBER}-bundled   # 预置 cfst"
+            echo "docker pull ${DOCKER_IMAGE}:${V}"
+            echo "docker pull ${DOCKER_IMAGE}:${V}-bundled   # 预置 cfst"
             echo '```'
-          } > release_body.md
-
-      - uses: softprops/action-gh-release@v2
-        with:
-          name: ${{ github.ref_name }}
-          body_path: release_body.md
-          files: dist/*
-          generate_release_notes: true
+          } > notes.md
+          grep -q '^## Docker' <(gh release view "$TAG" --json body -q .body) || gh release edit "$TAG" --notes-file notes.md

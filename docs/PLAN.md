@@ -123,6 +123,7 @@ data/cfst-ddns.db   data/secret.key   data/cfst/{cfst[.exe], ip.txt, ipv6.txt, *
 - [x] README 重写
 - [x] `docs/MIGRATION.md`：旧环境变量 → 新 UI 位置对照
 - [x] CHANGELOG 更新（Unreleased）；.github/SETUP.md 同步
+- [x] 接入 release-please 自动生成 CHANGELOG 与发版；v2 变化一览移入 `docs/MIGRATION.md`；删除 `scripts/generate-changelog.sh`
 
 ## 4. 验证记录
 
@@ -137,6 +138,7 @@ data/cfst-ddns.db   data/secret.key   data/cfst/{cfst[.exe], ip.txt, ipv6.txt, *
 | 2026-09-24 | P6 | `pnpm build`（vue-tsc 零错误）；grep 不到 element-plus；首屏 gzip 约 400KB → 约 185KB，dist 2.1MB → 1.5MB；浏览器走通初始化 → 账号 → 任务 → 执行（进度行实时刷新）→ 取消 → 历史 → 设置 → ⌘K；亮色和暗色截图；test 接口带 id 已抓包确认 | 通过 |
 | 2026-09-24 | 集成 | 前端嵌入后二进制 28MB（`-s -w`）；8080 实例仪表盘渲染正常、控制台无错误；6 个服务商、11 个渠道全部注册 | 通过 |
 | 2026-09-24 | P3–P5 | 本机冒烟：自动下载 cfst v2.3.5（Windows）→ 初始化/登录 → 建账号/任务 → 真实测速（自定义 3 个 /24、`-dd`）→ SSE 实时日志 → DNS 失败被正确记录为 failed → 重复触发 409 → Webhook 触发 + 取消 → 备份导出 | 通过；本机有 TUN 代理，延迟约 1 ms 不可信（已写入 README 注意事项） |
+| 2026-09-25 | P7 | CI 失败原因：`pnpm/action-setup` 未指定版本 → `packageManager: pnpm@10.34.5`（本地 `--frozen-lockfile` 通过）；触发收紧为 main/PR/tag/手动；接入 release-please；`actionlint` 通过 | 通过（待 CI 实测） |
 
 ## 5. 阻塞与风险
 
