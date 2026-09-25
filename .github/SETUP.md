@@ -75,7 +75,15 @@ Docker 会根据你的系统自动选择合适的架构。
 3. release-please 自动创建或更新 `chore(main): release x.y.z` PR，内含 CHANGELOG 与版本号改动。
 4. 想发版时合并这个 Release PR，工作流会自动打 tag、创建 Release、构建二进制与镜像。
 
-需要指定版本号时，在 `release-please-config.json` 中设置 `"release-as": "x.y.z"`，发版后删除（2.0.0 首发即如此）。
+需要手动指定版本号时，在合并到 `main` 的提交信息**末尾**加一行 footer（只影响下一次发版，无需事后清理）：
+
+```
+chore: 发布 2.5.0
+
+Release-As: 2.5.0
+```
+
+Squash merge 时写在合并对话框的提交说明最后一行；Rebase / Merge commit 方式则写在任一提交的末尾即可。
 
 > Release PR 由 `GITHUB_TOKEN` 创建，不会触发 PR 上的 CI；它只改 CHANGELOG 和版本号，合并后 `main` 上会照常测试。
 
