@@ -114,6 +114,9 @@ func TestDryRun(t *testing.T) {
 	if r.Status != store.StatusSuccess || !r.DryRun || r.BestIPv4 != "1.2.3.4" || len(r.Changes) != 0 {
 		t.Fatalf("dry run = %+v", r)
 	}
+	if r.MessageKey != "dryRunDone" || r.Message != "试运行完成，未修改 DNS" {
+		t.Fatalf("dry run message = %q / %q", r.MessageKey, r.Message)
+	}
 	if !strings.Contains(r.Log, "试运行：跳过 DNS 同步与通知") {
 		t.Fatalf("log missing dry-run line:\n%s", r.Log)
 	}
@@ -127,6 +130,9 @@ func TestDryRun(t *testing.T) {
 	st.DB.Model(&store.RecordState{}).Count(&states)
 	if r.Status != store.StatusSuccess || r.DryRun || !r.Changed || len(dryFake.records) != 1 || hits.Load() != 1 || states != 1 {
 		t.Fatalf("normal run = %+v records=%d hits=%d states=%d", r, len(dryFake.records), hits.Load(), states)
+	}
+	if r.MessageKey != "dnsUpdated" {
+		t.Fatalf("normal run messageKey = %q", r.MessageKey)
 	}
 
 	// 结果超过上限时只保存前 MaxStoredResults 个，并记录实际总数

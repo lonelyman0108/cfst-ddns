@@ -127,3 +127,42 @@ export function saveBlob(blob: Blob, filename: string) {
   document.body.removeChild(a)
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
+
+// ---------- 执行 / DNS 变更说明 ----------
+// 后端在 messageKey 中给出固定说明的代码；早期记录只有中文原文，按已知文案反查以便同样随语言显示；
+// 上游服务商报错等没有固定文案的内容原样显示。
+const LEGACY_RUN_MESSAGES: Record<string, string> = {
+  已取消: 'canceled',
+  '试运行完成，未修改 DNS': 'dryRunDone',
+  'DNS 记录已更新': 'dnsUpdated',
+  'IP 未变化': 'ipUnchanged',
+  '服务重启，执行被中断': 'interrupted',
+  任务未配置目标记录: 'noTargets',
+  '没有获得任何可用 IP，DNS 记录未修改': 'noIP',
+  '全部 DNS 记录更新失败': 'allFailed',
+}
+
+interface Described {
+  message?: string
+  messageKey?: string
+  messageArgs?: Record<string, unknown>
+}
+
+export function runMessage(r: Described): string {
+  if (r.messageKey) return t(`messages.run.${r.messageKey}`, r.messageArgs)
+  const m = r.message || ''
+  const key = LEGACY_RUN_MESSAGES[m]
+  if (key) return t(`messages.run.${key}`)
+  const partial = /^(\d+)\/(\d+) 条记录更新失败$/.exec(m)
+  if (partial) return t('messages.run.partialFailed', { failed: Number(partial[1]), total: Number(partial[2]) })
+  return m
+}
+
+export function changeMessage(c: Described): string {
+  if (c.messageKey) return t(`messages.change.${c.messageKey}`, c.messageArgs)
+  const m = c.message || ''
+  if (m === '无可用 IP，保留原记录') return t('messages.change.keptNoIP')
+  const acc = /^DNS 账号不可用: (.*)$/s.exec(m)
+  if (acc) return t('messages.change.accountUnavailable', { error: acc[1] })
+  return m
+}

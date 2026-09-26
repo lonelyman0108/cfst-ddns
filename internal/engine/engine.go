@@ -47,7 +47,7 @@ func New(st *store.Store, m *cfst.Manager, hub *logbus.Hub, log *slog.Logger, te
 func (e *Engine) Start(ctx context.Context) {
 	now := time.Now()
 	e.Store.DB.Model(&store.Run{}).Where("status IN ?", []string{store.StatusQueued, store.StatusRunning}).
-		Updates(map[string]any{"status": store.StatusFailed, "message": "服务重启，执行被中断", "finished_at": now})
+		Updates(map[string]any{"status": store.StatusFailed, "message": "服务重启，执行被中断", "message_key": "interrupted", "finished_at": now})
 	go func() {
 		for {
 			select {
@@ -170,11 +170,11 @@ func (e *Engine) execute(parent context.Context, runID uint) {
 	switch {
 	case errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled):
 		run.Status = store.StatusCanceled
-		run.Message = "已取消"
+		setMessage(&run, "canceled", "已取消", nil)
 		rl.Printf("执行已取消")
 	case err != nil:
 		run.Status = store.StatusFailed
-		run.Message = err.Error()
+		setMessage(&run, messageKeyOf(err), err.Error(), nil)
 		rl.Printf("✗ 执行失败: %v", err)
 	}
 	rl.Printf("结束，耗时 %s", time.Duration(run.DurationMs)*time.Millisecond)
@@ -213,13 +213,37 @@ func recordType(ipType string) string {
 	return "A"
 }
 
+// 有固定文案的整体失败原因；messageKeyOf 据此给出前端翻译用的代码。
+var (
+	errNoTargets = errors.New("任务未配置目标记录")
+	errNoIP      = errors.New("没有获得任何可用 IP，DNS 记录未修改")
+	errAllFailed = errors.New("全部 DNS 记录更新失败")
+)
+
+func messageKeyOf(err error) string {
+	switch {
+	case errors.Is(err, errNoTargets):
+		return "noTargets"
+	case errors.Is(err, errNoIP):
+		return "noIP"
+	case errors.Is(err, errAllFailed):
+		return "allFailed"
+	}
+	return ""
+}
+
+// setMessage 同时记录中文原文（用于日志与通知）和供前端翻译的代码。
+func setMessage(run *store.Run, key, zh string, args map[string]any) {
+	run.Message, run.MessageKey, run.MessageArgs = zh, key, args
+}
+
 // runTask 为执行主体；返回的 error 表示整体失败，部分失败通过 run.Status 表达。
 func (e *Engine) runTask(ctx context.Context, task *store.Task, run *store.Run, rl *logbus.RunLog) error {
 	rl.Printf("开始执行任务「%s」，测速类型: %s，目标记录: %d 条", task.Name, task.IPType, len(task.Targets))
 	if run.DryRun {
 		rl.Printf("本次为试运行：只测速，不修改 DNS、不发送通知")
 	} else if len(task.Targets) == 0 {
-		return errors.New("任务未配置目标记录")
+		return errNoTargets
 	}
 	count := task.Update.RecordCount
 	if count <= 0 {
@@ -267,12 +291,12 @@ func (e *Engine) runTask(ctx context.Context, task *store.Task, run *store.Run, 
 		"best_latency": run.BestLatency, "best_speed": run.BestSpeed})
 	rl.Emit("status", *run)
 	if len(best) == 0 {
-		return errors.New("没有获得任何可用 IP，DNS 记录未修改")
+		return errNoIP
 	}
 	if run.DryRun {
 		rl.Printf("试运行：跳过 DNS 同步与通知")
 		run.Status = store.StatusSuccess
-		run.Message = "试运行完成，未修改 DNS"
+		setMessage(run, "dryRunDone", "试运行完成，未修改 DNS", nil)
 		return nil
 	}
 
@@ -296,6 +320,7 @@ func (e *Engine) runTask(ctx context.Context, task *store.Task, run *store.Run, 
 			ch := store.DNSChange{AccountID: tg.AccountID, AccountName: names[tg.AccountID], FQDN: fqdn, Type: recordType(t)}
 			if err != nil {
 				ch.Action, ch.Message = "error", "DNS 账号不可用: "+err.Error()
+				ch.MessageKey, ch.MessageArgs = "accountUnavailable", map[string]any{"error": err.Error()}
 				run.Changes = append(run.Changes, ch)
 				rl.Printf("✗ %s %s: %s", fqdn, ch.Type, ch.Message)
 				errCount++
@@ -304,7 +329,7 @@ func (e *Engine) runTask(ctx context.Context, task *store.Task, run *store.Run, 
 			}
 			ips, ok := best[t]
 			if !ok {
-				ch.Action, ch.Message = "skip", "无可用 IP，保留原记录"
+				ch.Action, ch.Message, ch.MessageKey = "skip", "无可用 IP，保留原记录", "keptNoIP"
 				run.Changes = append(run.Changes, ch)
 				continue
 			}
@@ -343,16 +368,17 @@ func (e *Engine) runTask(ctx context.Context, task *store.Task, run *store.Run, 
 
 	switch {
 	case total > 0 && errCount == total:
-		return errors.New("全部 DNS 记录更新失败")
+		return errAllFailed
 	case errCount > 0:
 		run.Status = store.StatusPartial
-		run.Message = fmt.Sprintf("%d/%d 条记录更新失败", errCount, total)
+		setMessage(run, "partialFailed", fmt.Sprintf("%d/%d 条记录更新失败", errCount, total),
+			map[string]any{"failed": errCount, "total": total})
 	default:
 		run.Status = store.StatusSuccess
 		if run.Changed {
-			run.Message = "DNS 记录已更新"
+			setMessage(run, "dnsUpdated", "DNS 记录已更新", nil)
 		} else {
-			run.Message = "IP 未变化"
+			setMessage(run, "ipUnchanged", "IP 未变化", nil)
 		}
 	}
 	return nil

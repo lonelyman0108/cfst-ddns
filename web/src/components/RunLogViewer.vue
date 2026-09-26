@@ -18,6 +18,7 @@ import LogPanel from './LogPanel.vue'
 import EmptyState from './EmptyState.vue'
 import {
   changeActionMeta,
+  changeMessage,
   dayjs,
   fmtDuration,
   fmtLatency,
@@ -25,6 +26,7 @@ import {
   fmtSpeed,
   fmtTime,
   isRunActive,
+  runMessage,
   runTriggerLabel,
 } from '@/utils/format'
 
@@ -307,7 +309,7 @@ defineExpose({ reload: start })
             :variant="summary.status === 'failed' ? 'destructive' : 'default'"
             :class="summary.status === 'partial' ? 'border-warning/40 text-warning' : ''"
           >
-            <AlertDescription :class="summary.status === 'failed' ? 'text-destructive' : ''">{{ summary.message }}</AlertDescription>
+            <AlertDescription :class="summary.status === 'failed' ? 'text-destructive' : ''">{{ runMessage(summary) }}</AlertDescription>
           </Alert>
         </CardContent>
       </Card>
@@ -388,7 +390,7 @@ defineExpose({ reload: start })
                     <div><span class="text-muted-foreground mr-1">→</span>{{ c.newValue || '∅' }}</div>
                   </TableCell>
                   <TableCell class="text-muted-foreground hidden xl:table-cell min-w-32 whitespace-normal break-words">{{ c.accountName }}</TableCell>
-                  <TableCell class="text-muted-foreground max-w-80 min-w-40 pr-5 text-xs whitespace-normal break-words">{{ c.message || '-' }}</TableCell>
+                  <TableCell class="text-muted-foreground max-w-80 min-w-40 pr-5 text-xs whitespace-normal break-words">{{ changeMessage(c) || '-' }}</TableCell>
                 </TableRow>
               </TableBody>
             </Table>

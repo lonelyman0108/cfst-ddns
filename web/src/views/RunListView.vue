@@ -21,7 +21,7 @@ import RunSheet from '@/components/RunSheet.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import ToneBadge from '@/components/ToneBadge.vue'
 import { confirm } from '@/composables/useConfirm'
-import { fmtDuration, fmtLatency, fmtSpeed, fmtTime, fromNow, isRunActive, runStatusMeta, runTriggerLabel } from '@/utils/format'
+import { fmtDuration, fmtLatency, fmtSpeed, fmtTime, fromNow, isRunActive, runMessage, runStatusMeta, runTriggerLabel } from '@/utils/format'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -213,7 +213,7 @@ async function doPurge() {
               <router-link :to="`/tasks/${r.taskId}`" class="line-clamp-2 font-medium hover:underline" :title="r.taskName">{{ r.taskName }}</router-link>
               <div class="text-muted-foreground text-xs">{{ runTriggerLabel[r.trigger] ?? r.trigger }}</div>
               <!-- 窄屏隐藏「说明」列时显示在任务名下方 -->
-              <div v-if="r.message" class="text-muted-foreground line-clamp-2 text-xs xl:hidden" :title="r.message">{{ r.message }}</div>
+              <div v-if="r.message" class="text-muted-foreground line-clamp-2 text-xs xl:hidden" :title="runMessage(r)">{{ runMessage(r) }}</div>
             </TableCell>
             <TableCell class="text-code min-w-32 font-mono whitespace-normal break-all">
               <div v-if="r.bestIPv4">{{ r.bestIPv4 }}</div>
@@ -233,8 +233,8 @@ async function doPurge() {
               <div class="text-muted-foreground">{{ fmtTime(r.startedAt || r.createdAt, 'HH:mm:ss') }}</div>
             </TableCell>
             <TableCell class="text-muted-foreground hidden xl:table-cell text-right text-xs tabular-nums">{{ fmtDuration(r.durationMs) }}</TableCell>
-            <TableCell class="text-muted-foreground hidden xl:table-cell max-w-56 min-w-40 text-xs whitespace-normal" :title="r.message">
-              <span class="line-clamp-2 break-words">{{ r.message || '-' }}</span>
+            <TableCell class="text-muted-foreground hidden xl:table-cell max-w-56 min-w-40 text-xs whitespace-normal" :title="runMessage(r)">
+              <span class="line-clamp-2 break-words">{{ runMessage(r) || '-' }}</span>
             </TableCell>
             <TableCell class="pr-5">
               <div class="flex justify-end gap-0.5">

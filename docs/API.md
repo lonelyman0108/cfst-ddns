@@ -174,6 +174,8 @@ SSE 事件：
 - `status`：`data` 为 `RunSummary` JSON
 - `done`：`data` 为 `RunSummary` JSON，之后服务端关闭连接
 
+> `RunSummary` / `DNSChange` 另含可选的 `messageKey`、`messageArgs`：固定说明的代码与参数，前端据此按界面语言显示 `message`；为空时（如上游服务商报错）直接显示 `message`。
+
 ## 仪表盘
 
 `GET /api/dashboard` →

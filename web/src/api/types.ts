@@ -239,6 +239,9 @@ export interface RunSummary {
   /** 试运行：只测速，不修改 DNS、不发通知 */
   dryRun: boolean
   message: string
+  /** 固定说明的代码，前端据此按语言显示；上游报错等无代码时直接显示 message */
+  messageKey?: string
+  messageArgs?: Record<string, unknown>
   createdAt: string
 }
 
@@ -267,6 +270,9 @@ export interface DNSChange {
   oldValue: string
   newValue: string
   message: string
+  /** 固定说明的代码，前端据此按语言显示；上游报错等无代码时直接显示 message */
+  messageKey?: string
+  messageArgs?: Record<string, unknown>
 }
 
 export interface RunDetail extends RunSummary {
