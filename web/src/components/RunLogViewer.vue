@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { toast } from 'vue-sonner'
-import { CircleX, Gauge, ListTree, RefreshCw, ScrollText, Timer, Zap } from '@lucide/vue'
+import { ChevronDown, CircleX, Gauge, ListTree, RefreshCw, ScrollText, Timer, Zap } from '@lucide/vue'
 import { runsApi } from '@/api'
 import type { RunDetail, RunSummary, SpeedResult } from '@/api/types'
 import { Button } from '@/components/ui/button'
@@ -59,12 +59,23 @@ const duration = computed(() => {
   return fmtDuration(s.durationMs)
 })
 
+/** 测速结果默认只显示前几名，展开后显示全部已保存的结果 */
+const PREVIEW_ROWS = 10
+const expanded = ref<Record<string, boolean>>({})
+
 const groups = computed(() => {
   const res = detail.value?.results ?? []
-  const out: { type: 'v4' | 'v6'; label: string; rows: SpeedResult[] }[] = []
+  const out: { type: 'v4' | 'v6'; label: string; rows: SpeedResult[]; stored: number; total: number }[] = []
   for (const t of ['v4', 'v6'] as const) {
     const rows = res.filter((r) => r.ipType === t).sort((a, b) => a.rank - b.rank)
-    if (rows.length) out.push({ type: t, label: t === 'v4' ? 'IPv4' : 'IPv6', rows })
+    if (!rows.length) continue
+    out.push({
+      type: t,
+      label: t === 'v4' ? 'IPv4' : 'IPv6',
+      rows: expanded.value[t] ? rows : rows.slice(0, PREVIEW_ROWS),
+      stored: rows.length,
+      total: detail.value?.resultTotals?.[t] ?? rows.length,
+    })
   }
   return out
 })
@@ -307,31 +318,41 @@ defineExpose({ reload: start })
           <CardContent class="p-0">
             <EmptyState v-if="!groups.length" compact title="没有测速结果" />
             <div v-for="g in groups" :key="g.type" class="border-b last:border-b-0">
-              <div class="text-muted-foreground bg-muted/30 px-5 py-2 text-xs font-medium">{{ g.label }} · {{ g.rows.length }} 个</div>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead class="w-12 pl-5">#</TableHead>
-                    <TableHead>IP</TableHead>
-                    <TableHead class="text-right">延迟</TableHead>
-                    <TableHead class="text-right">下载速度</TableHead>
-                    <TableHead class="text-right">丢包率</TableHead>
-                    <TableHead class="text-right">发送/接收</TableHead>
-                    <TableHead class="pr-5 text-right">地区码</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  <TableRow v-for="r in g.rows" :key="r.ip">
-                    <TableCell class="text-muted-foreground pl-5 tabular-nums">{{ r.rank }}</TableCell>
-                    <TableCell><CopyText :text="r.ip" /></TableCell>
-                    <TableCell class="text-right tabular-nums">{{ fmtLatency(r.latency) }}</TableCell>
-                    <TableCell class="text-right tabular-nums">{{ fmtSpeed(r.speed) }}</TableCell>
-                    <TableCell class="text-right tabular-nums">{{ fmtPercent(r.lossRate) }}</TableCell>
-                    <TableCell class="text-right tabular-nums">{{ r.sent }} / {{ r.received }}</TableCell>
-                    <TableCell class="pr-5 text-right font-mono text-code">{{ r.colo || '-' }}</TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
+              <div class="text-muted-foreground bg-muted/30 px-5 py-2 text-xs font-medium">
+                {{ g.label }} · 共 {{ g.total }} 个<template v-if="g.total > g.stored">，保存前 {{ g.stored }} 个</template>
+              </div>
+              <div :class="expanded[g.type] && 'scrollbar-thin max-h-[560px] overflow-y-auto'">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead class="w-12 pl-5">#</TableHead>
+                      <TableHead>IP</TableHead>
+                      <TableHead class="text-right">延迟</TableHead>
+                      <TableHead class="text-right">下载速度</TableHead>
+                      <TableHead class="text-right">丢包率</TableHead>
+                      <TableHead class="text-right">发送/接收</TableHead>
+                      <TableHead class="pr-5 text-right">地区码</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableRow v-for="r in g.rows" :key="r.ip">
+                      <TableCell class="text-muted-foreground pl-5 tabular-nums">{{ r.rank }}</TableCell>
+                      <TableCell><CopyText :text="r.ip" /></TableCell>
+                      <TableCell class="text-right tabular-nums">{{ fmtLatency(r.latency) }}</TableCell>
+                      <TableCell class="text-right tabular-nums">{{ fmtSpeed(r.speed) }}</TableCell>
+                      <TableCell class="text-right tabular-nums">{{ fmtPercent(r.lossRate) }}</TableCell>
+                      <TableCell class="text-right tabular-nums">{{ r.sent }} / {{ r.received }}</TableCell>
+                      <TableCell class="pr-5 text-right font-mono text-code">{{ r.colo || '-' }}</TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
+              <div v-if="g.stored > PREVIEW_ROWS" class="border-t px-5 py-2">
+                <Button variant="ghost" size="sm" class="text-muted-foreground -ml-2" @click="expanded[g.type] = !expanded[g.type]">
+                  <ChevronDown :class="['transition-transform', expanded[g.type] && 'rotate-180']" />
+                  {{ expanded[g.type] ? '收起' : `显示全部 ${g.stored} 个` }}
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>

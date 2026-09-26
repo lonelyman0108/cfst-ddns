@@ -271,6 +271,8 @@ export interface DNSChange {
 
 export interface RunDetail extends RunSummary {
   results: SpeedResult[]
+  /** 各 IP 类型实际测得的结果数；results 只保存前 100 个（旧记录无此字段） */
+  resultTotals?: Partial<Record<'v4' | 'v6', number>>
   changes: DNSChange[]
   log: string
 }

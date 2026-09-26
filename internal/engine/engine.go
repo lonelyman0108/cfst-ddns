@@ -191,6 +191,9 @@ func (e *Engine) execute(parent context.Context, runID uint) {
 	rl.Emit("done", summary)
 }
 
+// MaxStoredResults 为每种 IP 类型保存到执行记录的测速结果上限。
+const MaxStoredResults = 100
+
 func ipTypes(t string) []string {
 	switch t {
 	case "v6":
@@ -235,7 +238,12 @@ func (e *Engine) runTask(ctx context.Context, task *store.Task, run *store.Run, 
 			rl.Printf("✗ IPv%s 测速失败: %v", strings.TrimPrefix(t, "v"), err)
 			continue
 		}
-		run.Results = append(run.Results, res...)
+		// 默认 IP 段可测出数千个结果，只保存排名靠前的部分，避免执行记录膨胀
+		if run.ResultTotals == nil {
+			run.ResultTotals = map[string]int{}
+		}
+		run.ResultTotals[t] = len(res)
+		run.Results = append(run.Results, res[:min(len(res), MaxStoredResults)]...)
 		if len(res) == 0 {
 			rl.Printf("! IPv%s 没有满足条件的 IP，将保留现有记录", strings.TrimPrefix(t, "v"))
 			continue

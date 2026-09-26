@@ -153,7 +153,8 @@ interface SpeedResult { ipType: 'v4'|'v6'; rank: number; ip: string; sent: numbe
   lossRate: number; latency: number /* ms */; speed: number /* MB/s */; colo: string }
 interface DNSChange { accountId: number; accountName: string; fqdn: string; type: 'A'|'AAAA'
   action: 'create'|'update'|'delete'|'skip'|'error'; oldValue: string; newValue: string; message: string }
-interface RunDetail extends RunSummary { results: SpeedResult[]; changes: DNSChange[]; log: string }
+interface RunDetail extends RunSummary { results: SpeedResult[]; resultTotals?: { v4?: number; v6?: number }; changes: DNSChange[]; log: string }
+// results 每种 IP 类型只保存排名前 100 个；resultTotals 为实际测得的总数（旧记录无此字段）
 ```
 
 | 方法 | 路径 | 响应 |

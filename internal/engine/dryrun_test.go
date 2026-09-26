@@ -2,12 +2,14 @@ package engine
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -28,6 +30,11 @@ func TestMain(m *testing.M) {
 		for i, a := range os.Args {
 			if a == "-o" && i+1 < len(os.Args) {
 				csv := "IP 地址,已发送,已接收,丢包率,平均延迟,下载速度(MB/s),地区码\n1.2.3.4,4,4,0.00,50.00,12.30,HKG\n"
+				// FAKE_CFST_ROWS 追加更多结果行，用于验证结果保存上限
+				n, _ := strconv.Atoi(os.Getenv("FAKE_CFST_ROWS"))
+				for j := 1; j < n; j++ {
+					csv += fmt.Sprintf("1.2.%d.%d,4,4,0.00,%d.00,1.00,HKG\n", j/250, j%250+1, 50+j)
+				}
 				_ = os.WriteFile(os.Args[i+1], []byte(csv), 0o644)
 			}
 		}
@@ -120,5 +127,12 @@ func TestDryRun(t *testing.T) {
 	st.DB.Model(&store.RecordState{}).Count(&states)
 	if r.Status != store.StatusSuccess || r.DryRun || !r.Changed || len(dryFake.records) != 1 || hits.Load() != 1 || states != 1 {
 		t.Fatalf("normal run = %+v records=%d hits=%d states=%d", r, len(dryFake.records), hits.Load(), states)
+	}
+
+	// 结果超过上限时只保存前 MaxStoredResults 个，并记录实际总数
+	t.Setenv("FAKE_CFST_ROWS", "150")
+	r = run(true)
+	if len(r.Results) != MaxStoredResults || r.ResultTotals["v4"] != 150 || r.Results[0].IP != "1.2.3.4" {
+		t.Fatalf("results=%d totals=%v first=%v", len(r.Results), r.ResultTotals, r.Results[0].IP)
 	}
 }

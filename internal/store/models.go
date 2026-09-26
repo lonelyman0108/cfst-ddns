@@ -157,8 +157,10 @@ type Run struct {
 	Message     string        `json:"message"`
 	Log         string        `json:"log,omitempty"`
 	Results     []SpeedResult `gorm:"serializer:json" json:"results,omitempty"`
-	Changes     []DNSChange   `gorm:"serializer:json" json:"changes,omitempty"`
-	CreatedAt   time.Time     `gorm:"index" json:"createdAt"`
+	// ResultTotals 为各 IP 类型实际测得的结果数（Results 只保存前 MaxStoredResults 个）
+	ResultTotals map[string]int `gorm:"serializer:json" json:"resultTotals,omitempty"`
+	Changes      []DNSChange    `gorm:"serializer:json" json:"changes,omitempty"`
+	CreatedAt    time.Time      `gorm:"index" json:"createdAt"`
 }
 
 // SummaryColumns 为列表查询时需要的列（不含大字段）。
