@@ -27,15 +27,19 @@ interface Line {
   cls: string
 }
 
-// cfst 进度条形如「1101 / 5955 [----->____] 可用: 1100」：拆成计数、比例与尾部说明，
-// 用自适应宽度的进度条代替字符画，窄屏也能完整显示；无法识别时按原文截断显示
+// cfst 进度条（pb/v3）各版本模板不同，均为「计数 [字符画] 尾部」：
+//   v2.2+ 延迟测速「1101 / 5955 [---↘___] 可用: 1100」，下载测速尾部为空
+//   v2.0–v2.1「1101 / 5955 [--->___] 18.49%」；v1.x「… 1.68% 20 p/s ETA 3m」
+// 拆成计数与比例，用自适应宽度的进度条代替字符画；尾部去掉与本组件重复的百分比后原样显示。
+// 无法识别时按原文截断显示
 const PROGRESS_RE = /^\s*(\d+)\s*\/\s*(\d+)\s*\[[^\]]*\]\s*(.*)$/
 const bar = computed(() => {
   const m = PROGRESS_RE.exec(props.progress)
   if (!m) return null
   const done = Number(m[1])
   const total = Number(m[2])
-  return { done, total, pct: total > 0 ? Math.min(100, (done / total) * 100) : 0, tail: m[3].trim() }
+  const tail = m[3].replace(/^\d+(\.\d+)?\s*%\s*/, '').trim()
+  return { done, total, pct: total > 0 ? Math.min(100, (done / total) * 100) : 0, tail }
 })
 
 const TIME_RE = /^(\d{1,2}:\d{2}:\d{2}|\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2})\s(.*)$/
