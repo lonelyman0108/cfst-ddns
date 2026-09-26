@@ -110,7 +110,7 @@ jobs:
             mkdir -p "build/$name"
             CGO_ENABLED=0 GOOS=$os GOARCH=$goarch GOARM=$goarm \
               go build -trimpath -ldflags "$LDFLAGS" -o "build/$name/$bin" ./cmd/cfst-ddns
-            cp README.md "build/$name/"
+            cp README*.md "build/$name/"
             if [[ "$os" == windows ]]; then
               (cd build && zip -qr "../dist/$name.zip" "$name")
             else

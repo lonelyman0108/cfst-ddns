@@ -5,7 +5,7 @@
 <h1 align="center">cfst-ddns</h1>
 
 <p align="center">
-  Cloudflare 优选 IP 自动测速 + DDNS 更新，带 Web 管理界面
+  Find the fastest Cloudflare IPs and keep your DNS records pointed at them — with a web UI
 </p>
 
 <p align="center">
@@ -16,34 +16,36 @@
 </p>
 
 <p align="center">
-  <b>简体中文</b> · <a href="README.en.md">English</a>
+  <b>English</b> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ja.md">日本語</a>
 </p>
 
-使用 [CloudflareSpeedTest](https://github.com/XIU2/CloudflareSpeedTest) 定时测出最快的 Cloudflare IP，并自动写入你的 DNS 记录。带 Web 管理界面，打包为单个二进制或 Docker 镜像，x86 / ARM 的 NAS、软路由、小主机都能运行。
+cfst-ddns runs [CloudflareSpeedTest](https://github.com/XIU2/CloudflareSpeedTest) on a schedule to find the fastest Cloudflare IPs from your network, then writes them to your DNS records. It ships with a web UI as a single binary or a Docker image, and runs on x86 and ARM NAS boxes, soft routers and mini PCs.
 
-> v2 是完全重写的版本。从 v1（Bash 脚本）升级请阅读 [迁移指南](docs/MIGRATION.md)。
+> v2 is a complete rewrite. Upgrading from v1 (the Bash scripts)? See the [migration guide](docs/MIGRATION.md) (Chinese), or import your old `config.sh` during first-time setup.
 
-## 功能
+## Features
 
-- **Web 界面**：仪表盘、任务管理、实时测速日志、执行历史、延迟/速度趋势图，支持暗色模式与移动端
-- **多 DNS 服务商**：Cloudflare、DNSPod、腾讯云（DNSPod API 3.0）、阿里云、华为云、GoDaddy
-- **多通知渠道**：Bark、Telegram、企业微信、钉钉、飞书、Server 酱、PushPlus、Gotify、ntfy、SMTP 邮件、自定义 Webhook
-- **多任务**：每个任务可单独设置 cron 周期、IPv4/IPv6/双栈、cfst 全部参数、自定义 IP 段，并可同时更新跨账号、跨域名的多条记录
-- **智能更新**：IP 未变时跳过；测速无结果时保留原记录；可写入前 N 个 IP 做负载均衡；支持线路、TTL，以及 Cloudflare 代理开关
-- **cfst 管理**：在界面中查看版本、切换版本、配置 GitHub 镜像、编辑 IP 段文件
-- **运维**：Webhook 外部触发、配置备份与恢复、历史自动清理、凭据加密存储、健康检查
+- **Web UI**: dashboard, task management, live speed-test logs, run history and latency/speed trend charts; dark mode, mobile friendly, with brand logos for every provider and channel
+- **Four languages**: the web UI is available in English, Simplified Chinese, Traditional Chinese and Japanese, detected from your browser and switchable in the header
+- **Guided setup**: a setup wizard takes you from installing cfst to your first dry run; a getting-started checklist on the dashboard and a searchable help page cover the rest
+- **DNS providers**: Cloudflare, DNSPod, Tencent Cloud (DNSPod API 3.0), Alibaba Cloud, Huawei Cloud, GoDaddy
+- **Notifications**: Bark, Telegram, WeCom, DingTalk, Feishu/Lark, ServerChan, PushPlus, Gotify, ntfy, SMTP email and custom webhooks
+- **Multiple tasks**: each task has its own cron schedule, IPv4/IPv6/dual-stack mode, full cfst options and custom IP ranges, and can update many records across accounts and domains
+- **Smart updates**: skips unchanged IPs, keeps the existing record when a test finds nothing, can write the top N IPs for load balancing, and supports ISP lines, TTL and the Cloudflare proxy toggle; dry runs test speeds without touching DNS or sending notifications
+- **cfst management**: automatic download or upload of an archive/binary, detection of an existing install, version switching, GitHub mirror speed test and IP range file editing
+- **Operations**: webhook triggers, config backup and restore, v1 config import, automatic history cleanup, encrypted credentials and a health check
 
-## 快速开始
+## Quick start
 
-### Docker Compose（推荐）
+### Docker Compose (recommended)
 
 ```yaml
 services:
   cfst-ddns:
-    image: lonelyman0108/cfst-ddns:latest   # 离线环境用 :latest-bundled（预置 cfst）
+    image: lonelyman0108/cfst-ddns:latest   # use :latest-bundled offline (cfst preinstalled)
     container_name: cfst-ddns
     restart: unless-stopped
-    network_mode: host                      # 测速必须使用宿主机网络
+    network_mode: host                      # speed tests must use the host network
     environment:
       - TZ=Asia/Shanghai
     volumes:
@@ -54,101 +56,102 @@ services:
 docker compose up -d
 ```
 
-启动后打开 `http://<主机IP>:8080`，按以下顺序完成配置：
+Open `http://<host-ip>:8080` and create the admin account (you can also restore a backup or import a v1 config here). The setup wizard then walks you through:
 
-1. 创建管理员账号
-2. 在「DNS 账号」中添加服务商凭据，并测试连接
-3. 可选：在「通知渠道」中添加推送方式，并发送一条测试
-4. 在「任务」中新建任务，选择目标记录，然后点击「立即执行」观察实时日志
+1. Checking that cfst is installed
+2. Adding a DNS account and testing the connection
+3. Optional: adding a notification channel
+4. Creating your first task from a template
+5. A dry run, with the live log, to confirm everything works
 
-### 二进制
+### Binary
 
-从 [Releases](https://github.com/lonelyman0108/cfst-ddns/releases) 下载对应平台的压缩包。提供 Linux（amd64 / arm64 / armv7 / armv6 / 386）、Windows（amd64 / arm64）、macOS（amd64 / arm64）版本；暂不支持 MIPS（内置的纯 Go SQLite 不支持该架构）。
+Download the archive for your platform from [Releases](https://github.com/lonelyman0108/cfst-ddns/releases). Builds are available for Linux (amd64 / arm64 / armv7 / armv6 / 386), Windows (amd64 / arm64) and macOS (amd64 / arm64). MIPS is not supported, because the embedded pure-Go SQLite does not support it.
 
-解压后运行：
+Extract it and run:
 
 ```bash
 ./cfst-ddns -listen :8080 -data ./data
 ```
 
-首次启动时会自动下载 cfst。国内网络如果下载失败，先在「系统设置」中配置 GitHub 镜像，再到「cfst 管理」页点击安装。
+cfst is downloaded automatically on first start. If GitHub is unreachable from your network, pick a GitHub mirror in **Settings** (it can speed-test the mirrors for you) and install cfst from the **cfst** page, or upload a cfst archive there.
 
-## 配置
+## Configuration
 
-多数配置都在网页中完成。启动参数如下：
+Most settings live in the web UI. Startup options:
 
-| 参数 | 环境变量 | 默认值 | 说明 |
+| Flag | Environment variable | Default | Description |
 |---|---|---|---|
-| `-listen` | `CFST_DDNS_LISTEN` | `:8080` | 监听地址 |
-| `-data` | `CFST_DDNS_DATA` | `./data`（容器内 `/app/data`） | 数据目录 |
+| `-listen` | `CFST_DDNS_LISTEN` | `:8080` | Listen address |
+| `-data` | `CFST_DDNS_DATA` | `./data` (`/app/data` in the container) | Data directory |
 | `-log-level` | `CFST_DDNS_LOG_LEVEL` | `info` | `debug` / `info` / `warn` / `error` |
-| `-auto-install` | `CFST_DDNS_AUTO_INSTALL` | `true` | 未安装 cfst 时自动下载 |
-| `-bundle-dir` | `CFST_DDNS_BUNDLE_DIR` | — | 预置 cfst 目录（bundled 镜像使用） |
-| — | `CFST_DDNS_SECRET` | 自动生成 `data/secret.key` | 凭据加密密钥 |
-| — | `ADMIN_USERNAME` / `ADMIN_PASSWORD` | — | 首次启动时自动创建管理员 |
+| `-auto-install` | `CFST_DDNS_AUTO_INSTALL` | `true` | Download cfst automatically if it is missing |
+| `-bundle-dir` | `CFST_DDNS_BUNDLE_DIR` | — | Preinstalled cfst directory (used by the bundled image) |
+| — | `CFST_DDNS_SECRET` | auto-generated `data/secret.key` | Credential encryption key |
+| — | `ADMIN_USERNAME` / `ADMIN_PASSWORD` | — | Create the admin account on first start |
 
-数据目录结构：
+Data directory layout:
 
 ```
 data/
-├── cfst-ddns.db   # 配置与历史（SQLite）
-├── secret.key     # 加密密钥，务必与数据库一起备份
-├── cfst/          # cfst 程序与 IP 段文件
-└── tmp/           # 测速临时文件
+├── cfst-ddns.db   # settings and history (SQLite)
+├── secret.key     # encryption key; always back it up with the database
+├── cfst/          # cfst binary and IP range files
+└── tmp/           # temporary speed-test files
 ```
 
-> ⚠️ 丢失 `secret.key`（或更换 `CFST_DDNS_SECRET`）后，已保存的凭据将无法解密。迁移机器时，要么复制整个 `data/` 目录，要么使用「系统设置 → 备份与恢复」。
+> ⚠️ If you lose `secret.key` (or change `CFST_DDNS_SECRET`), saved credentials can no longer be decrypted. When moving to another machine, copy the whole `data/` directory or use **Settings → Backup / Restore**.
 
-### 忘记密码
+### Forgot your password
 
 ```bash
-docker exec cfst-ddns cfst-ddns reset-password -username admin -password 新密码
-# 二进制：./cfst-ddns reset-password -data ./data -username admin -password 新密码
+docker exec cfst-ddns cfst-ddns reset-password -username admin -password NEW_PASSWORD
+# binary: ./cfst-ddns reset-password -data ./data -username admin -password NEW_PASSWORD
 ```
 
-### Webhook 触发
+### Webhook triggers
 
-在「系统设置」中启用 Webhook 后，可以从外部触发任务：
+After enabling webhooks in **Settings**, you can trigger a task from outside:
 
 ```bash
-curl -X POST "http://<主机>:8080/api/hooks/tasks/<任务ID>/run?token=<令牌>"
+curl -X POST "http://<host>:8080/api/hooks/tasks/<task-id>/run?token=<token>"
 ```
 
-## 测速注意事项
+## Speed-test notes
 
-- **必须使用 host 网络**：Docker 的 bridge 网络会影响测速结果。Docker Desktop（Windows/macOS）不支持 host 网络，建议在 Linux 上部署，或直接运行二进制。
-- **关闭代理**：本机如果运行了 Clash/Surge 等 TUN 或透明代理，测到的延迟会异常低（约 1 ms），结果不可信。请把运行测速的设备排除在代理之外。
-- **下载速度为 0**：cfst 默认的测速地址不保证可用，建议在任务中设置自建的「测速地址」，或者开启「禁用下载测速」，只按延迟排序。
-- **`-sl` 搭配 `-tl`**：只设置下载速度下限时，如果凑不够满足条件的 IP，cfst 可能长时间测速。
+- **Use host networking**: Docker's bridge network skews results. Docker Desktop (Windows/macOS) does not support host networking, so deploy on Linux or run the binary directly.
+- **Turn off proxies**: TUN or transparent proxies such as Clash or Surge make latency look unrealistically low (around 1 ms). Exclude the device running the tests from your proxy.
+- **Download speed is 0**: cfst's default test URL is not guaranteed to work. Set your own test URL in the task, or disable the download test and sort by latency only.
+- **`-sl` with `-tl`**: if you only set a minimum download speed and not enough IPs qualify, cfst may keep testing for a long time.
 
-## 开发
+## Development
 
-需要 Go 1.26+、Node.js 22+ 和 pnpm。
+Requires Go 1.26+, Node.js 22+ and pnpm.
 
 ```bash
-# 前端（开发服务器会把 /api 代理到 127.0.0.1:8080）
+# Frontend (the dev server proxies /api to 127.0.0.1:8080)
 cd web && pnpm install && pnpm dev
 
-# 后端
+# Backend
 go run ./cmd/cfst-ddns -data ./data -log-level debug
 
-# 完整构建（前端产物通过 go:embed 打入二进制）
+# Full build (the frontend is embedded with go:embed)
 cd web && pnpm build && cd .. && go build -o cfst-ddns ./cmd/cfst-ddns
 
-# 测试
+# Tests
 go test ./...
 
 # Docker
 docker build -t cfst-ddns .                    # standard
-docker build --target bundled -t cfst-ddns:b . # 预置 cfst
+docker build --target bundled -t cfst-ddns:b . # cfst preinstalled
 ```
 
-项目结构见 [docs/PLAN.md](docs/PLAN.md)，接口约定见 [docs/API.md](docs/API.md)，提交与发布规范见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+See [docs/PLAN.md](docs/PLAN.md) for the project layout, [docs/API.md](docs/API.md) for the API, and [CONTRIBUTING.md](CONTRIBUTING.md) for commit and release conventions (all in Chinese).
 
-### 新增 DNS 服务商或通知渠道
+### Adding a DNS provider or notification channel
 
-在 `internal/provider/`（或 `internal/notify/`）中新建一个文件，实现对应接口，并在 `init()` 中调用 `Register` 注册字段 Schema。前端表单会根据 Schema 自动生成，不需要修改前端代码。
+Create a file in `internal/provider/` (or `internal/notify/`), implement the interface, and call `Register` in `init()` with the field schema. The frontend builds its forms from the schema, so no frontend changes are needed.
 
-## 致谢
+## Acknowledgements
 
-- [XIU2/CloudflareSpeedTest](https://github.com/XIU2/CloudflareSpeedTest)（GPL-3.0）：本项目以独立子进程调用其发布的程序。
+- [XIU2/CloudflareSpeedTest](https://github.com/XIU2/CloudflareSpeedTest) (GPL-3.0): cfst-ddns runs its released binary as a separate process.
