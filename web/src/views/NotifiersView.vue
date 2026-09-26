@@ -212,14 +212,15 @@ async function remove(n: Notifier) {
     <div v-else class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
       <Card v-for="n in list" :key="n.id">
         <CardHeader>
-          <CardTitle class="flex min-w-0 items-center gap-2.5">
-            <BrandIcon kind="notifier" :type="n.type" :name="meta.notifierName(n.type)" :class="n.enabled ? 'size-7' : 'size-7 opacity-50'" />
-            <span class="truncate" :title="n.name">{{ n.name }}</span>
-          </CardTitle>
-          <CardDescription class="flex items-center gap-2">
-            <ToneBadge tone="primary">{{ meta.notifierName(n.type) }}</ToneBadge>
-            <ToneBadge v-if="!n.enabled">已停用</ToneBadge>
-          </CardDescription>
+          <div class="flex min-w-0 items-center gap-3">
+            <BrandIcon kind="notifier" :type="n.type" :name="meta.notifierName(n.type)" :class="n.enabled ? 'size-9' : 'size-9 opacity-50'" />
+            <div class="grid min-w-0 gap-0.5">
+              <CardTitle class="truncate" :title="n.name">{{ n.name }}</CardTitle>
+              <CardDescription class="truncate text-xs">
+                {{ [n.name === meta.notifierName(n.type) ? '' : meta.notifierName(n.type), n.enabled ? '' : '已停用'].filter(Boolean).join(' · ') || '已启用' }}
+              </CardDescription>
+            </div>
+          </div>
           <CardAction class="flex items-center gap-1">
             <Switch
               :model-value="n.enabled"

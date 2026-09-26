@@ -36,7 +36,6 @@ import FormItem from '@/components/FormItem.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import SchemaForm, { mergeSchemaDefaults, schemaDefaults } from '@/components/SchemaForm.vue'
 import BrandIcon from '@/components/BrandIcon.vue'
-import ToneBadge from '@/components/ToneBadge.vue'
 import TypePicker from '@/components/TypePicker.vue'
 import { confirm } from '@/composables/useConfirm'
 import { useMetaStore } from '@/stores/meta'
@@ -201,14 +200,15 @@ async function remove(a: Account) {
     <div v-else class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
       <Card v-for="a in list" :key="a.id">
         <CardHeader>
-          <CardTitle class="flex min-w-0 items-center gap-2.5">
-            <BrandIcon kind="provider" :type="a.provider" :name="meta.providerName(a.provider)" class="size-7" />
-            <span class="truncate" :title="a.name">{{ a.name }}</span>
-          </CardTitle>
-          <CardDescription class="flex items-center gap-2">
-            <ToneBadge tone="primary">{{ meta.providerName(a.provider) }}</ToneBadge>
-            <span class="text-xs">{{ a.taskCount ? `${a.taskCount} 个任务在用` : '未被引用' }}</span>
-          </CardDescription>
+          <div class="flex min-w-0 items-center gap-3">
+            <BrandIcon kind="provider" :type="a.provider" :name="meta.providerName(a.provider)" class="size-9" />
+            <div class="grid min-w-0 gap-0.5">
+              <CardTitle class="truncate" :title="a.name">{{ a.name }}</CardTitle>
+              <CardDescription class="truncate text-xs">
+                {{ [a.name === meta.providerName(a.provider) ? '' : meta.providerName(a.provider), a.taskCount ? `${a.taskCount} 个任务在用` : '未被引用'].filter(Boolean).join(' · ') }}
+              </CardDescription>
+            </div>
+          </div>
           <CardAction>
             <DropdownMenu>
               <DropdownMenuTrigger as-child>
