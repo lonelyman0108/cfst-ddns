@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/lonelyman0108/cfst-ddns/internal/store"
 )
@@ -209,6 +210,23 @@ func clean(s string) string {
 	return strings.TrimSpace(lastBar(ansi.ReplaceAllString(s, "")))
 }
 
+// barTail 匹配进度条「]」之后以多个空格隔开的下一段文字。
+var barTail = regexp.MustCompile(`^(.*?\][^\n]*?)\s{2,}(\S.*)$`)
+
+// splitBarLine 拆开首尾相接的「最后一条进度条 + 下一行日志」。
+// cfst 结束进度条时不换行，紧接着输出的提示（如「开始下载测速」）会与之同处一行。
+// 只有后半段含文字时才拆分，避免把进度条尾部的纯数字当成新行。
+func splitBarLine(s string) []string {
+	if !barStart.MatchString(s) {
+		return []string{s}
+	}
+	m := barTail.FindStringSubmatch(s)
+	if m == nil || !strings.ContainsFunc(m[2], unicode.IsLetter) {
+		return []string{s}
+	}
+	return []string{strings.TrimSpace(m[1]), m[2]}
+}
+
 // pump 把输出拆分为日志行与进度行：以 \n 结尾的是日志；以 \r 结尾，
 // 或暂时没有换行的尾部（非终端模式下的进度条）作为进度行，限流推送。
 func pump(r io.Reader, out Output) {
@@ -232,7 +250,9 @@ func pump(r io.Reader, out Output) {
 			seg := string(buf[:i])
 			if buf[i] == '\n' {
 				if line := clean(seg); line != "" {
-					out.Line(line)
+					for _, l := range splitBarLine(line) {
+						out.Line(l)
+					}
 				}
 			} else {
 				progress(seg)

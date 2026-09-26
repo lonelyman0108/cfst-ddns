@@ -134,3 +134,17 @@ func TestPumpConcatenatedBars(t *testing.T) {
 		t.Fatalf("progress = %q", c.progress)
 	}
 }
+
+func TestSplitBarLine(t *testing.T) {
+	cases := map[string][]string{
+		"5955 / 5955 [------] 可用: 5142  开始下载测速（下限：5.00 MB/s, 数量：10, 队列：168）": {"5955 / 5955 [------] 可用: 5142", "开始下载测速（下限：5.00 MB/s, 数量：10, 队列：168）"},
+		"64 / 64 [------] 可用: 30":   {"64 / 64 [------] 可用: 30"},
+		"10 / 10 [------]        3": {"10 / 10 [------]        3"},
+		"开始延迟测速（模式：TCP, 端口：443）":    {"开始延迟测速（模式：TCP, 端口：443）"},
+	}
+	for in, want := range cases {
+		if got := splitBarLine(in); !reflect.DeepEqual(got, want) {
+			t.Errorf("splitBarLine(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

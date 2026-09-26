@@ -195,7 +195,7 @@ async function remove(t: Task) {
                     <Button variant="ghost" size="icon" class="size-8"><EllipsisVertical /></Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" class="w-44">
-                    <DropdownMenuItem :disabled="running[t.id]" @select="runNow(t, true)"><FlaskConical />试运行（不改 DNS）</DropdownMenuItem>
+                    <DropdownMenuItem :disabled="running[t.id]" @select="runNow(t, true)"><FlaskConical />试运行</DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem @select="router.push(`/tasks/${t.id}`)"><Pencil />编辑</DropdownMenuItem>
                     <DropdownMenuItem @select="clone(t)"><Copy />克隆</DropdownMenuItem>
