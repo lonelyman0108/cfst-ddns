@@ -1,10 +1,13 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -75,11 +78,34 @@ func (s *Server) authPassword(c *gin.Context) {
 func (s *Server) metaProviders(c *gin.Context) { c.JSON(http.StatusOK, provider.Metas()) }
 func (s *Server) metaNotifiers(c *gin.Context) { c.JSON(http.StatusOK, notify.Metas()) }
 
-func (s *Server) systemInfo(c *gin.Context) {
-	tz := os.Getenv("TZ")
-	if tz == "" {
-		tz = time.Local.String()
+// timezoneName 返回可读的时区，如 "Asia/Shanghai (UTC+08:00)"。
+// time.Local 的名字恒为 "Local"，需从 TZ 或 /etc/localtime 的链接目标推断真实名称。
+func timezoneName() string {
+	name := os.Getenv("TZ")
+	if name == "" {
+		name = time.Local.String()
 	}
+	if name == "Local" {
+		name = ""
+		if p, err := filepath.EvalSymlinks("/etc/localtime"); err == nil {
+			if i := strings.Index(p, "zoneinfo/"); i >= 0 {
+				name = p[i+len("zoneinfo/"):]
+			}
+		}
+	}
+	abbr, off := time.Now().Zone()
+	if name == "" {
+		name = abbr
+	}
+	sign := '+'
+	if off < 0 {
+		sign, off = '-', -off
+	}
+	return fmt.Sprintf("%s (UTC%c%02d:%02d)", name, sign, off/3600, off%3600/60)
+}
+
+func (s *Server) systemInfo(c *gin.Context) {
+	tz := timezoneName()
 	c.JSON(http.StatusOK, gin.H{
 		"version": s.Build.Version, "commit": s.Build.Commit, "buildTime": s.Build.BuildTime,
 		"goVersion": runtime.Version(), "os": runtime.GOOS, "arch": runtime.GOARCH,

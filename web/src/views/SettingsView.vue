@@ -286,11 +286,13 @@ async function onFile(e: Event) {
         <CardContent>
           <Skeleton v-if="!info" class="h-32" />
           <dl v-else class="grid grid-cols-1 gap-x-8 gap-y-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
-            <div><dt class="text-muted-foreground text-xs">版本</dt><dd class="mt-0.5 font-medium">{{ info.version }}</dd></div>
-            <div><dt class="text-muted-foreground text-xs">提交</dt><dd class="mt-0.5 font-mono text-code">{{ info.commit || '-' }}</dd></div>
+            <div><dt class="text-muted-foreground text-xs">版本</dt><dd class="mt-0.5 font-medium">
+                {{ info.version === 'dev' ? '开发构建' : info.version }}
+              </dd></div>
+            <div><dt class="text-muted-foreground text-xs">提交</dt><dd class="mt-0.5 font-mono text-code">{{ info.commit && info.commit !== 'none' ? info.commit : '-' }}</dd></div>
             <div>
               <dt class="text-muted-foreground text-xs">构建时间</dt>
-              <dd class="mt-0.5">{{ fmtTime(info.buildTime) !== '-' ? fmtTime(info.buildTime) : info.buildTime || '-' }}</dd>
+              <dd class="mt-0.5">{{ fmtTime(info.buildTime) }}</dd>
             </div>
             <div><dt class="text-muted-foreground text-xs">Go 版本</dt><dd class="mt-0.5 font-mono text-code">{{ info.goVersion }}</dd></div>
             <div><dt class="text-muted-foreground text-xs">平台</dt><dd class="mt-0.5 font-mono text-code">{{ info.os }}/{{ info.arch }}</dd></div>
