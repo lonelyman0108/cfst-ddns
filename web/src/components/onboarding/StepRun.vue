@@ -58,7 +58,7 @@ function onDone(s: RunSummary) {
 </script>
 
 <template>
-  <div class="grid gap-4">
+  <div class="grid grid-cols-[minmax(0,1fr)] gap-4">
     <Skeleton v-if="!tasks" class="h-32" />
     <p v-else-if="!tasks.length" class="text-muted-foreground rounded-lg border border-dashed p-4 text-center text-sm">
       需要先创建一个任务

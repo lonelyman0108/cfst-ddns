@@ -140,7 +140,7 @@ watch(
       class="flex items-center gap-2 border-t border-white/10 bg-white/[0.03] px-4 py-1.5 font-mono text-log text-amber-300"
     >
       <span class="size-1.5 shrink-0 animate-pulse rounded-full bg-amber-300" />
-      <span class="truncate">{{ progress }}</span>
+      <span class="min-w-0 truncate">{{ progress }}</span>
     </div>
   </div>
 </template>

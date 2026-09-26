@@ -114,7 +114,7 @@ function finish() {
         </CardTitle>
         <CardDescription>{{ step.description }}</CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent class="min-w-0">
         <StepCfst v-if="step.key === 'cfst'" @changed="onChanged" />
         <StepAccount v-else-if="step.key === 'account'" @changed="onChanged" />
         <StepNotifier v-else-if="step.key === 'notifier'" @changed="onChanged" />
