@@ -1,0 +1,17 @@
+export default {
+  title: 'システムログ',
+  description: 'アプリケーションの実行ログ（メモリ内リングバッファ）',
+  terminal: 'ターミナル',
+  table: 'テーブル',
+  allLevels: 'すべてのレベル',
+  atLeast: '{level} 以上',
+  only: '{level} のみ',
+  keyword: 'キーワードで検索',
+  recent: '直近 {n} 件',
+  autoRefresh: '自動更新（3 秒）',
+  count: '{shown} / {total} 件',
+  time: '日時',
+  level: 'レベル',
+  message: '内容',
+  empty: 'ログはありません',
+}

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
 import { ArrowLeft, Bell, CircleCheck, FileUp, ListChecks, Loader2, ScanText, TriangleAlert, Upload, UserRoundKey } from '@lucide/vue'
@@ -18,6 +19,7 @@ import type { IPType } from '@/api/types'
 import { describeCron } from '@/utils/cron'
 import { ipTypeLabel } from '@/utils/format'
 
+const { t } = useI18n()
 const router = useRouter()
 const meta = useMetaStore()
 
@@ -29,12 +31,14 @@ const preview = ref<LegacyPreview | null>(null)
 const result = ref<LegacyApplyResult | null>(null)
 const fileInput = ref<HTMLInputElement>()
 
-const PLACEHOLDER = `# 粘贴 v1 的 config.sh、.env 或 docker-compose 的 environment 片段，例如：
+const placeholder = computed(
+  () => `# ${t('legacy.placeholderComment')}
 DNS_PROVIDER=cloudflare
 CF_API_TOKEN=xxxxxxxx
 DNS_RECORD_NAMES="cdn.example.com"
 CRON_SCHEDULE="0 */6 * * *"
-CFST_PARAMS="-n 200 -t 4 -tl 200"`
+CFST_PARAMS="-n 200 -t 4 -tl 200"`,
+)
 
 const total = computed(() => {
   const p = preview.value
@@ -49,7 +53,7 @@ onMounted(() => {
 async function readFile(f: File | undefined | null) {
   if (!f) return
   if (f.size > 1024 * 1024) {
-    toast.error('文件过大，请只粘贴相关配置')
+    toast.error(t('legacy.fileTooLarge'))
     return
   }
   content.value = await f.text()
@@ -69,7 +73,7 @@ function onDrop(e: DragEvent) {
 
 async function parse() {
   if (!content.value.trim()) {
-    toast.error('请先粘贴或选择配置文件')
+    toast.error(t('legacy.contentRequired'))
     return
   }
   parsing.value = true
@@ -87,15 +91,15 @@ async function apply() {
   const p = preview.value
   if (!p) return
   const ok = await confirm({
-    title: '确认导入？',
-    description: `将新建 ${p.accounts.length} 个 DNS 账号、${p.notifiers.length} 个通知渠道、${p.tasks.length} 个任务，不会修改已有配置。`,
-    confirmText: '导入',
+    title: t('legacy.confirmTitle'),
+    description: t('legacy.confirmDescription', { accounts: p.accounts.length, notifiers: p.notifiers.length, tasks: p.tasks.length }),
+    confirmText: t('common.import'),
   })
   if (!ok) return
   applying.value = true
   try {
     result.value = await legacyApi.apply(content.value)
-    toast.success('v1 配置已导入')
+    toast.success(t('legacy.imported'))
   } catch {
     /* 已提示 */
   } finally {
@@ -108,13 +112,13 @@ function reset() {
   result.value = null
 }
 
-// 按字段 Schema 显示中文标签与选项名，未知字段原样显示
+// 按字段 Schema 显示本地化标签与选项名，未知字段原样显示
 function configLines(kind: 'provider' | 'notifier', type: string, c: Record<string, string>) {
-  const t = (kind === 'provider' ? meta.providers : meta.notifiers).find((m) => m.type === type)
+  const m = (kind === 'provider' ? meta.providers : meta.notifiers).find((m) => m.type === type)
   return Object.entries(c ?? {})
     .filter(([, v]) => v !== '')
     .map(([k, v]) => {
-      const f = t?.fields.find((x) => x.key === k)
+      const f = m?.fields.find((x) => x.key === k)
       return [f?.label ?? k, f?.options?.find((o) => o.value === v)?.label ?? v] as const
     })
 }
@@ -122,34 +126,34 @@ function configLines(kind: 'provider' | 'notifier', type: string, c: Record<stri
 
 <template>
   <div class="mx-auto flex w-full max-w-4xl flex-col gap-4">
-    <PageHeader title="从 v1 导入" description="把 v1（Bash 脚本版）的环境变量转换为账号、通知渠道和任务">
-      <Button variant="outline" size="sm" @click="router.push('/settings#backup')"><ArrowLeft />返回设置</Button>
+    <PageHeader :title="t('legacy.title')" :description="t('legacy.description')">
+      <Button variant="outline" size="sm" @click="router.push('/settings#backup')"><ArrowLeft />{{ t('legacy.backToSettings') }}</Button>
     </PageHeader>
 
     <!-- 结果 -->
     <Card v-if="result">
       <CardHeader>
-        <CardTitle class="flex items-center gap-2"><CircleCheck class="text-success size-4" />导入完成</CardTitle>
-        <CardDescription>凭据已加密保存，建议在任务页检查一次目标记录后再执行</CardDescription>
+        <CardTitle class="flex items-center gap-2"><CircleCheck class="text-success size-4" />{{ t('legacy.doneTitle') }}</CardTitle>
+        <CardDescription>{{ t('legacy.doneDescription') }}</CardDescription>
       </CardHeader>
       <CardContent class="grid grid-cols-1 gap-4">
         <div class="grid grid-cols-3 gap-3">
           <div class="rounded-lg border p-3">
-            <div class="text-muted-foreground text-xs">DNS 账号</div>
+            <div class="text-muted-foreground text-xs">{{ t('legacy.accounts') }}</div>
             <div class="stat-number mt-1">{{ result.created.accounts }}</div>
           </div>
           <div class="rounded-lg border p-3">
-            <div class="text-muted-foreground text-xs">通知渠道</div>
+            <div class="text-muted-foreground text-xs">{{ t('legacy.notifiers') }}</div>
             <div class="stat-number mt-1">{{ result.created.notifiers }}</div>
           </div>
           <div class="rounded-lg border p-3">
-            <div class="text-muted-foreground text-xs">任务</div>
+            <div class="text-muted-foreground text-xs">{{ t('legacy.tasks') }}</div>
             <div class="stat-number mt-1">{{ result.created.tasks }}</div>
           </div>
         </div>
         <Alert v-if="result.warnings?.length" class="border-warning/40 bg-warning/5">
           <TriangleAlert class="text-warning!" />
-          <AlertTitle>需要手动处理</AlertTitle>
+          <AlertTitle>{{ t('legacy.manualAction') }}</AlertTitle>
           <AlertDescription>
             <ul class="list-disc pl-4">
               <li v-for="(w, i) in result.warnings" :key="i">{{ w }}</li>
@@ -158,8 +162,8 @@ function configLines(kind: 'provider' | 'notifier', type: string, c: Record<stri
         </Alert>
       </CardContent>
       <CardFooter class="flex flex-wrap justify-end gap-2 border-t">
-        <Button variant="outline" @click="router.push('/accounts')">查看账号</Button>
-        <Button @click="router.push('/tasks')"><ListChecks />查看任务</Button>
+        <Button variant="outline" @click="router.push('/accounts')">{{ t('legacy.viewAccounts') }}</Button>
+        <Button @click="router.push('/tasks')"><ListChecks />{{ t('legacy.viewTasks') }}</Button>
       </CardFooter>
     </Card>
 
@@ -167,7 +171,7 @@ function configLines(kind: 'provider' | 'notifier', type: string, c: Record<stri
     <template v-else-if="preview">
       <Alert v-if="preview.warnings?.length" class="border-warning/40 bg-warning/5">
         <TriangleAlert class="text-warning!" />
-        <AlertTitle>{{ preview.warnings.length }} 项需要注意</AlertTitle>
+        <AlertTitle>{{ t('legacy.warnings', { n: preview.warnings.length }) }}</AlertTitle>
         <AlertDescription>
           <ul class="list-disc pl-4">
             <li v-for="(w, i) in preview.warnings" :key="i">{{ w }}</li>
@@ -176,11 +180,11 @@ function configLines(kind: 'provider' | 'notifier', type: string, c: Record<stri
       </Alert>
 
       <Card v-if="!total" class="py-0">
-        <CardContent class="text-muted-foreground py-10 text-center text-sm">没有识别到可导入的配置，请检查粘贴的内容</CardContent>
+        <CardContent class="text-muted-foreground py-10 text-center text-sm">{{ t('legacy.nothing') }}</CardContent>
       </Card>
 
       <section v-if="preview.accounts.length" class="grid grid-cols-1 gap-2">
-        <h2 class="flex items-center gap-2 text-sm font-medium"><UserRoundKey class="text-muted-foreground size-4" />DNS 账号 · {{ preview.accounts.length }}</h2>
+        <h2 class="flex items-center gap-2 text-sm font-medium"><UserRoundKey class="text-muted-foreground size-4" />{{ t('legacy.accounts') }} · {{ preview.accounts.length }}</h2>
         <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Card v-for="(a, i) in preview.accounts" :key="i" class="gap-2 py-4">
             <CardHeader class="grid-cols-[auto_1fr] gap-x-3">
@@ -201,7 +205,7 @@ function configLines(kind: 'provider' | 'notifier', type: string, c: Record<stri
       </section>
 
       <section v-if="preview.notifiers.length" class="grid grid-cols-1 gap-2">
-        <h2 class="flex items-center gap-2 text-sm font-medium"><Bell class="text-muted-foreground size-4" />通知渠道 · {{ preview.notifiers.length }}</h2>
+        <h2 class="flex items-center gap-2 text-sm font-medium"><Bell class="text-muted-foreground size-4" />{{ t('legacy.notifiers') }} · {{ preview.notifiers.length }}</h2>
         <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Card v-for="(n, i) in preview.notifiers" :key="i" class="gap-2 py-4">
             <CardHeader class="grid-cols-[auto_1fr] gap-x-3">
@@ -209,9 +213,9 @@ function configLines(kind: 'provider' | 'notifier', type: string, c: Record<stri
               <CardTitle class="truncate" :title="n.name">{{ n.name }}</CardTitle>
               <CardDescription class="flex flex-wrap gap-1.5">
                 <ToneBadge tone="primary">{{ meta.notifierName(n.type) }}</ToneBadge>
-                <ToneBadge v-if="n.onSuccess">成功时</ToneBadge>
-                <ToneBadge v-if="n.onFailure">失败时</ToneBadge>
-                <ToneBadge v-if="n.onChangeOnly">仅 IP 变化</ToneBadge>
+                <ToneBadge v-if="n.onSuccess">{{ t('legacy.onSuccess') }}</ToneBadge>
+                <ToneBadge v-if="n.onFailure">{{ t('legacy.onFailure') }}</ToneBadge>
+                <ToneBadge v-if="n.onChangeOnly">{{ t('legacy.onlyOnChange') }}</ToneBadge>
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -227,34 +231,34 @@ function configLines(kind: 'provider' | 'notifier', type: string, c: Record<stri
       </section>
 
       <section v-if="preview.tasks.length" class="grid grid-cols-1 gap-2">
-        <h2 class="flex items-center gap-2 text-sm font-medium"><ListChecks class="text-muted-foreground size-4" />任务 · {{ preview.tasks.length }}</h2>
-        <Card v-for="(t, i) in preview.tasks" :key="i" class="gap-2 py-4">
+        <h2 class="flex items-center gap-2 text-sm font-medium"><ListChecks class="text-muted-foreground size-4" />{{ t('legacy.tasks') }} · {{ preview.tasks.length }}</h2>
+        <Card v-for="(task, i) in preview.tasks" :key="i" class="gap-2 py-4">
           <CardHeader>
-            <CardTitle class="truncate" :title="t.name">{{ t.name }}</CardTitle>
+            <CardTitle class="truncate" :title="task.name">{{ task.name }}</CardTitle>
             <CardDescription class="flex flex-wrap gap-1.5">
-              <ToneBadge>{{ t.cron ? describeCron(t.cron) : '仅手动' }}</ToneBadge>
-              <ToneBadge>{{ ipTypeLabel[t.ipType as IPType] ?? t.ipType }}</ToneBadge>
+              <ToneBadge>{{ task.cron ? describeCron(task.cron) : t('cron.presets.manual') }}</ToneBadge>
+              <ToneBadge>{{ ipTypeLabel[task.ipType as IPType] ?? task.ipType }}</ToneBadge>
             </CardDescription>
           </CardHeader>
-          <CardContent class="text-muted-foreground text-sm whitespace-pre-line">{{ t.summary }}</CardContent>
+          <CardContent class="text-muted-foreground text-sm whitespace-pre-line">{{ task.summary }}</CardContent>
         </Card>
       </section>
 
       <p v-if="preview.settings?.githubMirror" class="text-muted-foreground text-sm">
-        GitHub 镜像：<span class="text-foreground font-mono">{{ preview.settings.githubMirror }}</span>
+        {{ t('legacy.mirror') }}<span class="text-foreground font-mono">{{ preview.settings.githubMirror }}</span>
       </p>
 
       <div class="flex flex-wrap justify-end gap-2">
-        <Button variant="outline" @click="reset">返回修改</Button>
-        <Button :disabled="!total || applying" @click="apply"><Loader2 v-if="applying" class="animate-spin" /><Upload v-else />确认导入</Button>
+        <Button variant="outline" @click="reset">{{ t('legacy.backToEdit') }}</Button>
+        <Button :disabled="!total || applying" @click="apply"><Loader2 v-if="applying" class="animate-spin" /><Upload v-else />{{ t('legacy.confirmImport') }}</Button>
       </div>
     </template>
 
     <!-- 输入 -->
     <Card v-else>
       <CardHeader>
-        <CardTitle class="flex items-center gap-2"><ScanText class="text-muted-foreground size-4" />粘贴旧配置</CardTitle>
-        <CardDescription>支持 KEY=VALUE、export KEY=…、- KEY=VALUE 与 KEY: VALUE 写法；先预览，确认后才会创建</CardDescription>
+        <CardTitle class="flex items-center gap-2"><ScanText class="text-muted-foreground size-4" />{{ t('legacy.pasteTitle') }}</CardTitle>
+        <CardDescription>{{ t('legacy.pasteDescription') }}</CardDescription>
       </CardHeader>
       <CardContent class="grid grid-cols-1 gap-3">
         <div
@@ -263,14 +267,14 @@ function configLines(kind: 'provider' | 'notifier', type: string, c: Record<stri
           @dragleave="dragging = false"
           @drop.prevent="onDrop"
         >
-          <Textarea v-model="content" :placeholder="PLACEHOLDER" class="min-h-64 font-mono text-code" spellcheck="false" />
+          <Textarea v-model="content" :placeholder="placeholder" class="min-h-64 font-mono text-code" spellcheck="false" />
         </div>
-        <p class="text-muted-foreground text-xs">也可以把 config.sh / .env / docker-compose.yml 拖到输入框中。内容只发送到本机服务。</p>
+        <p class="text-muted-foreground text-xs">{{ t('legacy.dropHint') }}</p>
       </CardContent>
       <CardFooter class="flex flex-wrap justify-between gap-2 border-t">
-        <Button variant="outline" @click="fileInput?.click()"><FileUp />选择文件</Button>
+        <Button variant="outline" @click="fileInput?.click()"><FileUp />{{ t('legacy.pickFile') }}</Button>
         <input ref="fileInput" type="file" accept=".sh,.env,.yml,.yaml,.txt,text/plain" class="hidden" @change="onPick" />
-        <Button :disabled="parsing" @click="parse"><Loader2 v-if="parsing" class="animate-spin" /><ScanText v-else />解析预览</Button>
+        <Button :disabled="parsing" @click="parse"><Loader2 v-if="parsing" class="animate-spin" /><ScanText v-else />{{ t('legacy.parse') }}</Button>
       </CardFooter>
     </Card>
   </div>

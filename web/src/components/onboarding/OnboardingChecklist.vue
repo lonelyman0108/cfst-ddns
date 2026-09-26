@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ArrowRight, Check, Sparkles, X } from '@lucide/vue'
 import { onboardingApi, settingsApi } from '@/api'
 import type { OnboardingState } from '@/api/types-p9'
@@ -9,6 +10,7 @@ import { Progress } from '@/components/ui/progress'
 import { cn } from '@/lib/utils'
 import { ONBOARDING_STEPS } from './steps'
 
+const { t } = useI18n()
 const state = ref<OnboardingState | null>(null)
 const dismissed = ref(true)
 const dismissing = ref(false)
@@ -42,10 +44,10 @@ defineExpose({ reload: async () => (state.value = await onboardingApi.state()) }
 <template>
   <Card v-if="visible" class="border-primary/30 gap-3">
     <CardHeader>
-      <CardTitle class="flex items-center gap-2"><Sparkles class="text-primary size-4" />入门清单</CardTitle>
-      <CardDescription>完成以下几步，让优选 IP 自动写入 DNS</CardDescription>
+      <CardTitle class="flex items-center gap-2"><Sparkles class="text-primary size-4" />{{ t('onboarding.checklist.title') }}</CardTitle>
+      <CardDescription>{{ t('onboarding.checklist.description') }}</CardDescription>
       <CardAction>
-        <Button variant="ghost" size="icon" class="-mr-2 size-8" title="不再显示" :disabled="dismissing" @click="dismiss"><X /></Button>
+        <Button variant="ghost" size="icon" class="-mr-2 size-8" :title="t('onboarding.checklist.dismiss')" :disabled="dismissing" @click="dismiss"><X /></Button>
       </CardAction>
     </CardHeader>
     <CardContent class="grid grid-cols-1 gap-3">
@@ -75,7 +77,7 @@ defineExpose({ reload: async () => (state.value = await onboardingApi.state()) }
               <Check v-if="state?.[s.key]" class="size-3" />
             </span>
             <span :class="cn('min-w-0 flex-1 truncate', state?.[s.key] ? 'line-through' : 'font-medium')">
-              {{ s.title }}<span v-if="s.optional" class="text-muted-foreground font-normal">（可选）</span>
+              {{ t(s.title) }}<span v-if="s.optional" class="text-muted-foreground font-normal">{{ t('onboarding.checklist.optional') }}</span>
             </span>
             <ArrowRight v-if="!state?.[s.key]" class="text-muted-foreground size-3.5 transition-transform group-hover:translate-x-0.5" />
           </router-link>

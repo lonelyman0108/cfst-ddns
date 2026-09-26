@@ -1,0 +1,17 @@
+export default {
+  title: 'System logs',
+  description: 'Application logs (in-memory ring buffer)',
+  terminal: 'Terminal',
+  table: 'Table',
+  allLevels: 'All levels',
+  atLeast: '{level} and above',
+  only: '{level} only',
+  keyword: 'Search keyword',
+  recent: 'Last {n}',
+  autoRefresh: 'Auto refresh (3s)',
+  count: '{shown} / {total} lines',
+  time: 'Time',
+  level: 'Level',
+  message: 'Message',
+  empty: 'No logs',
+}

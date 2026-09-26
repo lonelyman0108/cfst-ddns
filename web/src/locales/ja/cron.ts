@@ -1,0 +1,36 @@
+// 执行周期：预设、cron 描述与 CronInput 组件文案
+export default {
+  presets: {
+    every30m: '30 分ごと',
+    hourly: '毎時',
+    every6h: '6 時間ごと',
+    every12h: '12 時間ごと',
+    daily3: '毎日 3 時',
+    manual: '手動のみ',
+  },
+  at: {
+    daily0: '毎日 0 時',
+    weekly: '毎週日曜 0 時',
+    monthly: '毎月 1 日 0 時',
+    yearly: '毎年 1 月 1 日 0 時',
+  },
+  everyDuration: '{d} ごと',
+  everyNMin: '{n} 分ごと',
+  everyMinute: '毎分',
+  everyNHour: '{n} 時間ごと',
+  everyNHourAt: '{n} 時間ごと（{m} 分）',
+  hourlyAt: '毎時 {m} 分',
+  dailyAt: '毎日 {time}',
+  weeklyAt: '毎週{day} {time}',
+  monthlyAt: '毎月 {d} 日 {time}',
+  sep: '、',
+  weekday: { 0: '日曜', 1: '月曜', 2: '火曜', 3: '水曜', 4: '木曜', 5: '金曜', 6: '土曜' },
+  input: {
+    custom: 'カスタム cron',
+    placeholder: '分 時 日 月 曜日（例: 0 */2 * * *）',
+    manualHint: '自動実行しません。手動または Webhook でのみ実行できます',
+    next: '次回',
+    rel: '（{rel}）',
+    showMore: 'さらに表示',
+  },
+}

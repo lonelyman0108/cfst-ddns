@@ -7,7 +7,6 @@ import (
 	"debug/elf"
 	"debug/macho"
 	"debug/pe"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -19,23 +18,23 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/lonelyman0108/cfst-ddns/internal/i18n"
 )
 
 // MaxUploadSize 为上传文件的大小上限。
 const MaxUploadSize = 64 << 20
 
 // BadFileError 表示文件本身不可用（平台不匹配、无法执行、格式错误），对应 HTTP 400。
-type BadFileError struct{ Msg string }
+type BadFileError struct{ *i18n.Msg }
 
-func (e *BadFileError) Error() string { return e.Msg }
-
-func badFile(format string, a ...any) error { return &BadFileError{Msg: fmt.Sprintf(format, a...)} }
+func badFile(format string, a ...any) error { return &BadFileError{i18n.M(format, a...)} }
 
 // ErrInstalling 表示已有安装在进行。
-var ErrInstalling = errors.New("正在安装中，请稍候")
+var ErrInstalling = i18n.New("正在安装中，请稍候")
 
 // ErrTaskActive 表示有任务排队或运行中，此时不能替换二进制。
-var ErrTaskActive = errors.New("有任务正在执行或排队，请稍后再安装或导入")
+var ErrTaskActive = i18n.New("有任务正在执行或排队，请稍后再安装或导入")
 
 // ImportResult 为导入结果。
 type ImportResult struct {
@@ -53,6 +52,7 @@ type Candidate struct {
 	Arch       string `json:"arch"`
 	Compatible bool   `json:"compatible"`
 	Message    string `json:"message,omitempty"`
+	Err        error  `json:"-"` // 与 Message 对应的原始错误，供接口层按语言输出
 }
 
 // begin 占用安装标记，返回释放函数。
@@ -265,21 +265,21 @@ func probe(ctx context.Context, bin, workDir string) (string, error) {
 	v := ParseVersion(out.String())
 	// 输出版本后因联网检查更新超时被结束仍视为成功；未超时却异常退出且没有版本号视为无法运行
 	if werr != nil && ctx.Err() == nil && v == "" {
-		return "", badFile("试运行失败: %v%s", werr, outputHead(out.String()))
+		if h := outputHead(out.String()); h != "" {
+			return "", badFile("试运行失败: %v（输出: %s）", werr, h)
+		}
+		return "", badFile("试运行失败: %v", werr)
 	}
 	return v, nil
 }
 
-// outputHead 取输出的前几行用于错误提示。
+// outputHead 取输出的前几行（以 " / " 连接）用于错误提示。
 func outputHead(s string) string {
 	lines := strings.Split(strings.TrimSpace(s), "\n")
 	if len(lines) > 3 {
 		lines = lines[:3]
 	}
-	if h := strings.TrimSpace(strings.Join(lines, " / ")); h != "" {
-		return "（输出: " + h + "）"
-	}
-	return ""
+	return strings.TrimSpace(strings.Join(lines, " / "))
 }
 
 // limitedBuffer 只保留前 4KB 输出（并发安全）。
@@ -526,7 +526,7 @@ func (m *Manager) inspect(ctx context.Context, f found) Candidate {
 	c := Candidate{Path: f.path, Source: f.source}
 	file, err := os.Open(f.path)
 	if err != nil {
-		c.Message = err.Error()
+		c.Message, c.Err = err.Error(), err
 		return c
 	}
 	c.OS, c.Arch, err = DetectPlatform(file)
@@ -535,19 +535,19 @@ func (m *Manager) inspect(ctx context.Context, f found) Candidate {
 		err = CheckPlatform(c.OS, c.Arch)
 	}
 	if err != nil {
-		c.Message = err.Error()
+		c.Message, c.Err = err.Error(), err
 		return c
 	}
 	c.Version = firstNonEmpty(bundledVersion(f), ParseVersion(filepath.Base(f.path)))
 	dir, err := m.tempDir()
 	if err != nil {
-		c.Message = err.Error()
+		c.Message, c.Err = err.Error(), err
 		return c
 	}
 	defer os.RemoveAll(dir)
 	v, err := probe(ctx, f.path, dir)
 	if err != nil {
-		c.Message = err.Error()
+		c.Message, c.Err = err.Error(), err
 		return c
 	}
 	c.Compatible = true

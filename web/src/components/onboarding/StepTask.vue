@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { toast } from 'vue-sonner'
+import { useI18n } from 'vue-i18n'
 import { CircleCheck, Loader2, Plus, Save } from '@lucide/vue'
 import { accountsApi, notifiersApi, tasksApi } from '@/api'
 import type { Account, IPType, Notifier, Task, TaskInput } from '@/api/types'
@@ -19,19 +20,19 @@ import { describeCron } from '@/utils/cron'
 import { ipTypeLabel } from '@/utils/format'
 
 const emit = defineEmits<{ (e: 'changed'): void }>()
+const { t } = useI18n()
 
+// 标题与说明见 onboarding.task.templates.<key>
 interface Template {
   key: string
-  title: string
-  description: string
   ipType: IPType
   cron: string
 }
 
 const TEMPLATES: Template[] = [
-  { key: 'v4', title: 'IPv4 · 每 6 小时', description: '最常用：优选 1 个 IPv4 写入 A 记录', ipType: 'v4', cron: '0 */6 * * *' },
-  { key: 'v6', title: 'IPv6 · 每 6 小时', description: '优选 1 个 IPv6 写入 AAAA 记录', ipType: 'v6', cron: '0 */6 * * *' },
-  { key: 'both', title: '双栈 · 每 12 小时', description: '同时写入 A 与 AAAA 记录', ipType: 'both', cron: '0 */12 * * *' },
+  { key: 'v4', ipType: 'v4', cron: '0 */6 * * *' },
+  { key: 'v6', ipType: 'v6', cron: '0 */6 * * *' },
+  { key: 'both', ipType: 'both', cron: '0 */12 * * *' },
 ]
 
 const tasks = ref<Task[] | null>(null)
@@ -53,9 +54,10 @@ const form = reactive({
   name: '',
   nameTouched: false,
 })
+// 存文案 key，渲染时 t()
 const errors = reactive<Record<string, string>>({})
 
-const tpl = computed(() => TEMPLATES.find((t) => t.key === form.template) ?? TEMPLATES[0])
+const tpl = computed(() => TEMPLATES.find((x) => x.key === form.template) ?? TEMPLATES[0])
 const account = computed(() => accounts.value.find((a) => a.id === form.accountId))
 const fqdn = computed(() => {
   const d = form.domain.trim()
@@ -107,10 +109,10 @@ function onAccount(v: unknown) {
 
 function validate() {
   for (const k of Object.keys(errors)) delete errors[k]
-  if (!form.accountId) errors.account = '请先添加 DNS 账号'
-  if (!form.domain.trim()) errors.domain = '请填写主域名'
-  if (!form.rr.trim()) errors.rr = '请填写主机记录，根域名填 @'
-  if (!form.name.trim()) errors.name = '请填写任务名称'
+  if (!form.accountId) errors.account = 'onboarding.task.errors.account'
+  if (!form.domain.trim()) errors.domain = 'onboarding.task.errors.domain'
+  if (!form.rr.trim()) errors.rr = 'onboarding.task.errors.rr'
+  if (!form.name.trim()) errors.name = 'onboarding.task.errors.name'
   return !Object.keys(errors).length
 }
 
@@ -118,7 +120,7 @@ async function create() {
   if (!validate()) return
   const d = defaults.value
   if (!d) {
-    toast.error('无法获取任务默认参数，请刷新后重试')
+    toast.error(t('onboarding.task.noDefaults'))
     return
   }
   const acc = account.value
@@ -144,7 +146,7 @@ async function create() {
   saving.value = true
   try {
     await tasksApi.create(body)
-    toast.success('任务已创建')
+    toast.success(t('onboarding.task.created'))
     form.nameTouched = false
     await load()
     emit('changed')
@@ -161,75 +163,77 @@ async function create() {
     <Skeleton v-if="!tasks" class="h-48" />
     <template v-else>
       <div v-if="tasks.length" class="grid grid-cols-1 gap-2">
-        <div v-for="t in tasks" :key="t.id" class="flex items-center gap-3 rounded-lg border px-3 py-2.5">
+        <div v-for="x in tasks" :key="x.id" class="flex items-center gap-3 rounded-lg border px-3 py-2.5">
           <CircleCheck class="text-success size-4 shrink-0" />
-          <router-link :to="`/tasks/${t.id}`" class="min-w-0 flex-1 truncate text-sm font-medium hover:underline" :title="t.name">{{ t.name }}</router-link>
-          <span class="text-muted-foreground hidden text-xs sm:inline">{{ t.cron ? describeCron(t.cron) : '仅手动' }}</span>
-          <ToneBadge>{{ ipTypeLabel[t.ipType] ?? t.ipType }}</ToneBadge>
+          <router-link :to="`/tasks/${x.id}`" class="min-w-0 flex-1 truncate text-sm font-medium hover:underline" :title="x.name">{{ x.name }}</router-link>
+          <span class="text-muted-foreground hidden text-xs sm:inline">{{ x.cron ? describeCron(x.cron) : t('cron.presets.manual') }}</span>
+          <ToneBadge>{{ ipTypeLabel[x.ipType] ?? x.ipType }}</ToneBadge>
         </div>
         <div v-if="!adding">
-          <Button variant="outline" size="sm" @click="adding = true"><Plus />再创建一个</Button>
+          <Button variant="outline" size="sm" @click="adding = true"><Plus />{{ t('onboarding.task.createAnother') }}</Button>
         </div>
       </div>
 
       <p v-if="adding && !accounts.length" class="text-muted-foreground rounded-lg border border-dashed p-4 text-center text-sm">
-        需要先在上一步添加 DNS 账号
+        {{ t('onboarding.task.needAccount') }}
       </p>
 
       <div v-else-if="adding" class="grid grid-cols-1 gap-4">
         <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
           <button
-            v-for="t in TEMPLATES"
-            :key="t.key"
+            v-for="x in TEMPLATES"
+            :key="x.key"
             type="button"
             :class="
               cn(
                 'rounded-lg border p-3 text-left transition-colors',
-                form.template === t.key ? 'border-primary bg-primary/5' : 'hover:bg-accent/50',
+                form.template === x.key ? 'border-primary bg-primary/5' : 'hover:bg-accent/50',
               )
             "
-            @click="form.template = t.key"
+            @click="form.template = x.key"
           >
-            <div class="text-sm font-medium">{{ t.title }}</div>
-            <div class="text-muted-foreground mt-0.5 text-xs leading-relaxed">{{ t.description }}</div>
+            <div class="text-sm font-medium">{{ t(`onboarding.task.templates.${x.key}.title`) }}</div>
+            <div class="text-muted-foreground mt-0.5 text-xs leading-relaxed">{{ t(`onboarding.task.templates.${x.key}.description`) }}</div>
           </button>
         </div>
 
         <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <FormItem label="DNS 账号" required :error="errors.account" class="sm:col-span-2">
+          <FormItem :label="t('onboarding.task.account')" required :error="errors.account && t(errors.account)" class="sm:col-span-2">
             <Select :model-value="form.accountId || undefined" @update:model-value="onAccount">
-              <SelectTrigger class="w-full"><SelectValue placeholder="选择账号" /></SelectTrigger>
+              <SelectTrigger class="w-full"><SelectValue :placeholder="t('onboarding.task.selectAccount')" /></SelectTrigger>
               <SelectContent>
                 <SelectItem v-for="a in accounts" :key="a.id" :value="a.id">{{ a.name }}</SelectItem>
               </SelectContent>
             </Select>
           </FormItem>
-          <FormItem label="主域名" required :error="errors.domain" help="账号下托管的域名，如 example.com">
+          <FormItem :label="t('onboarding.task.domain')" required :error="errors.domain && t(errors.domain)" :help="t('onboarding.task.domainHelp')">
             <SuggestInput v-model="form.domain" :options="domains" :loading="domainsLoading" placeholder="example.com" />
           </FormItem>
-          <FormItem label="主机记录" required :error="errors.rr" help="如 cdn；根域名填 @">
+          <FormItem :label="t('onboarding.task.rr')" required :error="errors.rr && t(errors.rr)" :help="t('onboarding.task.rrHelp')">
             <Input v-model="form.rr" placeholder="cdn" />
           </FormItem>
-          <FormItem label="写入 IP 数量" help="大于 1 时创建多条同名记录做负载均衡">
-            <NumInput v-model="form.recordCount" :min="1" :max="10" suffix="条" class="max-w-32" />
+          <FormItem :label="t('onboarding.task.recordCount')" :help="t('onboarding.task.recordCountHelp')">
+            <NumInput v-model="form.recordCount" :min="1" :max="10" :suffix="t('onboarding.task.recordUnit')" class="max-w-32" />
           </FormItem>
-          <FormItem label="任务名称" required :error="errors.name">
+          <FormItem :label="t('onboarding.task.name')" required :error="errors.name && t(errors.name)">
             <Input v-model="form.name" maxlength="64" @input="form.nameTouched = true" />
           </FormItem>
         </div>
 
         <div v-if="notifiers.length" class="rounded-lg border">
-          <SettingRow label="发送通知" :description="`推送到已添加的 ${notifiers.length} 个渠道`" for="ob-task-notify">
+          <SettingRow :label="t('onboarding.task.notify')" :description="t('onboarding.task.notifyDesc', { n: notifiers.length })" for="ob-task-notify">
             <Switch id="ob-task-notify" v-model="form.notify" />
           </SettingRow>
         </div>
 
         <p class="text-muted-foreground text-xs">
-          <template v-if="fqdn">将把优选 IP 写入 <span class="text-foreground font-mono">{{ fqdn }}</span>，</template>
-          执行周期为「{{ describeCron(tpl.cron) }}」。其余测速参数使用默认值，之后可以在任务页调整。
+          <i18n-t v-if="fqdn" keypath="onboarding.task.summaryTarget">
+            <template #fqdn><span class="text-foreground font-mono">{{ fqdn }}</span></template>
+          </i18n-t>
+          {{ t('onboarding.task.summarySchedule', { cron: describeCron(tpl.cron) }) }}
         </p>
         <div>
-          <Button :disabled="saving" @click="create"><Loader2 v-if="saving" class="animate-spin" /><Save v-else />创建任务</Button>
+          <Button :disabled="saving" @click="create"><Loader2 v-if="saving" class="animate-spin" /><Save v-else />{{ t('onboarding.task.create') }}</Button>
         </div>
       </div>
     </template>

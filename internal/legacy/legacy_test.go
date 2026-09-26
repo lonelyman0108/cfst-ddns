@@ -133,7 +133,7 @@ func TestSplitRecord(t *testing.T) {
 
 func hasWarn(p *Plan, sub string) bool {
 	for _, w := range p.Warnings {
-		if strings.Contains(w, sub) {
+		if strings.Contains(w.Error(), sub) {
 			return true
 		}
 	}
@@ -179,7 +179,7 @@ FOO=bar`), base)
 		if len(p.Warnings) != 1 || !hasWarn(p, "FOO") {
 			t.Fatalf("warnings = %v", p.Warnings)
 		}
-		if s := tk.Summary(); !strings.Contains(s, "A + AAAA") || !strings.Contains(s, "-debug -n 300 -sl 5") || !strings.Contains(s, "*/30") {
+		if s := tk.Summary().Error(); !strings.Contains(s, "A + AAAA") || !strings.Contains(s, "-debug -n 300 -sl 5") || !strings.Contains(s, "*/30") {
 			t.Fatalf("summary = %s", s)
 		}
 	})
@@ -282,12 +282,12 @@ TG_CHAT_ID=""`), base)
 
 func TestParseRefs(t *testing.T) {
 	p := Parse("CF_API_TOKEN=${CF_TOKEN}\nDNS_RECORD_NAMES=a.example.com\nTG_BOT_TOKEN=$BOT\nTG_BOT_TOKEN=real", base)
-	if len(p.Warnings) < 2 || p.Warnings[0] != "变量 CF_API_TOKEN 引用了外部环境变量 ${CF_TOKEN}，请填写实际值" {
+	if len(p.Warnings) < 2 || p.Warnings[0].Error() != "变量 CF_API_TOKEN 引用了外部环境变量 ${CF_TOKEN}，请填写实际值" {
 		t.Fatalf("warnings = %v", p.Warnings)
 	}
 	// 后面重新赋了实际值的变量不再提示
 	for _, w := range p.Warnings {
-		if strings.Contains(w, "TG_BOT_TOKEN 引用") {
+		if strings.Contains(w.Error(), "TG_BOT_TOKEN 引用") {
 			t.Fatalf("unexpected warning: %s", w)
 		}
 	}

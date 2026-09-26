@@ -9,7 +9,10 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
+import { useI18n } from 'vue-i18n'
 import { confirmState, settleConfirm } from '@/composables/useConfirm'
+
+const { t } = useI18n()
 
 function onOpenChange(v: boolean) {
   if (!v) settleConfirm(false)
@@ -26,9 +29,9 @@ function onOpenChange(v: boolean) {
         </AlertDialogDescription>
       </AlertDialogHeader>
       <AlertDialogFooter>
-        <AlertDialogCancel @click="settleConfirm(false)">{{ confirmState.cancelText || '取消' }}</AlertDialogCancel>
+        <AlertDialogCancel @click="settleConfirm(false)">{{ confirmState.cancelText || t('common.cancel') }}</AlertDialogCancel>
         <Button :variant="confirmState.destructive ? 'destructive' : 'default'" @click="settleConfirm(true)">
-          {{ confirmState.confirmText || '确定' }}
+          {{ confirmState.confirmText || t('common.confirm') }}
         </Button>
       </AlertDialogFooter>
     </AlertDialogContent>

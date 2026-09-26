@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ArrowDownToLine, Copy } from '@lucide/vue'
 import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -18,6 +19,7 @@ const props = withDefaults(
   { progress: '', live: false, title: '', height: '420px' },
 )
 
+const { t } = useI18n()
 const box = ref<HTMLElement>()
 const follow = ref(true)
 
@@ -111,12 +113,12 @@ watch(
           <span class="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-75" />
           <span class="relative inline-flex size-1.5 rounded-full bg-emerald-400" />
         </span>
-        实时
+        {{ t('runs.log.live') }}
       </span>
       <div class="ml-auto flex items-center gap-3">
         <label class="flex cursor-pointer items-center gap-1.5 text-zinc-400 select-none">
           <Switch :model-value="follow" class="scale-90 data-[state=unchecked]:bg-zinc-700" @update:model-value="setFollow" />
-          自动滚动
+          {{ t('runs.log.autoScroll') }}
         </label>
         <Tooltip>
           <TooltipTrigger as-child>
@@ -128,24 +130,24 @@ watch(
               <ArrowDownToLine class="size-3.5" />
             </button>
           </TooltipTrigger>
-          <TooltipContent>滚动到底部</TooltipContent>
+          <TooltipContent>{{ t('runs.log.toBottom') }}</TooltipContent>
         </Tooltip>
         <Tooltip>
           <TooltipTrigger as-child>
             <button
               type="button"
               class="rounded p-1 text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
-              @click="copyText(text, '日志已复制')"
+              @click="copyText(text, t('runs.log.copied'))"
             >
               <Copy class="size-3.5" />
             </button>
           </TooltipTrigger>
-          <TooltipContent>复制全部</TooltipContent>
+          <TooltipContent>{{ t('runs.log.copyAll') }}</TooltipContent>
         </Tooltip>
       </div>
     </div>
     <div ref="box" class="scrollbar-thin overflow-auto px-4 py-3 font-mono text-log" :style="{ height }" @scroll.passive="onScroll">
-      <div v-if="!lines.length" class="text-zinc-500">{{ live ? '等待日志输出…' : '（无日志）' }}</div>
+      <div v-if="!lines.length" class="text-zinc-500">{{ live ? t('runs.log.waiting') : t('runs.log.empty') }}</div>
       <div v-for="(l, i) in lines" :key="i" class="break-all whitespace-pre-wrap">
         <span v-if="l.time" class="mr-2 text-zinc-500 select-none">{{ l.time }}</span><span :class="cn(l.cls)">{{ l.body }}</span>
       </div>

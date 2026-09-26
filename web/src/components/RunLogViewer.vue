@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { toast } from 'vue-sonner'
+import { useI18n } from 'vue-i18n'
 import { ChevronDown, CircleX, Gauge, ListTree, RefreshCw, ScrollText, Timer, Zap } from '@lucide/vue'
 import { runsApi } from '@/api'
 import type { RunDetail, RunSummary, SpeedResult } from '@/api/types'
@@ -30,6 +31,7 @@ import {
 const props = withDefaults(defineProps<{ runId: number; logHeight?: string }>(), { logHeight: '440px' })
 const emit = defineEmits<{ (e: 'status', s: RunSummary): void; (e: 'done', s: RunSummary): void }>()
 
+const { t } = useI18n()
 const summary = ref<RunSummary | null>(null)
 const detail = ref<RunDetail | null>(null)
 const loading = ref(false)
@@ -66,15 +68,15 @@ const expanded = ref<Record<string, boolean>>({})
 const groups = computed(() => {
   const res = detail.value?.results ?? []
   const out: { type: 'v4' | 'v6'; label: string; rows: SpeedResult[]; stored: number; total: number }[] = []
-  for (const t of ['v4', 'v6'] as const) {
-    const rows = res.filter((r) => r.ipType === t).sort((a, b) => a.rank - b.rank)
+  for (const ty of ['v4', 'v6'] as const) {
+    const rows = res.filter((r) => r.ipType === ty).sort((a, b) => a.rank - b.rank)
     if (!rows.length) continue
     out.push({
-      type: t,
-      label: t === 'v4' ? 'IPv4' : 'IPv6',
-      rows: expanded.value[t] ? rows : rows.slice(0, PREVIEW_ROWS),
+      type: ty,
+      label: ty === 'v4' ? 'IPv4' : 'IPv6',
+      rows: expanded.value[ty] ? rows : rows.slice(0, PREVIEW_ROWS),
       stored: rows.length,
-      total: detail.value?.resultTotals?.[t] ?? rows.length,
+      total: detail.value?.resultTotals?.[ty] ?? rows.length,
     })
   }
   return out
@@ -115,7 +117,7 @@ async function loadDetail() {
     setSummary(d)
     return d
   } catch (e) {
-    loadError.value = '加载执行详情失败'
+    loadError.value = 'failed'
     throw e
   } finally {
     loading.value = false
@@ -200,17 +202,17 @@ async function start() {
 
 async function cancel() {
   const ok = await confirm({
-    title: '取消执行',
-    description: '确定要取消本次执行吗？已完成的测速结果不会写入 DNS。',
-    confirmText: '取消执行',
-    cancelText: '继续运行',
+    title: t('runs.viewer.cancel'),
+    description: t('runs.viewer.cancelDesc'),
+    confirmText: t('runs.viewer.cancel'),
+    cancelText: t('runs.viewer.keepRunning'),
     destructive: true,
   })
   if (!ok) return
   canceling.value = true
   try {
     await runsApi.cancel(props.runId)
-    toast.success('已发送取消请求')
+    toast.success(t('runs.viewer.cancelSent'))
   } catch {
     /* 已提示 */
   } finally {
@@ -242,8 +244,8 @@ defineExpose({ reload: start })
       <Skeleton class="h-72 w-full rounded-xl" />
     </div>
 
-    <EmptyState v-else-if="loadError && !summary" :icon="CircleX" :title="loadError" description="请检查网络或稍后重试">
-      <Button variant="outline" size="sm" @click="start"><RefreshCw />重试</Button>
+    <EmptyState v-else-if="loadError && !summary" :icon="CircleX" :title="t('runs.viewer.loadFailed')" :description="t('runs.viewer.loadFailedDesc')">
+      <Button variant="outline" size="sm" @click="start"><RefreshCw />{{ t('common.retry') }}</Button>
     </EmptyState>
 
     <template v-if="summary">
@@ -251,52 +253,52 @@ defineExpose({ reload: start })
         <CardContent class="grid grid-cols-1 gap-3">
           <div class="flex flex-wrap items-center gap-2">
             <StatusBadge :status="summary.status" />
-            <ToneBadge v-if="summary.dryRun" tone="info" title="只测速，不修改 DNS、不发送通知">试运行</ToneBadge>
+            <ToneBadge v-if="summary.dryRun" tone="info" :title="t('runs.dryRunTip')">{{ t('runs.dryRun') }}</ToneBadge>
             <router-link :to="`/tasks/${summary.taskId}`" class="font-semibold hover:underline">
-              {{ summary.taskName || `任务 #${summary.taskId}` }}
+              {{ summary.taskName || t('runs.viewer.taskFallback', { id: summary.taskId }) }}
             </router-link>
-            <span class="text-muted-foreground text-xs">#{{ summary.id }} · {{ runTriggerLabel[summary.trigger] ?? summary.trigger }}触发</span>
+            <span class="text-muted-foreground text-xs">#{{ summary.id }} · {{ t('runs.viewer.triggered', { trigger: runTriggerLabel[summary.trigger] ?? summary.trigger }) }}</span>
             <div class="ml-auto flex gap-2">
               <Button v-if="active" variant="destructive" size="sm" :disabled="canceling" @click="cancel">
-                <CircleX />取消执行
+                <CircleX />{{ t('runs.viewer.cancel') }}
               </Button>
-              <Button v-else variant="outline" size="sm" @click="start"><RefreshCw />刷新</Button>
+              <Button v-else variant="outline" size="sm" @click="start"><RefreshCw />{{ t('common.refresh') }}</Button>
             </div>
           </div>
           <div class="grid grid-cols-2 gap-x-6 gap-y-3 text-sm md:grid-cols-4">
             <div>
-              <div class="text-muted-foreground flex items-center gap-1 text-xs"><Timer class="size-3.5" />开始</div>
+              <div class="text-muted-foreground flex items-center gap-1 text-xs"><Timer class="size-3.5" />{{ t('runs.viewer.started') }}</div>
               <div class="mt-0.5 font-medium tabular-nums">{{ fmtTime(summary.startedAt) }}</div>
             </div>
             <div>
-              <div class="text-muted-foreground text-xs">耗时</div>
+              <div class="text-muted-foreground text-xs">{{ t('runs.duration') }}</div>
               <div class="mt-0.5 font-medium tabular-nums">{{ duration }}</div>
             </div>
             <div>
-              <div class="text-muted-foreground flex items-center gap-1 text-xs"><Gauge class="size-3.5" />最低延迟</div>
+              <div class="text-muted-foreground flex items-center gap-1 text-xs"><Gauge class="size-3.5" />{{ t('runs.viewer.minLatency') }}</div>
               <div class="mt-0.5 font-medium tabular-nums">{{ fmtLatency(summary.bestLatency) }}</div>
             </div>
             <div>
-              <div class="text-muted-foreground flex items-center gap-1 text-xs"><Zap class="size-3.5" />最高速度</div>
+              <div class="text-muted-foreground flex items-center gap-1 text-xs"><Zap class="size-3.5" />{{ t('runs.viewer.maxSpeed') }}</div>
               <div class="mt-0.5 font-medium tabular-nums">{{ fmtSpeed(summary.bestSpeed) }}</div>
             </div>
             <div class="min-w-0">
-              <div class="text-muted-foreground text-xs">最优 IPv4</div>
+              <div class="text-muted-foreground text-xs">{{ t('runs.viewer.bestV4') }}</div>
               <div class="mt-0.5"><CopyText v-if="summary.bestIPv4" :text="summary.bestIPv4" /><span v-else>-</span></div>
             </div>
             <div class="min-w-0">
-              <div class="text-muted-foreground text-xs">最优 IPv6</div>
+              <div class="text-muted-foreground text-xs">{{ t('runs.viewer.bestV6') }}</div>
               <div class="mt-0.5"><CopyText v-if="summary.bestIPv6" :text="summary.bestIPv6" /><span v-else>-</span></div>
             </div>
             <div>
-              <div class="text-muted-foreground text-xs">DNS 变更</div>
+              <div class="text-muted-foreground text-xs">{{ t('runs.viewer.dnsChanges') }}</div>
               <div class="mt-1">
-                <ToneBadge v-if="!active" :tone="summary.changed ? 'success' : 'neutral'">{{ summary.changed ? '有变化' : '无变化' }}</ToneBadge>
+                <ToneBadge v-if="!active" :tone="summary.changed ? 'success' : 'neutral'">{{ summary.changed ? t('runs.viewer.changed') : t('runs.viewer.unchanged') }}</ToneBadge>
                 <span v-else>-</span>
               </div>
             </div>
             <div>
-              <div class="text-muted-foreground text-xs">结束</div>
+              <div class="text-muted-foreground text-xs">{{ t('runs.viewer.finished') }}</div>
               <div class="mt-0.5 font-medium tabular-nums">{{ fmtTime(summary.finishedAt) }}</div>
             </div>
           </div>
@@ -313,13 +315,13 @@ defineExpose({ reload: start })
       <template v-if="!active && detail">
         <Card class="gap-0 py-0">
           <CardHeader class="border-b py-3 [.border-b]:pb-3">
-            <CardTitle class="flex items-center gap-2"><Gauge class="text-muted-foreground size-4" />测速结果</CardTitle>
+            <CardTitle class="flex items-center gap-2"><Gauge class="text-muted-foreground size-4" />{{ t('runs.viewer.results') }}</CardTitle>
           </CardHeader>
           <CardContent class="p-0">
-            <EmptyState v-if="!groups.length" compact title="没有测速结果" />
+            <EmptyState v-if="!groups.length" compact :title="t('runs.viewer.noResults')" />
             <div v-for="g in groups" :key="g.type" class="border-b last:border-b-0">
               <div class="text-muted-foreground bg-muted/30 px-5 py-2 text-xs font-medium">
-                {{ g.label }} · 共 {{ g.total }} 个<template v-if="g.total > g.stored">，保存前 {{ g.stored }} 个</template>
+                {{ t('runs.viewer.groupTotal', { label: g.label, total: g.total }) }}<template v-if="g.total > g.stored">{{ t('runs.viewer.groupStored', { n: g.stored }) }}</template>
               </div>
               <div :class="expanded[g.type] && 'scrollbar-thin max-h-[560px] overflow-y-auto'">
                 <Table>
@@ -327,11 +329,11 @@ defineExpose({ reload: start })
                     <TableRow>
                       <TableHead class="w-12 pl-5">#</TableHead>
                       <TableHead>IP</TableHead>
-                      <TableHead class="text-right">延迟</TableHead>
-                      <TableHead class="text-right">下载速度</TableHead>
-                      <TableHead class="text-right">丢包率</TableHead>
-                      <TableHead class="text-right">发送/接收</TableHead>
-                      <TableHead class="pr-5 text-right">地区码</TableHead>
+                      <TableHead class="text-right">{{ t('runs.viewer.colLatency') }}</TableHead>
+                      <TableHead class="text-right">{{ t('runs.viewer.colSpeed') }}</TableHead>
+                      <TableHead class="text-right">{{ t('runs.viewer.colLoss') }}</TableHead>
+                      <TableHead class="text-right">{{ t('runs.viewer.colSentRecv') }}</TableHead>
+                      <TableHead class="pr-5 text-right">{{ t('runs.viewer.colColo') }}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -350,7 +352,7 @@ defineExpose({ reload: start })
               <div v-if="g.stored > PREVIEW_ROWS" class="border-t px-5 py-2">
                 <Button variant="ghost" size="sm" class="text-muted-foreground -ml-2" @click="expanded[g.type] = !expanded[g.type]">
                   <ChevronDown :class="['transition-transform', expanded[g.type] && 'rotate-180']" />
-                  {{ expanded[g.type] ? '收起' : `显示全部 ${g.stored} 个` }}
+                  {{ expanded[g.type] ? t('common.collapse') : t('common.showAll', { n: g.stored }) }}
                 </Button>
               </div>
             </div>
@@ -359,19 +361,19 @@ defineExpose({ reload: start })
 
         <Card class="gap-0 py-0">
           <CardHeader class="border-b py-3 [.border-b]:pb-3">
-            <CardTitle class="flex items-center gap-2"><ListTree class="text-muted-foreground size-4" />DNS 变更</CardTitle>
+            <CardTitle class="flex items-center gap-2"><ListTree class="text-muted-foreground size-4" />{{ t('runs.viewer.dnsChanges') }}</CardTitle>
           </CardHeader>
           <CardContent class="p-0">
-            <EmptyState v-if="!detail.changes?.length" compact title="没有 DNS 变更" />
+            <EmptyState v-if="!detail.changes?.length" compact :title="t('runs.viewer.noChanges')" />
             <Table v-else>
               <TableHeader>
                 <TableRow>
-                  <TableHead class="w-20 pl-5">操作</TableHead>
-                  <TableHead>记录</TableHead>
-                  <TableHead class="w-16">类型</TableHead>
-                  <TableHead>原值 → 新值</TableHead>
-                  <TableHead class="hidden xl:table-cell">账号</TableHead>
-                  <TableHead class="pr-5">说明</TableHead>
+                  <TableHead class="w-20 pl-5">{{ t('common.actions') }}</TableHead>
+                  <TableHead>{{ t('runs.viewer.colRecord') }}</TableHead>
+                  <TableHead class="w-16">{{ t('common.type') }}</TableHead>
+                  <TableHead>{{ t('runs.viewer.colValues') }}</TableHead>
+                  <TableHead class="hidden xl:table-cell">{{ t('runs.viewer.colAccount') }}</TableHead>
+                  <TableHead class="pr-5">{{ t('runs.message') }}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -396,7 +398,7 @@ defineExpose({ reload: start })
 
       <div>
         <div class="mb-2 flex items-center gap-2 text-sm font-medium">
-          <ScrollText class="text-muted-foreground size-4" />{{ active ? '实时日志' : '完整日志' }}
+          <ScrollText class="text-muted-foreground size-4" />{{ active ? t('runs.viewer.liveLog') : t('runs.viewer.fullLog') }}
         </div>
         <LogPanel
           :text="logText"

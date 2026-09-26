@@ -15,6 +15,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/lonelyman0108/cfst-ddns/internal/cfst"
+	"github.com/lonelyman0108/cfst-ddns/internal/i18n"
 	"github.com/lonelyman0108/cfst-ddns/internal/notify"
 	"github.com/lonelyman0108/cfst-ddns/internal/provider"
 	"github.com/lonelyman0108/cfst-ddns/internal/store"
@@ -333,13 +334,13 @@ func (s *Server) restore(c *gin.Context) {
 	}
 	for _, a := range b.Accounts {
 		if _, ok := provider.Meta(a.Provider); !ok {
-			failMsg(c, http.StatusBadRequest, "备份中包含不支持的 DNS 服务商: "+a.Provider)
+			failMsg(c, http.StatusBadRequest, "备份中包含不支持的 DNS 服务商: %s", a.Provider)
 			return
 		}
 	}
 	for _, n := range b.Notifiers {
 		if _, ok := notify.Meta(n.Type); !ok {
-			failMsg(c, http.StatusBadRequest, "备份中包含不支持的通知渠道: "+n.Type)
+			failMsg(c, http.StatusBadRequest, "备份中包含不支持的通知渠道: %s", n.Type)
 			return
 		}
 	}
@@ -370,7 +371,7 @@ func (s *Server) restore(c *gin.Context) {
 		return txs.SaveSettings(b.Settings)
 	})
 	if err != nil {
-		fail(c, http.StatusInternalServerError, fmt.Errorf("恢复失败，数据未改动: %w", err))
+		fail(c, http.StatusInternalServerError, i18n.Errorf("恢复失败，数据未改动: %w", err))
 		return
 	}
 	for _, t := range old {

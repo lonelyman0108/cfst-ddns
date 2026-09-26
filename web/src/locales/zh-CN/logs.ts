@@ -1,0 +1,17 @@
+export default {
+  title: '系统日志',
+  description: '应用运行日志（内存环形缓冲）',
+  terminal: '终端',
+  table: '表格',
+  allLevels: '全部级别',
+  atLeast: '{level} 及以上',
+  only: '仅 {level}',
+  keyword: '搜索关键字',
+  recent: '最近 {n} 条',
+  autoRefresh: '自动刷新（3 秒）',
+  count: '{shown} / {total} 条',
+  time: '时间',
+  level: '级别',
+  message: '内容',
+  empty: '暂无日志',
+}

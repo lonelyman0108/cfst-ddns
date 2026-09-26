@@ -140,6 +140,14 @@ data/cfst-ddns.db   data/secret.key   data/cfst/{cfst[.exe], ip.txt, ipv6.txt, *
 - 接口契约：`docs/API.md`（P9 新增部分）
 - 验证：`go vet ./... && go test ./...`；`pnpm build`；浏览器走通引导全流程、上传导入、试运行、v1 导入
 
+### P10 多语言 — ✅（分支 `feat/onboarding-and-icons`，2026-09-27 用户确认范围）
+- [x] 前端接入 vue-i18n：简体中文 / 繁體中文 / English / 日本語，按浏览器语言自动选择、记住选择，页头与登录页提供切换（lucide `Languages` 图标）；dayjs 相对时间、页面标题随语言切换
+- [x] 文案按命名空间拆分在 `web/src/locales/<lang>/*.ts`（913 个键，四种语言键完全一致）
+- [x] 后端 `internal/i18n`：按 `Accept-Language`（SSE 用 `?lang=`）返回服务商 / 通知渠道表单字段与接口错误提示；测试保证所有表单文案与错误模板都有三种译文
+- [x] 不翻译（用户确认）：测速日志、执行结果说明（run.message）、通知正文、上游服务商原始报错
+- [x] README 默认改为英文，新增 `README.zh-CN.md`、`README.zh-TW.md`、`README.ja.md`；发布包附带全部语言 README
+- 验证：`go vet`、`go test ./...`；`pnpm build`；脚本核对四种语言键一致、代码引用的键均存在；英文界面 18 个页面无残留中文（测试数据除外）；en / ja 在 1440 / 1024 / 390 宽度下无溢出（日文「デュアルスタック」过长已改为「両方」）；实测切换语言即时生效（含后端返回的类型名与页面标题）
+
 ## 4. 验证记录
 
 | 日期 | 阶段 | 内容 | 结果 |

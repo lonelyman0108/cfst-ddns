@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/lonelyman0108/cfst-ddns/internal/cfst"
+	"github.com/lonelyman0108/cfst-ddns/internal/i18n"
 )
 
 // importFail 按错误类型返回状态码。
@@ -68,7 +69,14 @@ func (s *Server) cfstUpload(c *gin.Context) {
 func (s *Server) cfstScan(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
 	defer cancel()
-	c.JSON(http.StatusOK, s.CFST.Scan(ctx))
+	list := s.CFST.Scan(ctx)
+	l := lang(c)
+	for i := range list {
+		if list[i].Err != nil {
+			list[i].Message = i18n.Localize(l, list[i].Err)
+		}
+	}
+	c.JSON(http.StatusOK, list)
 }
 
 func (s *Server) cfstAdopt(c *gin.Context) {
@@ -95,7 +103,14 @@ func (s *Server) cfstAdopt(c *gin.Context) {
 
 // ---------- GitHub 镜像 ----------
 
-func (s *Server) cfstMirrors(c *gin.Context) { c.JSON(http.StatusOK, cfst.MirrorPresets) }
+func (s *Server) cfstMirrors(c *gin.Context) {
+	l := lang(c)
+	out := make([]cfst.Mirror, len(cfst.MirrorPresets))
+	for i, m := range cfst.MirrorPresets {
+		out[i] = cfst.Mirror{Mirror: m.Mirror, Label: i18n.T(l, m.Label)}
+	}
+	c.JSON(http.StatusOK, out)
+}
 
 func (s *Server) cfstMirrorTest(c *gin.Context) {
 	var req struct {
@@ -124,5 +139,13 @@ func (s *Server) cfstMirrorTest(c *gin.Context) {
 		failMsg(c, http.StatusBadRequest, "一次最多测试 20 个镜像")
 		return
 	}
-	c.JSON(http.StatusOK, cfst.ProbeMirrors(c.Request.Context(), mirrors))
+	res := cfst.ProbeMirrors(c.Request.Context(), mirrors)
+	l := lang(c)
+	for i := range res {
+		res[i].Label = i18n.T(l, res[i].Label)
+		if res[i].Err != nil {
+			res[i].Error = i18n.Localize(l, res[i].Err)
+		}
+	}
+	c.JSON(http.StatusOK, res)
 }

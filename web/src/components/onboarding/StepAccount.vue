@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { toast } from 'vue-sonner'
+import { useI18n } from 'vue-i18n'
 import { ArrowLeft, CircleCheck, CircleX, ExternalLink, Loader2, PlugZap, Plus, Save } from '@lucide/vue'
 import { accountsApi } from '@/api'
 import type { Account, Config, TestResult, TypeMeta } from '@/api/types'
@@ -18,6 +19,7 @@ import { useMetaStore } from '@/stores/meta'
 
 const emit = defineEmits<{ (e: 'changed'): void }>()
 
+const { t } = useI18n()
 const meta = useMetaStore()
 const list = ref<Account[] | null>(null)
 const adding = ref(false)
@@ -73,12 +75,12 @@ async function test() {
 }
 
 async function save() {
-  form.nameError = form.name.trim() ? '' : '请填写名称'
+  form.nameError = form.name.trim() ? '' : 'onboarding.nameRequired'
   if (form.nameError || !schemaRef.value?.validate() || !form.result?.ok) return
   form.saving = true
   try {
     await accountsApi.create({ name: form.name.trim(), provider: form.provider, config: { ...form.config }, remark: '' })
-    toast.success('DNS 账号已添加')
+    toast.success(t('onboarding.account.added'))
     form.provider = ''
     await load()
     emit('changed')
@@ -102,7 +104,7 @@ async function save() {
           <ToneBadge tone="primary">{{ meta.providerName(a.provider) }}</ToneBadge>
         </div>
         <div v-if="!adding">
-          <Button variant="outline" size="sm" @click="adding = true"><Plus />再添加一个</Button>
+          <Button variant="outline" size="sm" @click="adding = true"><Plus />{{ t('onboarding.addAnother') }}</Button>
         </div>
       </div>
 
@@ -113,32 +115,32 @@ async function save() {
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-2 text-sm font-medium">
                 {{ providerMeta.name }}
-                <InlineLink :icon="ArrowLeft" class="text-xs font-normal" @click="form.provider = ''">更换</InlineLink>
+                <InlineLink :icon="ArrowLeft" class="text-xs font-normal" @click="form.provider = ''">{{ t('onboarding.change') }}</InlineLink>
               </div>
               <p v-if="providerMeta.description" class="text-muted-foreground mt-1 text-xs leading-relaxed">{{ providerMeta.description }}</p>
             </div>
             <Button v-if="providerMeta.docsUrl" variant="outline" size="sm" as-child>
-              <a :href="providerMeta.docsUrl" target="_blank" rel="noopener"><ExternalLink />如何获取凭据</a>
+              <a :href="providerMeta.docsUrl" target="_blank" rel="noopener"><ExternalLink />{{ t('onboarding.account.howToGetCredentials') }}</a>
             </Button>
           </div>
-          <FormItem label="名称" required for="ob-acc-name" :error="form.nameError">
-            <Input id="ob-acc-name" v-model="form.name" maxlength="64" placeholder="便于识别的名称" />
+          <FormItem :label="t('common.name')" required for="ob-acc-name" :error="form.nameError && t(form.nameError)">
+            <Input id="ob-acc-name" v-model="form.name" maxlength="64" :placeholder="t('onboarding.namePlaceholder')" />
           </FormItem>
           <SchemaForm v-if="providerMeta" :key="form.key" ref="schemaRef" v-model="form.config" :fields="providerMeta.fields" />
           <Alert v-if="form.result" :class="form.result.ok ? 'border-success/40 bg-success/5' : 'border-destructive/40 bg-destructive/5'">
             <CircleCheck v-if="form.result.ok" class="text-success!" />
             <CircleX v-else class="text-destructive!" />
-            <AlertTitle :class="form.result.ok ? 'text-success' : 'text-destructive'">{{ form.result.ok ? '连接成功' : '连接失败' }}</AlertTitle>
+            <AlertTitle :class="form.result.ok ? 'text-success' : 'text-destructive'">{{ form.result.ok ? t('onboarding.account.connOk') : t('onboarding.account.connFail') }}</AlertTitle>
             <AlertDescription v-if="form.result.message">{{ form.result.message }}</AlertDescription>
           </Alert>
           <div class="flex flex-wrap items-center gap-2">
             <Button variant="outline" :disabled="form.testing" @click="test">
-              <Loader2 v-if="form.testing" class="animate-spin" /><PlugZap v-else />测试连接
+              <Loader2 v-if="form.testing" class="animate-spin" /><PlugZap v-else />{{ t('onboarding.account.testConnection') }}
             </Button>
             <Button :disabled="form.saving || !form.result?.ok" @click="save">
-              <Loader2 v-if="form.saving" class="animate-spin" /><Save v-else />保存账号
+              <Loader2 v-if="form.saving" class="animate-spin" /><Save v-else />{{ t('onboarding.account.save') }}
             </Button>
-            <span v-if="!form.result?.ok" class="text-muted-foreground text-xs">测试连接成功后才能保存</span>
+            <span v-if="!form.result?.ok" class="text-muted-foreground text-xs">{{ t('onboarding.account.testFirst') }}</span>
           </div>
         </div>
       </template>

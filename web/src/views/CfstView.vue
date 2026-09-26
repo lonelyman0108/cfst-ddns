@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { toast } from 'vue-sonner'
 import {
   ArrowUpCircle,
@@ -42,6 +43,7 @@ import ToneBadge from '@/components/ToneBadge.vue'
 import { confirm } from '@/composables/useConfirm'
 import { fmtTime, fromNow } from '@/utils/format'
 
+const { t } = useI18n()
 const status = ref<CfstStatus | null>(null)
 const releases = ref<CfstRelease[]>([])
 const releasesLoading = ref(false)
@@ -110,20 +112,20 @@ const upgrade = computed(() => {
 })
 
 async function install(version: string) {
-  const label = version === 'latest' ? '最新版' : version
+  const label = version === 'latest' ? t('cfst.latestVersion') : version
   if (status.value?.installed) {
     const ok = await confirm({
-      title: `安装 ${label}？`,
-      description: `将替换当前版本 ${status.value.version || ''}。下载与解压可能需要数分钟。`,
-      confirmText: '安装',
+      title: t('cfst.confirmInstall.title', { label }),
+      description: t('cfst.confirmInstall.description', { version: status.value.version || '' }),
+      confirmText: t('cfst.install'),
     })
     if (!ok) return
   }
   installing.value = version
-  const id = toast.loading(`正在安装 ${label}…`, { description: '下载与解压可能需要数分钟，请勿关闭页面' })
+  const id = toast.loading(t('cfst.installingLabel', { label }), { description: t('cfst.installingHint') })
   try {
     const r = await cfstApi.install(version)
-    toast.success(`已安装 ${r.version}`, { id, description: undefined })
+    toast.success(t('cfst.installed', { version: r.version }), { id, description: undefined })
     await loadStatus()
   } catch {
     toast.dismiss(id)
@@ -153,7 +155,7 @@ function setFile(f: File | undefined | null) {
   upload.error = ''
   if (!f) return
   if (f.size > MAX_UPLOAD) {
-    upload.error = '文件超过 64MB'
+    upload.error = t('cfst.upload.tooLarge')
     return
   }
   upload.file = f
@@ -181,7 +183,7 @@ async function submitUpload() {
   upload.progress = 0
   try {
     const r = await cfstApi.upload(upload.file, upload.version.trim() || undefined, (p) => (upload.progress = p))
-    toast.success(`已导入 ${r.version}`, { description: `${r.os}/${r.arch}` })
+    toast.success(t('cfst.upload.done', { version: r.version }), { description: `${r.os}/${r.arch}` })
     upload.open = false
     await loadStatus()
   } catch {
@@ -194,7 +196,7 @@ async function submitUpload() {
 // ---------- 自动识别 ----------
 const scan = reactive({ open: false, loading: false, loaded: false, list: [] as CfstCandidate[] })
 const adopting = ref('')
-const sourceLabel: Record<CfstCandidate['source'], string> = { datadir: '数据目录', path: 'PATH', bundled: '镜像内置' }
+const sourceLabel = (s: CfstCandidate['source']) => (s === 'path' ? 'PATH' : s === 'datadir' || s === 'bundled' ? t(`cfst.scan.source.${s}`) : s)
 
 async function runScan() {
   scan.open = true
@@ -213,7 +215,7 @@ async function adopt(c: CfstCandidate) {
   adopting.value = c.path
   try {
     const r = await cfstApi.adopt(c.path, c.version || undefined)
-    toast.success(`已使用 ${r.version}`, { description: c.path })
+    toast.success(t('cfst.scan.adopted', { version: r.version }), { description: c.path })
     scan.open = false
     await loadStatus()
   } catch {
@@ -262,7 +264,7 @@ async function saveIPFile(kind: IPFileKind) {
   try {
     await cfstApi.saveIPFile(kind, f.content)
     f.original = f.content
-    toast.success('IP 段文件已保存')
+    toast.success(t('cfst.ipFile.saved'))
   } catch {
     /* 已提示 */
   } finally {
@@ -272,9 +274,9 @@ async function saveIPFile(kind: IPFileKind) {
 
 async function resetIPFile(kind: IPFileKind) {
   const ok = await confirm({
-    title: '恢复默认内容？',
-    description: `${kind === 'v4' ? 'ip.txt' : 'ipv6.txt'} 将被恢复为 cfst 自带的默认 IP 段，当前内容会被覆盖。`,
-    confirmText: '恢复默认',
+    title: t('cfst.ipFile.resetTitle'),
+    description: t('cfst.ipFile.resetDescription', { file: kind === 'v4' ? 'ip.txt' : 'ipv6.txt' }),
+    confirmText: t('cfst.ipFile.reset'),
     destructive: true,
   })
   if (!ok) return
@@ -284,7 +286,7 @@ async function resetIPFile(kind: IPFileKind) {
     const r = await cfstApi.resetIPFile(kind)
     f.content = r.content ?? ''
     f.original = f.content
-    toast.success('已恢复默认')
+    toast.success(t('cfst.ipFile.resetDone'))
   } catch {
     /* 已提示 */
   } finally {
@@ -301,42 +303,44 @@ onMounted(() => {
 
 <template>
   <div class="flex flex-col gap-4">
-    <PageHeader title="cfst 管理" description="CloudflareSpeedTest 可执行文件与 IP 段文件">
-      <Button variant="outline" size="sm" @click="loadStatus(), loadReleases()"><RefreshCw />刷新</Button>
-      <Button variant="outline" size="sm" :disabled="busy" @click="runScan"><ScanSearch />自动识别</Button>
-      <Button variant="outline" size="sm" :disabled="busy" @click="openUpload"><Upload />导入本地文件</Button>
+    <PageHeader :title="t('cfst.title')" :description="t('cfst.description')">
+      <Button variant="outline" size="sm" @click="loadStatus(), loadReleases()"><RefreshCw />{{ t('common.refresh') }}</Button>
+      <Button variant="outline" size="sm" :disabled="busy" @click="runScan"><ScanSearch />{{ t('cfst.scan.title') }}</Button>
+      <Button variant="outline" size="sm" :disabled="busy" @click="openUpload"><Upload />{{ t('cfst.upload.title') }}</Button>
       <Button size="sm" :disabled="busy" @click="install('latest')">
-        <Loader2 v-if="installing === 'latest'" class="animate-spin" /><CloudDownload v-else />安装最新版
+        <Loader2 v-if="installing === 'latest'" class="animate-spin" /><CloudDownload v-else />{{ t('cfst.installLatest') }}
       </Button>
     </PageHeader>
 
     <Alert>
       <Info />
       <AlertDescription>
-        <p>
-          cfst 从 GitHub Releases 下载（<a href="https://github.com/XIU2/CloudflareSpeedTest" target="_blank" rel="noopener" class="text-primary hover:underline">XIU2/CloudflareSpeedTest</a>）。
-          下载缓慢时可
-          <InlineLink :icon="Gauge" @click="mirrorOpen = true">测试镜像速度</InlineLink>
-          并一键切换；无法联网时可导入本地文件。
-        </p>
+        <i18n-t keypath="cfst.intro" tag="p">
+          <template #repo>
+            <a href="https://github.com/XIU2/CloudflareSpeedTest" target="_blank" rel="noopener" class="text-primary hover:underline">XIU2/CloudflareSpeedTest</a>
+          </template>
+          <template #mirror>
+            <InlineLink :icon="Gauge" @click="mirrorOpen = true">{{ t('cfst.mirror.title') }}</InlineLink>
+          </template>
+        </i18n-t>
       </AlertDescription>
     </Alert>
 
     <Alert v-if="upgrade && !busy" class="border-primary/40 bg-primary/5">
       <ArrowUpCircle class="text-primary!" />
-      <AlertTitle>有新版本 {{ upgrade.tag }}</AlertTitle>
+      <AlertTitle>{{ t('cfst.upgrade.title', { tag: upgrade.tag }) }}</AlertTitle>
       <AlertDescription class="flex flex-wrap items-center justify-between gap-2">
-        <span>当前安装 {{ status?.version }}，发布于 {{ fromNow(upgrade.publishedAt) }}。</span>
-        <Button size="sm" @click="install(upgrade.tag)"><Download />升级</Button>
+        <span>{{ t('cfst.upgrade.description', { version: status?.version ?? '', time: fromNow(upgrade.publishedAt) }) }}</span>
+        <Button size="sm" @click="install(upgrade.tag)"><Download />{{ t('cfst.upgrade.action') }}</Button>
       </AlertDescription>
     </Alert>
 
     <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
       <Card class="min-w-0 lg:col-span-1">
         <CardHeader>
-          <CardTitle class="flex items-center gap-2"><PackageCheck class="text-muted-foreground size-4" />当前安装</CardTitle>
+          <CardTitle class="flex items-center gap-2"><PackageCheck class="text-muted-foreground size-4" />{{ t('cfst.current.title') }}</CardTitle>
           <CardAction>
-            <ToneBadge v-if="status" :tone="status.installed ? 'success' : 'danger'">{{ status.installed ? '已安装' : '未安装' }}</ToneBadge>
+            <ToneBadge v-if="status" :tone="status.installed ? 'success' : 'danger'">{{ status.installed ? t('cfst.current.installed') : t('cfst.current.notInstalled') }}</ToneBadge>
           </CardAction>
         </CardHeader>
         <CardContent class="grid grid-cols-1 gap-4">
@@ -348,26 +352,26 @@ onMounted(() => {
             </div>
             <dl class="grid grid-cols-1 gap-3 text-sm">
               <div>
-                <dt class="text-muted-foreground text-xs">路径</dt>
+                <dt class="text-muted-foreground text-xs">{{ t('cfst.current.path') }}</dt>
                 <dd class="mt-0.5 font-mono text-code break-all">{{ status.path || '-' }}</dd>
               </div>
               <div>
-                <dt class="text-muted-foreground text-xs">本平台资源文件</dt>
+                <dt class="text-muted-foreground text-xs">{{ t('cfst.current.asset') }}</dt>
                 <dd class="mt-0.5 font-mono text-code">{{ status.asset || '-' }}</dd>
               </div>
             </dl>
             <div v-if="!status.installed && !busy" class="grid grid-cols-1 gap-2">
-              <p class="text-muted-foreground text-xs">可在线安装、导入本地文件，或识别本机已有的 cfst。</p>
+              <p class="text-muted-foreground text-xs">{{ t('cfst.current.emptyHint') }}</p>
               <div class="flex flex-wrap gap-2">
-                <Button size="sm" @click="install('latest')"><CloudDownload />安装最新版</Button>
-                <Button variant="outline" size="sm" @click="openUpload"><Upload />导入</Button>
-                <Button variant="outline" size="sm" @click="runScan"><ScanSearch />识别</Button>
+                <Button size="sm" @click="install('latest')"><CloudDownload />{{ t('cfst.installLatest') }}</Button>
+                <Button variant="outline" size="sm" @click="openUpload"><Upload />{{ t('common.import') }}</Button>
+                <Button variant="outline" size="sm" @click="runScan"><ScanSearch />{{ t('cfst.current.detect') }}</Button>
               </div>
             </div>
             <Alert v-if="installing || status.installing" class="border-info/40 bg-info/5">
               <Loader2 class="text-info! animate-spin" />
-              <AlertTitle class="text-info">正在安装{{ installing && installing !== 'latest' ? ` ${installing}` : '' }}</AlertTitle>
-              <AlertDescription>下载与解压可能需要数分钟，请勿关闭页面。</AlertDescription>
+              <AlertTitle class="text-info">{{ installing && installing !== 'latest' ? t('cfst.installingLabel', { label: installing }) : t('cfst.installingNow') }}</AlertTitle>
+              <AlertDescription>{{ t('cfst.installingHintFull') }}</AlertDescription>
             </Alert>
           </template>
         </CardContent>
@@ -375,21 +379,21 @@ onMounted(() => {
 
       <Card class="min-w-0 gap-0 py-0 lg:col-span-2">
         <CardHeader class="border-b py-3 [.border-b]:pb-3">
-          <CardTitle class="flex items-center gap-2"><CloudDownload class="text-muted-foreground size-4" />可用版本</CardTitle>
-          <CardDescription>GitHub Releases（Releases 列表直连 GitHub API）</CardDescription>
+          <CardTitle class="flex items-center gap-2"><CloudDownload class="text-muted-foreground size-4" />{{ t('cfst.releases.title') }}</CardTitle>
+          <CardDescription>{{ t('cfst.releases.description') }}</CardDescription>
         </CardHeader>
         <CardContent class="p-0">
           <div v-if="releasesLoading && !releases.length" class="grid grid-cols-1 gap-3 p-5"><Skeleton v-for="i in 5" :key="i" class="h-8" /></div>
-          <EmptyState v-else-if="releasesError" :icon="CircleAlert" compact title="获取版本列表失败" description="可能无法访问 GitHub API，请检查网络后重试">
-            <Button variant="outline" size="sm" @click="loadReleases"><RefreshCw />重试</Button>
+          <EmptyState v-else-if="releasesError" :icon="CircleAlert" compact :title="t('cfst.releases.loadFailed')" :description="t('cfst.releases.loadFailedHint')">
+            <Button variant="outline" size="sm" @click="loadReleases"><RefreshCw />{{ t('common.retry') }}</Button>
           </EmptyState>
           <div v-else class="max-h-[420px] overflow-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead class="pl-5">版本</TableHead>
-                  <TableHead>发布时间</TableHead>
-                  <TableHead class="w-44 pr-5 text-right">操作</TableHead>
+                  <TableHead class="pl-5">{{ t('cfst.releases.version') }}</TableHead>
+                  <TableHead>{{ t('cfst.releases.publishedAt') }}</TableHead>
+                  <TableHead class="w-44 pr-5 text-right">{{ t('common.actions') }}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -397,8 +401,8 @@ onMounted(() => {
                   <TableCell class="pl-5">
                     <div class="flex items-center gap-2">
                       <span class="font-mono text-sm font-medium">{{ r.tag }}</span>
-                      <ToneBadge v-if="isCurrent(r.tag)" tone="success">当前</ToneBadge>
-                      <ToneBadge v-if="latest?.tag === r.tag" tone="primary">最新</ToneBadge>
+                      <ToneBadge v-if="isCurrent(r.tag)" tone="success">{{ t('cfst.releases.current') }}</ToneBadge>
+                      <ToneBadge v-if="latest?.tag === r.tag" tone="primary">{{ t('cfst.releases.latest') }}</ToneBadge>
                     </div>
                     <div v-if="r.name && r.name !== r.tag" class="text-muted-foreground max-w-60 truncate text-xs" :title="r.name">{{ r.name }}</div>
                   </TableCell>
@@ -410,21 +414,21 @@ onMounted(() => {
                     <div class="flex items-center justify-end gap-1">
                       <Button v-if="r.assetAvailable" size="sm" variant="outline" class="w-24" :disabled="busy" @click="install(r.tag)">
                         <Loader2 v-if="installing === r.tag" class="animate-spin" /><RotateCcw v-else-if="isCurrent(r.tag)" /><Download v-else />
-                        {{ isCurrent(r.tag) ? '重新安装' : '安装' }}
+                        {{ isCurrent(r.tag) ? t('cfst.reinstall') : t('cfst.install') }}
                       </Button>
                       <Tooltip v-else>
                         <TooltipTrigger as-child>
-                          <ToneBadge tone="neutral" class="w-24 cursor-default justify-center" tabindex="0">不支持本平台</ToneBadge>
+                          <ToneBadge tone="neutral" class="w-24 cursor-default justify-center" tabindex="0">{{ t('cfst.releases.unsupported') }}</ToneBadge>
                         </TooltipTrigger>
-                        <TooltipContent>该版本没有 {{ status ? `${status.os}/${status.arch}` : '本平台' }} 的资源文件</TooltipContent>
+                        <TooltipContent>{{ t('cfst.releases.noAsset', { platform: status ? `${status.os}/${status.arch}` : t('cfst.releases.thisPlatform') }) }}</TooltipContent>
                       </Tooltip>
                       <Tooltip>
                         <TooltipTrigger as-child>
                           <Button variant="ghost" size="icon" class="text-muted-foreground size-8" as-child>
-                            <a :href="releaseUrl(r.tag)" target="_blank" rel="noopener" :aria-label="`在 GitHub 查看 ${r.tag}`"><ExternalLink /></a>
+                            <a :href="releaseUrl(r.tag)" target="_blank" rel="noopener" :aria-label="t('cfst.releases.viewTagOnGitHub', { tag: r.tag })"><ExternalLink /></a>
                           </Button>
                         </TooltipTrigger>
-                        <TooltipContent>在 GitHub 查看</TooltipContent>
+                        <TooltipContent>{{ t('cfst.releases.viewOnGitHub') }}</TooltipContent>
                       </Tooltip>
                     </div>
                   </TableCell>
@@ -438,8 +442,8 @@ onMounted(() => {
 
     <Card>
       <CardHeader>
-        <CardTitle class="flex items-center gap-2"><FileText class="text-muted-foreground size-4" />IP 段文件</CardTitle>
-        <CardDescription>任务「IP 来源」为默认时使用，每行一个 IP 或 CIDR 段，# 开头为注释</CardDescription>
+        <CardTitle class="flex items-center gap-2"><FileText class="text-muted-foreground size-4" />{{ t('cfst.ipFile.title') }}</CardTitle>
+        <CardDescription>{{ t('cfst.ipFile.description') }}</CardDescription>
       </CardHeader>
       <CardContent>
         <Tabs :model-value="ipTab" @update:model-value="onTab">
@@ -454,17 +458,17 @@ onMounted(() => {
                 v-model="ipFiles[k].content"
                 spellcheck="false"
                 class="scrollbar-thin h-80 resize-y font-mono text-log"
-                placeholder="每行一个 IP 或 CIDR 段"
+                :placeholder="t('cfst.ipFile.placeholder')"
               />
               <div class="mt-3 flex flex-wrap items-center gap-2">
                 <span class="text-muted-foreground text-xs">
-                  {{ countLines(ipFiles[k].content) }} 行有效内容
-                  <span v-if="ipFiles[k].content !== ipFiles[k].original" class="text-warning"> · 未保存</span>
+                  {{ t('cfst.ipFile.lines', { n: countLines(ipFiles[k].content) }) }}
+                  <span v-if="ipFiles[k].content !== ipFiles[k].original" class="text-warning"> · {{ t('cfst.ipFile.unsaved') }}</span>
                 </span>
                 <div class="ml-auto flex gap-2">
-                  <Button variant="outline" size="sm" :disabled="ipFiles[k].saving" @click="resetIPFile(k)"><RotateCcw />恢复默认</Button>
+                  <Button variant="outline" size="sm" :disabled="ipFiles[k].saving" @click="resetIPFile(k)"><RotateCcw />{{ t('cfst.ipFile.reset') }}</Button>
                   <Button size="sm" :disabled="ipFiles[k].saving || ipFiles[k].content === ipFiles[k].original" @click="saveIPFile(k)">
-                    <Loader2 v-if="ipFiles[k].saving" class="animate-spin" /><Save v-else />保存
+                    <Loader2 v-if="ipFiles[k].saving" class="animate-spin" /><Save v-else />{{ t('common.save') }}
                   </Button>
                 </div>
               </div>
@@ -478,8 +482,8 @@ onMounted(() => {
     <Dialog v-model:open="upload.open">
       <DialogContent class="sm:max-w-lg" @interact-outside="upload.uploading && $event.preventDefault()">
         <DialogHeader>
-          <DialogTitle>导入本地文件</DialogTitle>
-          <DialogDescription>支持 release 压缩包（.zip / .tar.gz）或解压后的可执行文件，最大 64MB</DialogDescription>
+          <DialogTitle>{{ t('cfst.upload.title') }}</DialogTitle>
+          <DialogDescription>{{ t('cfst.upload.description') }}</DialogDescription>
         </DialogHeader>
         <div class="grid grid-cols-1 gap-4">
           <div
@@ -499,8 +503,10 @@ onMounted(() => {
             @drop.prevent="onDrop"
           >
             <Upload class="text-muted-foreground size-6" />
-            <div class="text-sm">拖入文件，或 <span class="text-primary">点击选择</span></div>
-            <div class="text-muted-foreground text-xs">会校验文件的系统与架构是否与本机（{{ status ? `${status.os}/${status.arch}` : '—' }}）一致</div>
+            <i18n-t keypath="cfst.upload.drop" tag="div" class="text-sm">
+              <template #pick><span class="text-primary">{{ t('cfst.upload.pick') }}</span></template>
+            </i18n-t>
+            <div class="text-muted-foreground text-xs">{{ t('cfst.upload.platformCheck', { platform: status ? `${status.os}/${status.arch}` : '—' }) }}</div>
             <input ref="fileInput" type="file" class="hidden" @change="onPick" />
           </div>
           <p v-if="upload.error" class="text-destructive text-xs">{{ upload.error }}</p>
@@ -511,22 +517,22 @@ onMounted(() => {
               <div class="truncate text-sm font-medium" :title="upload.file.name">{{ upload.file.name }}</div>
               <div class="text-muted-foreground text-xs">{{ fmtSize(upload.file.size) }}</div>
             </div>
-            <Button v-if="!upload.uploading" variant="ghost" size="icon" class="size-7" aria-label="移除" @click="upload.file = null"><X /></Button>
+            <Button v-if="!upload.uploading" variant="ghost" size="icon" class="size-7" :aria-label="t('cfst.upload.remove')" @click="upload.file = null"><X /></Button>
           </div>
 
-          <FormItem label="版本号" for="cfst-version" help="留空时从文件名或程序输出中识别">
-            <Input id="cfst-version" v-model="upload.version" placeholder="如 v2.3.4" class="font-mono" :disabled="upload.uploading" />
+          <FormItem :label="t('cfst.upload.version')" for="cfst-version" :help="t('cfst.upload.versionHelp')">
+            <Input id="cfst-version" v-model="upload.version" :placeholder="t('cfst.upload.versionPlaceholder')" class="font-mono" :disabled="upload.uploading" />
           </FormItem>
 
           <div v-if="upload.uploading" class="grid grid-cols-1 gap-1.5">
             <Progress :model-value="upload.progress" />
-            <div class="text-muted-foreground text-xs">{{ upload.progress < 100 ? `上传中 ${upload.progress}%` : '正在校验与安装…' }}</div>
+            <div class="text-muted-foreground text-xs">{{ upload.progress < 100 ? t('cfst.upload.progress', { n: upload.progress }) : t('cfst.upload.verifying') }}</div>
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" :disabled="upload.uploading" @click="upload.open = false">取消</Button>
+          <Button variant="outline" :disabled="upload.uploading" @click="upload.open = false">{{ t('common.cancel') }}</Button>
           <Button :disabled="!upload.file || upload.uploading" @click="submitUpload">
-            <Loader2 v-if="upload.uploading" class="animate-spin" /><Upload v-else />导入
+            <Loader2 v-if="upload.uploading" class="animate-spin" /><Upload v-else />{{ t('common.import') }}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -536,8 +542,8 @@ onMounted(() => {
     <Dialog v-model:open="scan.open">
       <DialogContent class="flex max-h-[85vh] flex-col sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>自动识别</DialogTitle>
-          <DialogDescription>在数据目录、PATH 和镜像内置目录中查找已有的 cfst</DialogDescription>
+          <DialogTitle>{{ t('cfst.scan.title') }}</DialogTitle>
+          <DialogDescription>{{ t('cfst.scan.description') }}</DialogDescription>
         </DialogHeader>
         <div class="-mx-6 min-h-0 flex-1 overflow-y-auto px-6">
           <div v-if="scan.loading" class="grid grid-cols-1 gap-2"><Skeleton v-for="i in 3" :key="i" class="h-16" /></div>
@@ -545,31 +551,31 @@ onMounted(() => {
             v-else-if="!scan.list.length"
             :icon="ScanSearch"
             compact
-            :title="scan.loaded ? '未找到可用的 cfst' : '识别失败'"
-            description="可以在线安装，或导入本地文件"
+            :title="scan.loaded ? t('cfst.scan.notFound') : t('cfst.scan.failed')"
+            :description="t('cfst.scan.emptyHint')"
           >
-            <Button variant="outline" size="sm" @click="(scan.open = false), openUpload()"><Upload />导入本地文件</Button>
+            <Button variant="outline" size="sm" @click="(scan.open = false), openUpload()"><Upload />{{ t('cfst.upload.title') }}</Button>
           </EmptyState>
           <div v-else class="divide-y rounded-md border">
             <div v-for="c in scan.list" :key="c.path" class="flex items-center gap-3 px-3 py-2.5">
               <div class="min-w-0 flex-1">
                 <div class="font-mono text-code break-all">{{ c.path }}</div>
                 <div class="mt-1 flex flex-wrap items-center gap-1.5">
-                  <ToneBadge>{{ sourceLabel[c.source] ?? c.source }}</ToneBadge>
-                  <ToneBadge>{{ c.version || '版本未知' }}</ToneBadge>
+                  <ToneBadge>{{ sourceLabel(c.source) }}</ToneBadge>
+                  <ToneBadge>{{ c.version || t('cfst.scan.versionUnknown') }}</ToneBadge>
                   <ToneBadge v-if="c.os || c.arch">{{ c.os || '?' }}/{{ c.arch || '?' }}</ToneBadge>
-                  <ToneBadge :tone="c.compatible ? 'success' : 'danger'">{{ c.compatible ? '可用' : '不兼容' }}</ToneBadge>
+                  <ToneBadge :tone="c.compatible ? 'success' : 'danger'">{{ c.compatible ? t('cfst.scan.compatible') : t('cfst.scan.incompatible') }}</ToneBadge>
                 </div>
                 <div v-if="!c.compatible && c.message" class="text-destructive mt-1 text-xs">{{ c.message }}</div>
               </div>
               <Button size="sm" variant="outline" class="shrink-0" :disabled="!c.compatible || !!adopting" @click="adopt(c)">
-                <Loader2 v-if="adopting === c.path" class="animate-spin" />使用
+                <Loader2 v-if="adopting === c.path" class="animate-spin" />{{ t('cfst.scan.use') }}
               </Button>
             </div>
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" :disabled="scan.loading" @click="runScan"><RefreshCw />重新识别</Button>
+          <Button variant="outline" :disabled="scan.loading" @click="runScan"><RefreshCw />{{ t('cfst.scan.rescan') }}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -578,8 +584,8 @@ onMounted(() => {
     <Dialog v-model:open="mirrorOpen">
       <DialogContent class="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>测试镜像速度</DialogTitle>
-          <DialogDescription>选用后用于下载 cfst，也可在系统设置中修改</DialogDescription>
+          <DialogTitle>{{ t('cfst.mirror.title') }}</DialogTitle>
+          <DialogDescription>{{ t('cfst.mirror.description') }}</DialogDescription>
         </DialogHeader>
         <MirrorPicker />
       </DialogContent>

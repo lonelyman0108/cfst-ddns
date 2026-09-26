@@ -7,11 +7,11 @@ package provider
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sort"
 	"strings"
 	"sync"
 
+	"github.com/lonelyman0108/cfst-ddns/internal/i18n"
 	"github.com/lonelyman0108/cfst-ddns/internal/schema"
 )
 
@@ -108,7 +108,7 @@ func New(t string, cfg schema.Config) (Provider, error) {
 	e, ok := registry[t]
 	mu.RUnlock()
 	if !ok {
-		return nil, fmt.Errorf("不支持的 DNS 服务商: %s", t)
+		return nil, i18n.Errorf("不支持的 DNS 服务商: %s", t)
 	}
 	cfg = e.meta.ApplyDefaults(cfg)
 	if err := e.meta.Validate(cfg); err != nil {

@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/lonelyman0108/cfst-ddns/internal/engine"
+	"github.com/lonelyman0108/cfst-ddns/internal/i18n"
 	"github.com/lonelyman0108/cfst-ddns/internal/scheduler"
 	"github.com/lonelyman0108/cfst-ddns/internal/store"
 )
@@ -97,7 +98,7 @@ func (s *Server) normalizeTask(t *store.Task) error { return normalizeTaskIn(s.S
 func normalizeTaskIn(st *store.Store, t *store.Task) error {
 	t.Name = strings.TrimSpace(t.Name)
 	if t.Name == "" {
-		return errors.New("任务名称不能为空")
+		return i18n.New("任务名称不能为空")
 	}
 	t.Cron = strings.TrimSpace(t.Cron)
 	if err := scheduler.Validate(t.Cron); err != nil {
@@ -106,31 +107,31 @@ func normalizeTaskIn(st *store.Store, t *store.Task) error {
 	switch t.IPType {
 	case "v4", "v6", "both":
 	default:
-		return errors.New("IP 类型必须为 v4、v6 或 both")
+		return i18n.New("IP 类型必须为 v4、v6 或 both")
 	}
 	sp := &t.SpeedTest
 	if sp.Threads < 0 || sp.Threads > 1000 {
-		return errors.New("延迟测速线程需在 1-1000 之间")
+		return i18n.New("延迟测速线程需在 1-1000 之间")
 	}
 	if sp.MaxLossRate < 0 || sp.MaxLossRate > 1 {
-		return errors.New("丢包率上限需在 0-1 之间")
+		return i18n.New("丢包率上限需在 0-1 之间")
 	}
 	if sp.IPSource != "custom" {
 		sp.IPSource = "default"
 	} else {
 		if (t.IPType != "v6" && strings.TrimSpace(sp.IPv4Ranges) == "") ||
 			(t.IPType != "v4" && strings.TrimSpace(sp.IPv6Ranges) == "") {
-			return errors.New("自定义 IP 段不能为空")
+			return i18n.New("自定义 IP 段不能为空")
 		}
 	}
 	if t.Update.RecordCount < 1 {
 		t.Update.RecordCount = 1
 	}
 	if t.Update.RecordCount > 10 {
-		return errors.New("每种类型最多写入 10 条记录")
+		return i18n.New("每种类型最多写入 10 条记录")
 	}
 	if len(t.Targets) == 0 {
-		return errors.New("至少需要一条目标记录")
+		return i18n.New("至少需要一条目标记录")
 	}
 	seen := map[string]bool{}
 	for i := range t.Targets {
@@ -141,14 +142,14 @@ func normalizeTaskIn(st *store.Store, t *store.Task) error {
 			tg.RR = "@"
 		}
 		if tg.Domain == "" {
-			return fmt.Errorf("第 %d 条目标记录的主域名不能为空", i+1)
+			return i18n.Errorf("第 %d 条目标记录的主域名不能为空", i+1)
 		}
 		if _, err := st.GetAccount(tg.AccountID); err != nil {
-			return fmt.Errorf("第 %d 条目标记录的 DNS 账号不存在", i+1)
+			return i18n.Errorf("第 %d 条目标记录的 DNS 账号不存在", i+1)
 		}
 		key := fmt.Sprintf("%d|%s|%s|%s", tg.AccountID, tg.RR, tg.Domain, tg.Line)
 		if seen[key] {
-			return fmt.Errorf("目标记录重复: %s.%s", tg.RR, tg.Domain)
+			return i18n.Errorf("目标记录重复: %s.%s", tg.RR, tg.Domain)
 		}
 		seen[key] = true
 	}
@@ -259,7 +260,7 @@ func (s *Server) cloneTask(c *gin.Context) {
 	}
 	n := *t
 	n.ID = 0
-	n.Name = t.Name + " (副本)"
+	n.Name = i18n.Sprintf(lang(c), "%s (副本)", t.Name)
 	n.Enabled = false
 	n.CreatedAt, n.UpdatedAt = time.Time{}, time.Time{}
 	if err := s.Store.DB.Create(&n).Error; err != nil {

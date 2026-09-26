@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { toast } from 'vue-sonner'
 import { Check, Gauge, Loader2 } from '@lucide/vue'
 import { cfstApi, settingsApi } from '@/api'
@@ -13,6 +14,7 @@ import type { Tone } from '@/utils/format'
 const props = withDefaults(defineProps<{ autoTest?: boolean }>(), { autoTest: true })
 const emit = defineEmits<{ (e: 'selected', mirror: string): void }>()
 
+const { t } = useI18n()
 const presets = ref<MirrorPreset[]>([])
 const probes = ref<MirrorProbe[] | null>(null)
 const current = ref<string | null>(null)
@@ -29,7 +31,7 @@ interface Row {
 const rows = computed<Row[]>(() => {
   if (probes.value) return probes.value.map((p) => ({ mirror: p.mirror, label: p.label || p.mirror, probe: p }))
   const list: Row[] = presets.value.map((m) => ({ ...m }))
-  if (current.value && !list.some((r) => r.mirror === current.value)) list.push({ mirror: current.value, label: '当前设置' })
+  if (current.value && !list.some((r) => r.mirror === current.value)) list.push({ mirror: current.value, label: t('components.mirror.currentSetting') })
   return list
 })
 
@@ -58,7 +60,7 @@ async function use(mirror: string) {
   try {
     const s = await settingsApi.update({ githubMirror: mirror })
     current.value = s.githubMirror ?? mirror
-    toast.success(mirror ? '已切换 GitHub 镜像' : '已切换为直连 GitHub')
+    toast.success(mirror ? t('components.mirror.switched') : t('components.mirror.switchedDirect'))
     emit('selected', mirror)
   } catch {
     /* 已提示 */
@@ -87,21 +89,21 @@ defineExpose({ test })
   <div class="grid grid-cols-1 gap-3">
     <div class="flex items-center justify-between gap-2">
       <p class="text-muted-foreground text-xs">
-        {{ testing ? '正在测速，最长约 8 秒…' : probes ? '已按可用性与延迟排序' : '测试各镜像下载 GitHub 资源的速度' }}
+        {{ testing ? t('components.mirror.testing') : probes ? t('components.mirror.sorted') : t('components.mirror.hint') }}
       </p>
       <Button variant="outline" size="sm" :disabled="testing || loading" @click="test">
-        <Loader2 v-if="testing" class="animate-spin" /><Gauge v-else />{{ probes ? '重新测速' : '开始测速' }}
+        <Loader2 v-if="testing" class="animate-spin" /><Gauge v-else />{{ probes ? t('components.mirror.retest') : t('components.mirror.test') }}
       </Button>
     </div>
 
     <div v-if="loading" class="grid grid-cols-1 gap-2"><Skeleton v-for="i in 4" :key="i" class="h-12" /></div>
-    <div v-else-if="!rows.length" class="text-muted-foreground py-6 text-center text-sm">暂无可用镜像</div>
+    <div v-else-if="!rows.length" class="text-muted-foreground py-6 text-center text-sm">{{ t('components.mirror.empty') }}</div>
     <div v-else class="divide-y rounded-md border">
       <div v-for="r in rows" :key="r.mirror" class="flex items-center gap-3 px-3 py-2.5">
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-1.5 text-sm font-medium">
             <span class="truncate" :title="r.label">{{ r.label }}</span>
-            <ToneBadge v-if="best !== undefined && r.mirror === best" tone="success">最快</ToneBadge>
+            <ToneBadge v-if="best !== undefined && r.mirror === best" tone="success">{{ t('components.mirror.fastest') }}</ToneBadge>
           </div>
           <div class="text-muted-foreground truncate font-mono text-xs" :title="r.mirror || 'https://github.com'">
             {{ r.mirror || 'https://github.com' }}
@@ -113,14 +115,14 @@ defineExpose({ test })
         <div class="w-20 shrink-0 text-right">
           <Skeleton v-if="testing" class="ml-auto h-5 w-14" />
           <ToneBadge v-else-if="r.probe" :tone="latencyTone(r.probe)">
-            {{ r.probe.ok ? `${r.probe.latencyMs} ms` : '失败' }}
+            {{ r.probe.ok ? `${r.probe.latencyMs} ms` : t('components.mirror.failed') }}
           </ToneBadge>
           <span v-else class="text-muted-foreground text-xs">—</span>
         </div>
         <div class="flex w-28 shrink-0 justify-end">
-          <span v-if="current === r.mirror" class="text-success inline-flex h-8 items-center gap-1 text-xs font-medium"><Check class="size-3.5" />使用中</span>
+          <span v-if="current === r.mirror" class="text-success inline-flex h-8 items-center gap-1 text-xs font-medium"><Check class="size-3.5" />{{ t('components.mirror.inUse') }}</span>
           <Button v-else variant="outline" size="sm" :disabled="saving !== null" @click="use(r.mirror)">
-            <Loader2 v-if="saving === r.mirror" class="animate-spin" />使用此镜像
+            <Loader2 v-if="saving === r.mirror" class="animate-spin" />{{ t('components.mirror.use') }}
           </Button>
         </div>
       </div>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { toast } from 'vue-sonner'
 import {
   ArrowLeft,
@@ -46,6 +47,7 @@ import { useMetaStore } from '@/stores/meta'
 import { describeCron } from '@/utils/cron'
 import { fmtTime, fromNow, ipTypeLabel } from '@/utils/format'
 
+const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const meta = useMetaStore()
@@ -134,7 +136,7 @@ onMounted(load)
 
 onBeforeRouteLeave(async () => {
   if (loading.value || loadFailed.value || saving.value || snap() === snapshot) return true
-  return confirm({ title: '放弃未保存的修改？', description: '离开后本页的修改将丢失。', confirmText: '离开', destructive: true })
+  return confirm({ title: t('tasks.edit.leaveTitle'), description: t('tasks.edit.leaveDesc'), confirmText: t('tasks.edit.leave'), destructive: true })
 })
 
 // ---------- 目标记录 ----------
@@ -193,14 +195,14 @@ async function loadDomains(accountId: number) {
 
 const rec = reactive({ open: false, loading: false, title: '', records: [] as DNSRecord[], error: false })
 
-async function viewRecords(t: Target) {
-  if (!t.accountId || !t.domain.trim()) {
-    toast.warning('请先选择账号并填写主域名')
+async function viewRecords(tg: Target) {
+  if (!tg.accountId || !tg.domain.trim()) {
+    toast.warning(t('tasks.edit.pickAccountFirst'))
     return
   }
-  Object.assign(rec, { open: true, loading: true, records: [], error: false, title: fqdn(t) || t.domain })
+  Object.assign(rec, { open: true, loading: true, records: [], error: false, title: fqdn(tg) || tg.domain })
   try {
-    rec.records = (await accountsApi.records(t.accountId, t.domain.trim(), t.rr.trim() || undefined)) ?? []
+    rec.records = (await accountsApi.records(tg.accountId, tg.domain.trim(), tg.rr.trim() || undefined)) ?? []
   } catch {
     rec.error = true
   } finally {
@@ -237,18 +239,18 @@ const summaryRecords = computed(() => {
 
 // ---------- 保存 ----------
 function validate(): string {
-  if (!form.name.trim()) return '请填写任务名称'
-  if (!form.targets.length) return '请至少添加一个目标记录'
-  for (const [i, t] of form.targets.entries()) {
-    const n = `目标记录 #${i + 1}`
-    if (!t.accountId) return `${n}：请选择 DNS 账号`
-    if (!t.domain.trim()) return `${n}：请填写主域名`
-    if (!t.rr.trim()) return `${n}：请填写主机记录（根域名填 @）`
+  if (!form.name.trim()) return t('tasks.edit.v.name')
+  if (!form.targets.length) return t('tasks.edit.v.targets')
+  for (const [i, tg] of form.targets.entries()) {
+    const n = i + 1
+    if (!tg.accountId) return t('tasks.edit.v.account', { n })
+    if (!tg.domain.trim()) return t('tasks.edit.v.domain', { n })
+    if (!tg.rr.trim()) return t('tasks.edit.v.rr', { n })
   }
-  if (form.update.recordCount < 1 || form.update.recordCount > 10) return '写入 IP 数量需在 1–10 之间'
+  if (form.update.recordCount < 1 || form.update.recordCount > 10) return t('tasks.edit.v.recordCount')
   if (form.speedTest.ipSource === 'custom') {
-    if (showV4.value && !form.speedTest.ipv4Ranges.trim()) return '请填写自定义 IPv4 段'
-    if (showV6.value && !form.speedTest.ipv6Ranges.trim()) return '请填写自定义 IPv6 段'
+    if (showV4.value && !form.speedTest.ipv4Ranges.trim()) return t('tasks.edit.v.ipv4Ranges')
+    if (showV6.value && !form.speedTest.ipv6Ranges.trim()) return t('tasks.edit.v.ipv6Ranges')
   }
   return ''
 }
@@ -295,7 +297,7 @@ async function save() {
   try {
     if (isNew.value) await tasksApi.create(body)
     else await tasksApi.update(taskId.value, body)
-    toast.success('任务已保存')
+    toast.success(t('tasks.edit.saved'))
     snapshot = snap()
     router.push('/tasks')
   } catch {
@@ -312,11 +314,11 @@ async function save() {
     <div class="mb-4 flex flex-wrap items-center gap-3">
       <Button variant="ghost" size="icon" class="size-8" @click="router.push('/tasks')"><ArrowLeft /></Button>
       <div class="min-w-0 flex-1">
-        <h1 class="page-title truncate">{{ isNew ? '新建任务' : form.name || '编辑任务' }}</h1>
-        <p class="text-muted-foreground mt-0.5">配置测速参数、写入策略与目标 DNS 记录</p>
+        <h1 class="page-title truncate">{{ isNew ? $t('tasks.newTask') : form.name || $t('tasks.edit.editTitle') }}</h1>
+        <p class="text-muted-foreground mt-0.5">{{ $t('tasks.edit.subtitle') }}</p>
       </div>
       <label v-if="!loading && !loadFailed" class="flex cursor-pointer items-center gap-2 text-sm font-medium">
-        <Switch v-model="form.enabled" />{{ form.enabled ? '已启用' : '已停用' }}
+        <Switch v-model="form.enabled" />{{ form.enabled ? $t('common.enabled') : $t('common.disabled') }}
       </label>
     </div>
 
@@ -324,8 +326,8 @@ async function save() {
       <Skeleton v-for="i in 4" :key="i" class="h-40 rounded-xl" />
     </div>
 
-    <EmptyState v-else-if="loadFailed" :icon="CircleX" title="加载失败" description="无法获取任务数据">
-      <Button variant="outline" size="sm" @click="load">重试</Button>
+    <EmptyState v-else-if="loadFailed" :icon="CircleX" :title="$t('tasks.edit.loadFailed')" :description="$t('tasks.edit.loadFailedDesc')">
+      <Button variant="outline" size="sm" @click="load">{{ $t('common.retry') }}</Button>
     </EmptyState>
 
     <div v-else class="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
@@ -333,22 +335,22 @@ async function save() {
         <!-- 基本信息 -->
         <Card>
           <CardHeader>
-            <CardTitle class="flex items-center gap-2"><Settings2 class="text-muted-foreground size-4" />基本信息</CardTitle>
+            <CardTitle class="flex items-center gap-2"><Settings2 class="text-muted-foreground size-4" />{{ $t('tasks.edit.basic') }}</CardTitle>
           </CardHeader>
           <CardContent class="grid grid-cols-1 gap-x-4 gap-y-3 md:grid-cols-3">
-            <FormItem label="任务名称" required for="name" class="md:col-span-2">
-              <Input id="name" v-model="form.name" maxlength="64" placeholder="如：主站优选" />
+            <FormItem :label="$t('tasks.edit.name')" required for="name" class="md:col-span-2">
+              <Input id="name" v-model="form.name" maxlength="64" :placeholder="$t('tasks.edit.namePlaceholder')" />
             </FormItem>
-            <FormItem label="IP 类型" help="IPv4 写 A 记录，IPv6 写 AAAA 记录；双栈分别测速">
+            <FormItem :label="$t('tasks.ipType')" :help="$t('tasks.edit.ipTypeHelp')">
               <Tabs :model-value="form.ipType" @update:model-value="setIpType">
                 <TabsList class="h-9 w-full">
                   <TabsTrigger value="v4">IPv4</TabsTrigger>
                   <TabsTrigger value="v6">IPv6</TabsTrigger>
-                  <TabsTrigger value="both">双栈</TabsTrigger>
+                  <TabsTrigger value="both">{{ $t('tasks.edit.dualStack') }}</TabsTrigger>
                 </TabsList>
               </Tabs>
             </FormItem>
-            <FormItem label="执行周期" class="md:col-span-3">
+            <FormItem :label="$t('tasks.schedule')" class="md:col-span-3">
               <CronInput v-model="form.cron" @next="nextRuns = $event" />
             </FormItem>
           </CardContent>
@@ -357,88 +359,88 @@ async function save() {
         <!-- 测速参数 -->
         <Card>
           <CardHeader>
-            <CardTitle class="flex items-center gap-2"><Gauge class="text-muted-foreground size-4" />测速参数</CardTitle>
-            <CardDescription>标签旁为对应的 CloudflareSpeedTest 命令行参数</CardDescription>
+            <CardTitle class="flex items-center gap-2"><Gauge class="text-muted-foreground size-4" />{{ $t('tasks.edit.speedTest') }}</CardTitle>
+            <CardDescription>{{ $t('tasks.edit.speedTestDesc') }}</CardDescription>
           </CardHeader>
           <CardContent class="grid grid-cols-1 gap-4">
             <!-- 延迟测速 -->
             <section class="grid grid-cols-1 gap-2">
-              <h4 class="text-muted-foreground text-xs font-medium">延迟测速</h4>
+              <h4 class="text-muted-foreground text-xs font-medium">{{ $t('tasks.edit.latencyTest') }}</h4>
               <div class="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
-                <FormItem label="线程数" flag="-n" help="越大越快，路由器等弱设备请调低。默认 200，最多 1000"><NumInput v-model="form.speedTest.threads" :min="1" :max="1000" /></FormItem>
-                <FormItem label="测速次数" flag="-t" help="每个 IP 测几次延迟。默认 4"><NumInput v-model="form.speedTest.pingTimes" :min="1" :max="100" suffix="次" /></FormItem>
-                <FormItem label="端口" flag="-tp" help="延迟与下载测速的端口。默认 443"><NumInput v-model="form.speedTest.port" :min="1" :max="65535" /></FormItem>
-                <FormItem label="丢包率上限" flag="-tlr" help="0–1，0 表示丢包即过滤。默认 1">
+                <FormItem :label="$t('tasks.edit.threads')" flag="-n" :help="$t('tasks.edit.threadsHelp')"><NumInput v-model="form.speedTest.threads" :min="1" :max="1000" /></FormItem>
+                <FormItem :label="$t('tasks.edit.pingTimes')" flag="-t" :help="$t('tasks.edit.pingTimesHelp')"><NumInput v-model="form.speedTest.pingTimes" :min="1" :max="100" :suffix="$t('tasks.edit.timesUnit')" /></FormItem>
+                <FormItem :label="$t('tasks.edit.port')" flag="-tp" :help="$t('tasks.edit.portHelp')"><NumInput v-model="form.speedTest.port" :min="1" :max="65535" /></FormItem>
+                <FormItem :label="$t('tasks.edit.maxLoss')" flag="-tlr" :help="$t('tasks.edit.maxLossHelp')">
                   <NumInput v-model="form.speedTest.maxLossRate" :min="0" :max="1" :step="0.05" :decimals="2" />
                 </FormItem>
-                <FormItem label="延迟上限" flag="-tl" help="只保留平均延迟低于此值的 IP。默认 9999"><NumInput v-model="form.speedTest.maxLatency" :min="0" :max="9999" suffix="ms" /></FormItem>
-                <FormItem label="延迟下限" flag="-tll" help="只保留平均延迟高于此值的 IP。默认 0"><NumInput v-model="form.speedTest.minLatency" :min="0" :max="9999" suffix="ms" /></FormItem>
+                <FormItem :label="$t('tasks.edit.maxLatency')" flag="-tl" :help="$t('tasks.edit.maxLatencyHelp')"><NumInput v-model="form.speedTest.maxLatency" :min="0" :max="9999" suffix="ms" /></FormItem>
+                <FormItem :label="$t('tasks.edit.minLatency')" flag="-tll" :help="$t('tasks.edit.minLatencyHelp')"><NumInput v-model="form.speedTest.minLatency" :min="0" :max="9999" suffix="ms" /></FormItem>
               </div>
             </section>
 
             <!-- 下载测速 -->
             <section class="grid grid-cols-1 gap-2">
-              <h4 class="text-muted-foreground text-xs font-medium">下载测速</h4>
+              <h4 class="text-muted-foreground text-xs font-medium">{{ $t('tasks.edit.downloadTest') }}</h4>
               <div class="divide-y rounded-md border">
-                <SettingRow label="禁用下载测速" flag="-dd" description="结果改为按延迟排序（默认按下载速度），测速更快">
+                <SettingRow :label="$t('tasks.edit.disableDownload')" flag="-dd" :description="$t('tasks.edit.disableDownloadDesc')">
                   <Switch v-model="form.speedTest.disableDownload" />
                 </SettingRow>
               </div>
               <div v-if="!form.speedTest.disableDownload" class="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
-                <FormItem label="测速数量" flag="-dn" help="从延迟最低的 IP 起下载测速的数量。默认 10"><NumInput v-model="form.speedTest.downloadCount" :min="1" :max="100" suffix="个 IP" /></FormItem>
-                <FormItem label="测速时间" flag="-dt" help="单个 IP 下载测速的最长时间。默认 10 秒"><NumInput v-model="form.speedTest.downloadTime" :min="1" :max="120" suffix="秒" /></FormItem>
-                <FormItem label="速度下限" flag="-sl" help="只保留高于此速度的 IP，凑够数量才停止。默认 0">
+                <FormItem :label="$t('tasks.edit.downloadCount')" flag="-dn" :help="$t('tasks.edit.downloadCountHelp')"><NumInput v-model="form.speedTest.downloadCount" :min="1" :max="100" :suffix="$t('tasks.edit.ipUnit')" /></FormItem>
+                <FormItem :label="$t('tasks.edit.downloadTime')" flag="-dt" :help="$t('tasks.edit.downloadTimeHelp')"><NumInput v-model="form.speedTest.downloadTime" :min="1" :max="120" :suffix="$t('tasks.edit.secondsUnit')" /></FormItem>
+                <FormItem :label="$t('tasks.edit.minSpeed')" flag="-sl" :help="$t('tasks.edit.minSpeedHelp')">
                   <NumInput v-model="form.speedTest.minSpeed" :min="0" :step="0.5" :decimals="2" suffix="MB/s" />
                 </FormItem>
                 <p
                   v-if="form.speedTest.minSpeed > 0 && form.speedTest.maxLatency >= 9999"
                   class="text-warning flex items-start gap-1 self-end pb-2 text-xs sm:col-span-2 lg:col-span-1"
                 >
-                  <TriangleAlert class="mt-0.5 size-3.5 shrink-0" />建议同时设置延迟上限，避免因凑不够数量而长时间测速
+                  <TriangleAlert class="mt-0.5 size-3.5 shrink-0" />{{ $t('tasks.edit.minSpeedWarn') }}
                 </p>
               </div>
             </section>
 
             <!-- 测速地址与 HTTPing -->
             <section class="grid grid-cols-1 gap-2">
-              <h4 class="text-muted-foreground text-xs font-medium">测速地址与 HTTPing</h4>
-              <FormItem label="测速地址" flag="-url" help="下载测速与 HTTPing 使用的地址；内置地址不保证可用，建议自建">
-                <Input v-model="form.speedTest.url" placeholder="留空使用 cfst 内置地址" class="font-mono" />
+              <h4 class="text-muted-foreground text-xs font-medium">{{ $t('tasks.edit.urlSection') }}</h4>
+              <FormItem :label="$t('tasks.edit.url')" flag="-url" :help="$t('tasks.edit.urlHelp')">
+                <Input v-model="form.speedTest.url" :placeholder="$t('tasks.edit.urlPlaceholder')" class="font-mono" />
               </FormItem>
               <div class="divide-y rounded-md border">
-                <SettingRow label="HTTPing 模式" flag="-httping" description="延迟测速改用 HTTP 协议访问测速地址（默认 TCPing）">
+                <SettingRow :label="$t('tasks.edit.httping')" flag="-httping" :description="$t('tasks.edit.httpingDesc')">
                   <Switch v-model="form.speedTest.httping" />
                 </SettingRow>
               </div>
               <div v-if="form.speedTest.httping" class="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
-                <FormItem label="有效状态码" flag="-httping-code" help="仅限一个，0 表示默认（200、301、302）"><NumInput v-model="form.speedTest.httpingCode" :min="0" :max="599" /></FormItem>
-                <FormItem label="匹配地区" flag="-cfcolo" help="机场三字码，英文逗号分隔，仅 HTTPing 模式有效" class="lg:col-span-3">
-                  <Input v-model="form.speedTest.cfColo" placeholder="HKG,NRT,LAX（留空为所有地区）" class="font-mono" />
+                <FormItem :label="$t('tasks.edit.httpingCode')" flag="-httping-code" :help="$t('tasks.edit.httpingCodeHelp')"><NumInput v-model="form.speedTest.httpingCode" :min="0" :max="599" /></FormItem>
+                <FormItem :label="$t('tasks.edit.cfColo')" flag="-cfcolo" :help="$t('tasks.edit.cfColoHelp')" class="lg:col-span-3">
+                  <Input v-model="form.speedTest.cfColo" :placeholder="$t('tasks.edit.cfColoPlaceholder')" class="font-mono" />
                 </FormItem>
               </div>
             </section>
 
             <!-- IP 来源 -->
             <section class="grid grid-cols-1 gap-2">
-              <h4 class="text-muted-foreground text-xs font-medium">IP 来源</h4>
+              <h4 class="text-muted-foreground text-xs font-medium">{{ $t('tasks.edit.ipSource') }}</h4>
               <div class="divide-y rounded-md border">
-                <SettingRow label="测速全部 IP" flag="-allip" description="对 IP 段内每个 IP 测速（仅 IPv4，默认每个 /24 随机一个），耗时显著增加">
+                <SettingRow :label="$t('tasks.edit.allIP')" flag="-allip" :description="$t('tasks.edit.allIPDesc')">
                   <Switch v-model="form.speedTest.allIP" />
                 </SettingRow>
-                <SettingRow label="IP 段" :description="form.speedTest.ipSource === 'custom' ? '为本任务单独指定 IP 段' : '使用 cfst 目录下的 ip.txt / ipv6.txt，可在「cfst 管理」中编辑'">
+                <SettingRow :label="$t('tasks.edit.ipRanges')" :description="form.speedTest.ipSource === 'custom' ? $t('tasks.edit.ipRangesCustomDesc') : $t('tasks.edit.ipRangesDefaultDesc')">
                   <Tabs v-model="form.speedTest.ipSource">
                     <TabsList class="h-8">
-                      <TabsTrigger value="default" class="text-xs">默认文件</TabsTrigger>
-                      <TabsTrigger value="custom" class="text-xs">自定义</TabsTrigger>
+                      <TabsTrigger value="default" class="text-xs">{{ $t('tasks.edit.defaultFile') }}</TabsTrigger>
+                      <TabsTrigger value="custom" class="text-xs">{{ $t('tasks.edit.custom') }}</TabsTrigger>
                     </TabsList>
                   </Tabs>
                 </SettingRow>
               </div>
               <div v-if="form.speedTest.ipSource === 'custom'" :class="['grid grid-cols-1 gap-x-4 gap-y-3', showV4 && showV6 && 'md:grid-cols-2']">
-                <FormItem v-if="showV4" label="IPv4 段" help="每行一个或以逗号分隔">
+                <FormItem v-if="showV4" :label="$t('tasks.edit.ipv4Ranges')" :help="$t('tasks.edit.rangesHelp')">
                   <Textarea v-model="form.speedTest.ipv4Ranges" class="text-code min-h-24 font-mono" placeholder="173.245.48.0/20&#10;104.16.0.0/13" />
                 </FormItem>
-                <FormItem v-if="showV6" label="IPv6 段" help="每行一个或以逗号分隔">
+                <FormItem v-if="showV6" :label="$t('tasks.edit.ipv6Ranges')" :help="$t('tasks.edit.rangesHelp')">
                   <Textarea v-model="form.speedTest.ipv6Ranges" class="text-code min-h-24 font-mono" placeholder="2606:4700::/32" />
                 </FormItem>
               </div>
@@ -447,12 +449,12 @@ async function save() {
             <Collapsible v-model:open="advancedOpen">
               <CollapsibleTrigger as-child>
                 <button type="button" class="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs font-medium transition-colors">
-                  <ChevronRight :class="['size-3.5 transition-transform duration-200', advancedOpen && 'rotate-90']" />高级参数
+                  <ChevronRight :class="['size-3.5 transition-transform duration-200', advancedOpen && 'rotate-90']" />{{ $t('tasks.edit.advanced') }}
                 </button>
               </CollapsibleTrigger>
               <CollapsibleContent class="pt-2">
-                <FormItem label="附加参数" help="原样追加到 cfst 命令行，空格分隔；可能与上方配置冲突，了解含义再用">
-                  <Input v-model="form.speedTest.extraArgs" class="font-mono" placeholder="如 -tlr 0.2" />
+                <FormItem :label="$t('tasks.edit.extraArgs')" :help="$t('tasks.edit.extraArgsHelp')">
+                  <Input v-model="form.speedTest.extraArgs" class="font-mono" :placeholder="$t('tasks.edit.extraArgsPlaceholder')" />
                 </FormItem>
               </CollapsibleContent>
             </Collapsible>
@@ -463,24 +465,24 @@ async function save() {
         <Card>
           <CardHeader>
             <CardTitle class="flex items-center gap-2">
-              <Globe class="text-muted-foreground size-4" />目标记录<ToneBadge>{{ form.targets.length }}</ToneBadge>
+              <Globe class="text-muted-foreground size-4" />{{ $t('tasks.targets') }}<ToneBadge>{{ form.targets.length }}</ToneBadge>
             </CardTitle>
-            <CardDescription>测速结果写入以下 DNS 记录，可跨账号、跨域名</CardDescription>
+            <CardDescription>{{ $t('tasks.edit.targetsDesc') }}</CardDescription>
             <CardAction>
-              <Button type="button" variant="outline" size="sm" :disabled="!accounts.length" @click="addTarget"><Plus />添加</Button>
+              <Button type="button" variant="outline" size="sm" :disabled="!accounts.length" @click="addTarget"><Plus />{{ $t('common.add') }}</Button>
             </CardAction>
           </CardHeader>
           <CardContent>
-            <EmptyState v-if="!accounts.length" compact :icon="UserRoundKey" title="还没有 DNS 账号" description="添加服务商账号后才能配置目标记录">
-              <Button type="button" size="sm" @click="router.push('/accounts')">添加 DNS 账号</Button>
+            <EmptyState v-if="!accounts.length" compact :icon="UserRoundKey" :title="$t('tasks.edit.noAccount')" :description="$t('tasks.edit.noAccountDesc')">
+              <Button type="button" size="sm" @click="router.push('/accounts')">{{ $t('tasks.edit.addAccount') }}</Button>
             </EmptyState>
-            <EmptyState v-else-if="!form.targets.length" compact :icon="Globe" title="至少添加一个目标记录">
-              <Button type="button" size="sm" variant="outline" @click="addTarget"><Plus />添加目标记录</Button>
+            <EmptyState v-else-if="!form.targets.length" compact :icon="Globe" :title="$t('tasks.edit.v.targets')">
+              <Button type="button" size="sm" variant="outline" @click="addTarget"><Plus />{{ $t('tasks.edit.addTarget') }}</Button>
             </EmptyState>
             <div v-else class="grid grid-cols-1 gap-2">
               <!-- md 以上的列标题 -->
               <div class="text-muted-foreground text-label hidden gap-2 px-0.5 font-medium md:grid md:grid-cols-[minmax(0,1.5fr)_minmax(0,1.3fr)_minmax(0,0.8fr)_84px_minmax(0,0.8fr)_32px]">
-                <span>DNS 账号</span><span>主域名</span><span>主机记录</span><span>TTL</span><span>线路 / 代理</span><span />
+                <span>{{ $t('tasks.edit.colAccount') }}</span><span>{{ $t('tasks.edit.colDomain') }}</span><span>{{ $t('tasks.edit.colRr') }}</span><span>TTL</span><span>{{ $t('tasks.edit.colLineProxy') }}</span><span />
               </div>
               <div v-for="(t, i) in form.targets" :key="i" class="grid grid-cols-1 gap-1 border-b pb-2 last:border-b-0 last:pb-0">
                 <div class="grid grid-cols-2 items-center gap-2 md:grid-cols-[minmax(0,1.5fr)_minmax(0,1.3fr)_minmax(0,0.8fr)_84px_minmax(0,0.8fr)_32px]">
@@ -497,7 +499,7 @@ async function save() {
                         />
                         <span class="truncate" :title="accountById(t.accountId)!.name">{{ accountById(t.accountId)!.name }}</span>
                       </span>
-                      <SelectValue v-else placeholder="选择账号" />
+                      <SelectValue v-else :placeholder="$t('tasks.edit.pickAccount')" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem v-for="a in accounts" :key="a.id" :value="a.id">
@@ -514,31 +516,31 @@ async function save() {
                     placeholder="example.com"
                     @open="t.accountId && loadDomains(t.accountId)"
                   />
-                  <Input v-model="t.rr" placeholder="www / @" class="font-mono" title="主机记录" />
-                  <NumInput v-model="t.ttl" :min="1" :max="86400" :title="isCloudflare(t.accountId) ? 'TTL（1 = 自动）' : 'TTL'" />
-                  <Input v-if="t.accountId && !isCloudflare(t.accountId)" v-model="t.line" placeholder="默认线路" />
+                  <Input v-model="t.rr" placeholder="www / @" class="font-mono" :title="$t('tasks.edit.colRr')" />
+                  <NumInput v-model="t.ttl" :min="1" :max="86400" :title="isCloudflare(t.accountId) ? $t('tasks.edit.ttlAutoTitle') : 'TTL'" />
+                  <Input v-if="t.accountId && !isCloudflare(t.accountId)" v-model="t.line" :placeholder="$t('tasks.edit.defaultLine')" />
                   <label v-else class="flex h-9 cursor-pointer items-center gap-2 text-sm">
-                    <Switch v-model="t.proxied" />代理
+                    <Switch v-model="t.proxied" />{{ $t('tasks.edit.proxied') }}
                   </label>
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon"
                     class="text-muted-foreground hover:text-destructive size-8 justify-self-end"
-                    title="删除"
+                    :title="$t('common.delete')"
                     @click="form.targets.splice(i, 1)"
                   >
                     <Trash2 />
                   </Button>
                 </div>
                 <div class="flex flex-wrap items-center gap-x-3 gap-y-1 px-0.5 text-xs">
-                  <span :class="['font-mono break-all', fqdn(t) ? 'text-primary' : 'text-muted-foreground']">{{ fqdn(t) || '未填写域名' }}</span>
-                  <span v-if="isCloudflare(t.accountId)" class="text-muted-foreground">TTL 1 = 自动</span>
+                  <span :class="['font-mono break-all', fqdn(t) ? 'text-primary' : 'text-muted-foreground']">{{ fqdn(t) || $t('tasks.edit.noDomain') }}</span>
+                  <span v-if="isCloudflare(t.accountId)" class="text-muted-foreground">{{ $t('tasks.edit.ttlAuto') }}</span>
                   <button type="button" class="text-muted-foreground hover:text-foreground inline-flex items-center gap-1" @click="viewRecords(t)">
-                    <Search class="size-3" />查看现有记录
+                    <Search class="size-3" />{{ $t('tasks.edit.viewRecords') }}
                   </button>
                   <span v-if="isCloudflare(t.accountId) && t.proxied" class="text-warning inline-flex items-center gap-1">
-                    <TriangleAlert class="size-3.5" />开启代理后访问者解析到 Cloudflare 分配的 IP，优选 IP 将不生效
+                    <TriangleAlert class="size-3.5" />{{ $t('tasks.edit.proxiedWarn') }}
                   </span>
                 </div>
               </div>
@@ -550,14 +552,14 @@ async function save() {
         <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
           <Card>
             <CardHeader>
-              <CardTitle class="flex items-center gap-2"><SlidersHorizontal class="text-muted-foreground size-4" />更新策略</CardTitle>
+              <CardTitle class="flex items-center gap-2"><SlidersHorizontal class="text-muted-foreground size-4" />{{ $t('tasks.edit.updatePolicy') }}</CardTitle>
             </CardHeader>
             <CardContent class="grid grid-cols-1 gap-3">
-              <FormItem label="写入 IP 数量" help="每种记录类型写入排名前 N 的 IP；多于 1 条时创建同名记录做负载均衡（1–10）">
-                <NumInput v-model="form.update.recordCount" :min="1" :max="10" suffix="条" class="max-w-40" />
+              <FormItem :label="$t('tasks.edit.recordCount')" :help="$t('tasks.edit.recordCountHelp')">
+                <NumInput v-model="form.update.recordCount" :min="1" :max="10" :suffix="$t('tasks.edit.recordUnit')" class="max-w-40" />
               </FormItem>
               <div class="divide-y rounded-md border">
-                <SettingRow label="IP 未变化时跳过" description="记录值与本次选出的 IP 一致时不调用更新接口，减少 API 调用">
+                <SettingRow :label="$t('tasks.edit.skipUnchanged')" :description="$t('tasks.edit.skipUnchangedDesc')">
                   <Switch v-model="form.update.skipUnchanged" />
                 </SettingRow>
               </div>
@@ -566,19 +568,19 @@ async function save() {
 
           <Card>
             <CardHeader>
-              <CardTitle class="flex items-center gap-2"><Bell class="text-muted-foreground size-4" />通知</CardTitle>
+              <CardTitle class="flex items-center gap-2"><Bell class="text-muted-foreground size-4" />{{ $t('tasks.edit.notify') }}</CardTitle>
               <CardDescription>
-                触发条件在各渠道中设置 · <router-link to="/notifiers" class="text-primary hover:underline">管理</router-link>
+                {{ $t('tasks.edit.notifyDesc') }} · <router-link to="/notifiers" class="text-primary hover:underline">{{ $t('tasks.edit.manage') }}</router-link>
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <p v-if="!notifiers.length" class="text-muted-foreground text-xs">暂无通知渠道。</p>
+              <p v-if="!notifiers.length" class="text-muted-foreground text-xs">{{ $t('tasks.edit.noNotifiers') }}</p>
               <div v-else class="divide-y rounded-md border">
                 <label v-for="nt in notifiers" :key="nt.id" class="hover:bg-accent/40 flex cursor-pointer items-center gap-3 px-3 py-2">
                   <Checkbox :model-value="form.notifierIds.includes(nt.id)" @update:model-value="toggleNotifier(nt.id, !!$event)" />
                   <BrandIcon kind="notifier" :type="nt.type" :name="meta.notifierName(nt.type)" class="size-6" />
                   <span class="min-w-0 flex-1 truncate text-sm" :title="nt.name">{{ nt.name }}</span>
-                  <span class="text-muted-foreground text-xs">{{ meta.notifierName(nt.type) }}{{ nt.enabled ? '' : ' · 已停用' }}</span>
+                  <span class="text-muted-foreground text-xs">{{ meta.notifierName(nt.type) }}{{ nt.enabled ? '' : ` · ${$t('common.disabled')}` }}</span>
                 </label>
               </div>
             </CardContent>
@@ -587,8 +589,8 @@ async function save() {
 
         <!-- 吸底保存栏（仅在内容区宽度内） -->
         <div class="bg-background/85 sticky bottom-0 z-10 flex justify-end gap-2 border-t py-3 backdrop-blur">
-          <Button type="button" variant="outline" @click="router.push('/tasks')">取消</Button>
-          <Button type="submit" :disabled="saving"><Loader2 v-if="saving" class="animate-spin" /><Save v-else />保存任务</Button>
+          <Button type="button" variant="outline" @click="router.push('/tasks')">{{ $t('common.cancel') }}</Button>
+          <Button type="submit" :disabled="saving"><Loader2 v-if="saving" class="animate-spin" /><Save v-else />{{ $t('tasks.edit.save') }}</Button>
         </div>
       </form>
 
@@ -596,40 +598,40 @@ async function save() {
       <aside class="hidden xl:sticky xl:top-18 xl:block">
         <Card>
           <CardHeader>
-            <CardTitle>摘要</CardTitle>
+            <CardTitle>{{ $t('tasks.edit.summary') }}</CardTitle>
           </CardHeader>
           <CardContent class="grid grid-cols-1 gap-3 text-sm">
             <div>
-              <div class="text-muted-foreground text-xs">状态</div>
+              <div class="text-muted-foreground text-xs">{{ $t('common.status') }}</div>
               <div class="mt-0.5 flex items-center gap-2">
-                <ToneBadge :tone="form.enabled ? 'success' : 'neutral'">{{ form.enabled ? '已启用' : '已停用' }}</ToneBadge>
+                <ToneBadge :tone="form.enabled ? 'success' : 'neutral'">{{ form.enabled ? $t('common.enabled') : $t('common.disabled') }}</ToneBadge>
                 <ToneBadge>{{ ipTypeLabel[form.ipType] }}</ToneBadge>
               </div>
             </div>
             <div>
-              <div class="text-muted-foreground text-xs">执行周期</div>
+              <div class="text-muted-foreground text-xs">{{ $t('tasks.schedule') }}</div>
               <div class="mt-0.5">{{ describeCron(form.cron) }}</div>
               <div v-if="form.cron.trim() && nextRuns.length" class="text-muted-foreground text-xs tabular-nums">
-                下次 {{ fmtTime(nextRuns[0], 'MM-DD HH:mm') }}（{{ fromNow(nextRuns[0]) }}）
+                {{ $t('tasks.edit.nextRun', { time: fmtTime(nextRuns[0], 'MM-DD HH:mm'), rel: fromNow(nextRuns[0]) }) }}
               </div>
             </div>
             <div>
-              <div class="text-muted-foreground text-xs">每种类型写入</div>
-              <div class="mt-0.5 tabular-nums">前 {{ form.update.recordCount || 1 }} 个 IP{{ form.update.skipUnchanged ? ' · 未变化跳过' : '' }}</div>
+              <div class="text-muted-foreground text-xs">{{ $t('tasks.edit.perType') }}</div>
+              <div class="mt-0.5 tabular-nums">{{ $t('tasks.edit.topN', { n: form.update.recordCount || 1 }) }}{{ form.update.skipUnchanged ? ` · ${$t('tasks.edit.skipShort')}` : '' }}</div>
             </div>
             <div>
-              <div class="text-muted-foreground text-xs">将写入的记录（{{ summaryRecords.length }}）</div>
+              <div class="text-muted-foreground text-xs">{{ $t('tasks.edit.willWrite', { n: summaryRecords.length }) }}</div>
               <ul v-if="summaryRecords.length" class="mt-1 grid grid-cols-1 gap-1">
                 <li v-for="r in summaryRecords" :key="r.key" class="flex min-w-0 items-center gap-1.5">
                   <ToneBadge class="shrink-0 px-1">{{ r.type }}</ToneBadge>
                   <span class="text-code min-w-0 truncate font-mono" :title="r.fqdn">{{ r.fqdn }}</span>
                 </li>
               </ul>
-              <p v-else class="text-muted-foreground mt-0.5 text-xs">尚未填写目标记录</p>
+              <p v-else class="text-muted-foreground mt-0.5 text-xs">{{ $t('tasks.edit.noTargetsYet') }}</p>
             </div>
             <div>
-              <div class="text-muted-foreground text-xs">通知渠道</div>
-              <div class="mt-0.5">{{ form.notifierIds.length ? `${form.notifierIds.length} 个` : '不通知' }}</div>
+              <div class="text-muted-foreground text-xs">{{ $t('tasks.edit.notifiers') }}</div>
+              <div class="mt-0.5">{{ form.notifierIds.length ? $t('tasks.edit.notifierCount', { n: form.notifierIds.length }) : $t('tasks.edit.noNotify') }}</div>
             </div>
           </CardContent>
         </Card>
@@ -639,21 +641,21 @@ async function save() {
     <Dialog v-model:open="rec.open">
       <DialogContent class="sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle>现有记录</DialogTitle>
+          <DialogTitle>{{ $t('tasks.edit.existingRecords') }}</DialogTitle>
           <DialogDescription class="font-mono">{{ rec.title }}</DialogDescription>
         </DialogHeader>
         <div class="max-h-[60vh] overflow-auto rounded-md border">
           <div v-if="rec.loading" class="grid grid-cols-1 gap-2 p-4"><Skeleton v-for="i in 3" :key="i" class="h-8" /></div>
-          <EmptyState v-else-if="rec.error" :icon="CircleX" compact title="查询失败" />
-          <EmptyState v-else-if="!rec.records.length" :icon="Globe" compact title="没有匹配的记录" description="保存并执行任务后会自动创建" />
+          <EmptyState v-else-if="rec.error" :icon="CircleX" compact :title="$t('tasks.edit.queryFailed')" />
+          <EmptyState v-else-if="!rec.records.length" :icon="Globe" compact :title="$t('tasks.edit.noRecords')" :description="$t('tasks.edit.noRecordsDesc')" />
           <Table v-else>
             <TableHeader>
               <TableRow>
-                <TableHead>域名</TableHead>
-                <TableHead>类型</TableHead>
-                <TableHead>值</TableHead>
+                <TableHead>{{ $t('tasks.edit.colFqdn') }}</TableHead>
+                <TableHead>{{ $t('common.type') }}</TableHead>
+                <TableHead>{{ $t('tasks.edit.colValue') }}</TableHead>
                 <TableHead class="text-right">TTL</TableHead>
-                <TableHead>代理 / 线路</TableHead>
+                <TableHead>{{ $t('tasks.edit.colProxyLine') }}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -663,7 +665,7 @@ async function save() {
                 <TableCell class="text-code font-mono">{{ r.value }}</TableCell>
                 <TableCell class="text-right">{{ r.ttl }}</TableCell>
                 <TableCell>
-                  <ToneBadge v-if="r.proxied" tone="warning">已代理</ToneBadge>
+                  <ToneBadge v-if="r.proxied" tone="warning">{{ $t('tasks.edit.isProxied') }}</ToneBadge>
                   <span v-else class="text-muted-foreground text-xs">{{ r.line || '-' }}</span>
                 </TableCell>
               </TableRow>

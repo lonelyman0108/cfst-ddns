@@ -23,6 +23,7 @@ export function mergeSchemaDefaults(fields: Field[], config: Config | null | und
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
 import { Eye, EyeOff } from '@lucide/vue'
+import { useI18n } from 'vue-i18n'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
@@ -40,6 +41,7 @@ const props = withDefaults(
 )
 
 const model = defineModel<Config>({ required: true })
+const { t } = useI18n()
 
 const errors = reactive<Record<string, string>>({})
 const reveal = reactive<Record<string, boolean>>({})
@@ -80,7 +82,7 @@ function setNumber(f: Field, v: number | undefined) {
 }
 
 function placeholderOf(f: Field) {
-  if (masked.value.has(f.key)) return '******（已保存，留空则保持不变）'
+  if (masked.value.has(f.key)) return t('format.form.secretPlaceholder')
   return f.placeholder || ''
 }
 
@@ -90,7 +92,7 @@ function validate(): boolean {
   for (const f of visibleFields.value) {
     if (!f.required || f.type === 'switch') continue
     if (!(model.value[f.key] ?? '').trim()) {
-      errors[f.key] = `请填写${f.label}`
+      errors[f.key] = t('format.form.required', { label: f.label })
       ok = false
     }
   }
@@ -168,7 +170,7 @@ defineExpose({ validate })
         @update:model-value="setText(f, String($event ?? ''))"
       >
         <SelectTrigger :id="`sf-${f.key}`" class="w-full" :aria-invalid="!!errors[f.key]">
-          <SelectValue :placeholder="f.placeholder || '请选择'" />
+          <SelectValue :placeholder="f.placeholder || t('format.form.select')" />
         </SelectTrigger>
         <SelectContent>
           <SelectItem v-for="o in f.options || []" :key="o.value" :value="o.value">{{ o.label }}</SelectItem>

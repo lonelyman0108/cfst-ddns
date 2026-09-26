@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/lonelyman0108/cfst-ddns/internal/httpx"
+	"github.com/lonelyman0108/cfst-ddns/internal/i18n"
 	"github.com/lonelyman0108/cfst-ddns/internal/schema"
 )
 
@@ -71,7 +72,7 @@ func parseHeaders(s string) (map[string]string, error) {
 		}
 		k, v, ok := strings.Cut(line, ":")
 		if !ok || strings.TrimSpace(k) == "" {
-			return nil, fmt.Errorf("Webhook: 请求头格式错误: %s", line)
+			return nil, i18n.Errorf("Webhook: 请求头格式错误: %s", line)
 		}
 		h[strings.TrimSpace(k)] = strings.TrimSpace(v)
 	}

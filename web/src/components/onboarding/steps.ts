@@ -4,6 +4,7 @@ import type { OnboardingKey, OnboardingState } from '@/api/types-p9'
 
 export interface OnboardingStep {
   key: OnboardingKey
+  /** 文案 key，使用处 t() */
   title: string
   description: string
   icon: Component
@@ -11,11 +12,11 @@ export interface OnboardingStep {
 }
 
 export const ONBOARDING_STEPS: OnboardingStep[] = [
-  { key: 'cfst', title: '准备 cfst', description: '安装测速程序 CloudflareSpeedTest', icon: CloudDownload },
-  { key: 'account', title: '添加 DNS 账号', description: '填写服务商凭据并测试连接', icon: UserRoundKey },
-  { key: 'notifier', title: '通知渠道', description: '可选：测速结果推送到手机', icon: Bell, optional: true },
-  { key: 'task', title: '创建任务', description: '从模板创建第一个测速任务', icon: ListChecks },
-  { key: 'run', title: '首次执行', description: '试运行或正式执行并查看日志', icon: Play },
+  { key: 'cfst', title: 'onboarding.steps.cfst.title', description: 'onboarding.steps.cfst.description', icon: CloudDownload },
+  { key: 'account', title: 'onboarding.steps.account.title', description: 'onboarding.steps.account.description', icon: UserRoundKey },
+  { key: 'notifier', title: 'onboarding.steps.notifier.title', description: 'onboarding.steps.notifier.description', icon: Bell, optional: true },
+  { key: 'task', title: 'onboarding.steps.task.title', description: 'onboarding.steps.task.description', icon: ListChecks },
+  { key: 'run', title: 'onboarding.steps.run.title', description: 'onboarding.steps.run.description', icon: Play },
 ]
 
 /** 第一个未完成的步骤（通知为可选，任务已建时视为跳过） */

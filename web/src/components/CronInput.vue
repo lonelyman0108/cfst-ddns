@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ChevronDown, CircleAlert, Loader2 } from '@lucide/vue'
 import { cronApi, errorMessage } from '@/api'
 import { Input } from '@/components/ui/input'
@@ -7,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, Sele
 import { CRON_PRESETS, describeCron } from '@/utils/cron'
 import { fmtTime, fromNow } from '@/utils/format'
 
+const { t } = useI18n()
 const model = defineModel<string>({ default: '' })
 const emit = defineEmits<{ (e: 'next', v: string[]): void }>()
 
@@ -97,19 +99,19 @@ onBeforeUnmount(() => clearTimeout(timer))
         <SelectContent>
           <SelectItem v-for="p in CRON_PRESETS" :key="keyOf(p.value)" :value="keyOf(p.value)">{{ p.label }}</SelectItem>
           <SelectSeparator />
-          <SelectItem :value="CUSTOM">自定义 cron</SelectItem>
+          <SelectItem :value="CUSTOM">{{ t('cron.input.custom') }}</SelectItem>
         </SelectContent>
       </Select>
       <Input
         v-if="mode === CUSTOM"
         :model-value="custom"
         class="min-w-48 flex-1 font-mono"
-        placeholder="分 时 日 月 周，如 0 */2 * * *"
+        :placeholder="t('cron.input.placeholder')"
         @update:model-value="onCustomInput"
       />
     </div>
     <!-- 一行摘要：表达式 · 描述 · 下次执行；可展开查看未来 5 次 -->
-    <div v-if="!model.trim()" class="text-muted-foreground text-xs">不自动执行，仅可手动或通过 Webhook 触发</div>
+    <div v-if="!model.trim()" class="text-muted-foreground text-xs">{{ t('cron.input.manualHint') }}</div>
     <div v-else-if="error" class="text-destructive flex items-center gap-1.5 text-xs">
       <CircleAlert class="size-3.5 shrink-0" /><span class="font-mono">{{ model }}</span> · {{ error }}
     </div>
@@ -119,9 +121,9 @@ onBeforeUnmount(() => clearTimeout(timer))
       <span>·</span>
       <Loader2 v-if="loading" class="size-3.5 animate-spin" />
       <template v-else-if="next.length">
-        <span>下次 <span class="text-foreground tabular-nums">{{ fmtTime(next[0], 'MM-DD HH:mm') }}</span>（{{ fromNow(next[0]) }}）</span>
+        <span>{{ t('cron.input.next') }} <span class="text-foreground tabular-nums">{{ fmtTime(next[0], 'MM-DD HH:mm') }}</span>{{ t('cron.input.rel', { rel: fromNow(next[0]) }) }}</span>
         <button type="button" class="text-primary ml-1 inline-flex items-center hover:underline" @click="showMore = !showMore">
-          {{ showMore ? '收起' : '查看更多' }}<ChevronDown :class="['size-3.5 transition-transform', showMore && 'rotate-180']" />
+          {{ showMore ? t('common.collapse') : t('cron.input.showMore') }}<ChevronDown :class="['size-3.5 transition-transform', showMore && 'rotate-180']" />
         </button>
       </template>
     </div>

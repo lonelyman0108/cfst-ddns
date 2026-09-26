@@ -1,6 +1,7 @@
 import axios, { AxiosError, type AxiosRequestConfig } from 'axios'
 import { toast } from 'vue-sonner'
 import { clearToken, getToken } from '@/utils/token'
+import { currentLocale, t } from '@/i18n'
 
 declare module 'axios' {
   interface AxiosRequestConfig {
@@ -24,6 +25,7 @@ export function onUnauthorized(fn: () => void) {
 http.interceptors.request.use((config) => {
   const token = getToken()
   if (token) config.headers.set('Authorization', `Bearer ${token}`)
+  config.headers.set('Accept-Language', currentLocale())
   return config
 })
 
@@ -40,9 +42,9 @@ async function extractMessage(err: AxiosError): Promise<string> {
     const msg = (data as { error?: unknown }).error
     if (typeof msg === 'string' && msg) return msg
   }
-  if (err.code === 'ECONNABORTED') return '请求超时'
-  if (!err.response) return '网络错误，无法连接到服务器'
-  return `请求失败（${err.response.status}）`
+  if (err.code === 'ECONNABORTED') return t('format.http.timeout')
+  if (!err.response) return t('format.http.network')
+  return t('format.http.status', { status: err.response.status })
 }
 
 /** 从任意错误中取出可读信息（优先使用后端返回的 error 字段） */

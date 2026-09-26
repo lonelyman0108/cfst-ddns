@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { toast } from 'vue-sonner'
+import { useI18n } from 'vue-i18n'
 import { ArrowLeft, CircleCheck, CircleX, ExternalLink, Loader2, Plus, Save, Send } from '@lucide/vue'
 import { notifiersApi } from '@/api'
 import type { Config, Notifier, TestResult, TypeMeta } from '@/api/types'
@@ -20,6 +21,7 @@ import { useMetaStore } from '@/stores/meta'
 
 const emit = defineEmits<{ (e: 'changed'): void }>()
 
+const { t } = useI18n()
 const meta = useMetaStore()
 const list = ref<Notifier[] | null>(null)
 const adding = ref(false)
@@ -70,7 +72,7 @@ async function test() {
 }
 
 async function save() {
-  form.nameError = form.name.trim() ? '' : '请填写名称'
+  form.nameError = form.name.trim() ? '' : 'onboarding.nameRequired'
   if (form.nameError || !schemaRef.value?.validate()) return
   form.saving = true
   try {
@@ -83,7 +85,7 @@ async function save() {
       onFailure: form.onFailure,
       onlyOnChange: form.onlyOnChange,
     })
-    toast.success('通知渠道已添加')
+    toast.success(t('onboarding.notifier.added'))
     form.type = ''
     await load()
     emit('changed')
@@ -107,7 +109,7 @@ async function save() {
           <ToneBadge tone="primary">{{ meta.notifierName(n.type) }}</ToneBadge>
         </div>
         <div v-if="!adding">
-          <Button variant="outline" size="sm" @click="adding = true"><Plus />再添加一个</Button>
+          <Button variant="outline" size="sm" @click="adding = true"><Plus />{{ t('onboarding.addAnother') }}</Button>
         </div>
       </div>
 
@@ -118,36 +120,36 @@ async function save() {
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-2 text-sm font-medium">
                 {{ typeMeta.name }}
-                <InlineLink :icon="ArrowLeft" class="text-xs font-normal" @click="form.type = ''">更换</InlineLink>
+                <InlineLink :icon="ArrowLeft" class="text-xs font-normal" @click="form.type = ''">{{ t('onboarding.change') }}</InlineLink>
               </div>
               <p v-if="typeMeta.description" class="text-muted-foreground mt-1 text-xs leading-relaxed">{{ typeMeta.description }}</p>
             </div>
             <Button v-if="typeMeta.docsUrl" variant="outline" size="sm" as-child>
-              <a :href="typeMeta.docsUrl" target="_blank" rel="noopener"><ExternalLink />配置说明</a>
+              <a :href="typeMeta.docsUrl" target="_blank" rel="noopener"><ExternalLink />{{ t('onboarding.notifier.docs') }}</a>
             </Button>
           </div>
-          <FormItem label="名称" required for="ob-ntf-name" :error="form.nameError">
+          <FormItem :label="t('common.name')" required for="ob-ntf-name" :error="form.nameError && t(form.nameError)">
             <Input id="ob-ntf-name" v-model="form.name" maxlength="64" />
           </FormItem>
           <SchemaForm v-if="typeMeta" :key="form.key" ref="schemaRef" v-model="form.config" :fields="typeMeta.fields" />
           <div class="divide-y rounded-lg border">
-            <SettingRow label="成功时通知" for="ob-on-success"><Switch id="ob-on-success" v-model="form.onSuccess" /></SettingRow>
-            <SettingRow label="失败时通知" for="ob-on-failure"><Switch id="ob-on-failure" v-model="form.onFailure" /></SettingRow>
-            <SettingRow label="仅 IP 变化时通知" description="IP 没变时不打扰" for="ob-on-change">
+            <SettingRow :label="t('onboarding.notifier.onSuccess')" for="ob-on-success"><Switch id="ob-on-success" v-model="form.onSuccess" /></SettingRow>
+            <SettingRow :label="t('onboarding.notifier.onFailure')" for="ob-on-failure"><Switch id="ob-on-failure" v-model="form.onFailure" /></SettingRow>
+            <SettingRow :label="t('onboarding.notifier.onlyOnChange')" :description="t('onboarding.notifier.onlyOnChangeDesc')" for="ob-on-change">
               <Switch id="ob-on-change" v-model="form.onlyOnChange" />
             </SettingRow>
           </div>
           <Alert v-if="form.result" :class="form.result.ok ? 'border-success/40 bg-success/5' : 'border-destructive/40 bg-destructive/5'">
             <CircleCheck v-if="form.result.ok" class="text-success!" />
             <CircleX v-else class="text-destructive!" />
-            <AlertTitle :class="form.result.ok ? 'text-success' : 'text-destructive'">{{ form.result.ok ? '已发送测试消息' : '发送失败' }}</AlertTitle>
+            <AlertTitle :class="form.result.ok ? 'text-success' : 'text-destructive'">{{ form.result.ok ? t('onboarding.notifier.sent') : t('onboarding.notifier.sendFailed') }}</AlertTitle>
             <AlertDescription v-if="form.result.message">{{ form.result.message }}</AlertDescription>
           </Alert>
           <div class="flex flex-wrap gap-2">
             <Button variant="outline" :disabled="form.testing" @click="test">
-              <Loader2 v-if="form.testing" class="animate-spin" /><Send v-else />发送测试
+              <Loader2 v-if="form.testing" class="animate-spin" /><Send v-else />{{ t('onboarding.notifier.sendTest') }}
             </Button>
-            <Button :disabled="form.saving" @click="save"><Loader2 v-if="form.saving" class="animate-spin" /><Save v-else />保存渠道</Button>
+            <Button :disabled="form.saving" @click="save"><Loader2 v-if="form.saving" class="animate-spin" /><Save v-else />{{ t('onboarding.notifier.save') }}</Button>
           </div>
         </div>
       </template>

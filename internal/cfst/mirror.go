@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/lonelyman0108/cfst-ddns/internal/httpx"
+	"github.com/lonelyman0108/cfst-ddns/internal/i18n"
 )
 
 // Mirror 为 GitHub 镜像预设。
@@ -36,6 +37,7 @@ type MirrorProbe struct {
 	OK        bool   `json:"ok"`
 	LatencyMs int64  `json:"latencyMs"`
 	Error     string `json:"error,omitempty"`
+	Err       error  `json:"-"` // 与 Error 对应的原始错误，供接口层按语言输出
 }
 
 // probeAsset 为测速使用的发布资源（固定版本，确保存在）。
@@ -78,15 +80,13 @@ func ProbeMirrors(ctx context.Context, mirrors []string) []MirrorProbe {
 func probeMirror(ctx context.Context, mirror string) MirrorProbe {
 	p := MirrorProbe{Mirror: mirror, Label: MirrorLabel(mirror)}
 	if mirror != "" && !strings.HasPrefix(mirror, "http://") && !strings.HasPrefix(mirror, "https://") {
-		p.Error = "地址需以 http:// 或 https:// 开头"
-		return p
+		return p.fail(i18n.New("地址需以 http:// 或 https:// 开头"))
 	}
 	ctx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, MirrorURL(mirror, probeAsset), nil)
 	if err != nil {
-		p.Error = err.Error()
-		return p
+		return p.fail(err)
 	}
 	// 只取前 1KB，不支持 Range 的代理读到后即断开
 	req.Header.Set("Range", "bytes=0-1023")
@@ -95,31 +95,30 @@ func probeMirror(ctx context.Context, mirror string) MirrorProbe {
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		if ctx.Err() != nil {
-			p.Error = "超时（8 秒）"
-		} else {
-			p.Error = err.Error()
+			return p.fail(i18n.New("超时（8 秒）"))
 		}
-		return p
+		return p.fail(err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
-		p.Error = fmt.Sprintf("HTTP %d", resp.StatusCode)
-		return p
+		return p.fail(fmt.Errorf("HTTP %d", resp.StatusCode))
 	}
 	// 有的代理出错时返回 200 + HTML 页面
 	if ct := resp.Header.Get("Content-Type"); strings.HasPrefix(ct, "text/html") {
-		p.Error = "返回的不是文件（" + ct + "）"
-		return p
+		return p.fail(i18n.Errorf("返回的不是文件（%s）", ct))
 	}
 	head := make([]byte, 2)
 	if _, err := io.ReadFull(resp.Body, head); err != nil {
-		p.Error = "读取响应失败: " + err.Error()
-		return p
+		return p.fail(i18n.Errorf("读取响应失败: %w", err))
 	}
 	if head[0] != 0x1f || head[1] != 0x8b {
-		p.Error = "返回内容不是有效的发布文件"
-		return p
+		return p.fail(i18n.New("返回内容不是有效的发布文件"))
 	}
 	p.OK, p.LatencyMs = true, time.Since(start).Milliseconds()
+	return p
+}
+
+func (p MirrorProbe) fail(err error) MirrorProbe {
+	p.Error, p.Err = err.Error(), err
 	return p
 }

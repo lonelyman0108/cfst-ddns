@@ -1,0 +1,36 @@
+// 执行周期：预设、cron 描述与 CronInput 组件文案
+export default {
+  presets: {
+    every30m: 'Every 30 minutes',
+    hourly: 'Hourly',
+    every6h: 'Every 6 hours',
+    every12h: 'Every 12 hours',
+    daily3: 'Daily at 3:00',
+    manual: 'Manual only',
+  },
+  at: {
+    daily0: 'Daily at 00:00',
+    weekly: 'Every Sunday at 00:00',
+    monthly: 'Monthly on day 1 at 00:00',
+    yearly: 'Yearly on Jan 1 at 00:00',
+  },
+  everyDuration: 'Every {d}',
+  everyNMin: 'Every {n} minutes',
+  everyMinute: 'Every minute',
+  everyNHour: 'Every {n} hours',
+  everyNHourAt: 'Every {n} hours (at minute {m})',
+  hourlyAt: 'Hourly at minute {m}',
+  dailyAt: 'Daily at {time}',
+  weeklyAt: 'Every {day} at {time}',
+  monthlyAt: 'Monthly on day {d} at {time}',
+  sep: ', ',
+  weekday: { 0: 'Sunday', 1: 'Monday', 2: 'Tuesday', 3: 'Wednesday', 4: 'Thursday', 5: 'Friday', 6: 'Saturday' },
+  input: {
+    custom: 'Custom cron',
+    placeholder: 'min hour day month weekday, e.g. 0 */2 * * *',
+    manualHint: 'Not run automatically; trigger manually or via Webhook only',
+    next: 'Next',
+    rel: ' ({rel})',
+    showMore: 'Show more',
+  },
+}

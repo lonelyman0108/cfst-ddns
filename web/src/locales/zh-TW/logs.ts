@@ -1,0 +1,17 @@
+export default {
+  title: '系統日誌',
+  description: '應用程式執行日誌（記憶體環形緩衝）',
+  terminal: '終端機',
+  table: '表格',
+  allLevels: '全部層級',
+  atLeast: '{level} 及以上',
+  only: '僅 {level}',
+  keyword: '搜尋關鍵字',
+  recent: '最近 {n} 筆',
+  autoRefresh: '自動重新整理（3 秒）',
+  count: '{shown} / {total} 筆',
+  time: '時間',
+  level: '層級',
+  message: '內容',
+  empty: '暫無日誌',
+}

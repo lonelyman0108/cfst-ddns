@@ -2,7 +2,6 @@
 package legacy
 
 import (
-	"fmt"
 	"net/url"
 	"regexp"
 	"sort"
@@ -10,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/lonelyman0108/cfst-ddns/internal/cfst"
+	"github.com/lonelyman0108/cfst-ddns/internal/i18n"
 	"github.com/lonelyman0108/cfst-ddns/internal/scheduler"
 	"github.com/lonelyman0108/cfst-ddns/internal/schema"
 	"github.com/lonelyman0108/cfst-ddns/internal/store"
@@ -41,7 +41,7 @@ func ParseVars(content string) map[string]string {
 	return vars
 }
 
-func parseVars(content string) (map[string]string, []string) {
+func parseVars(content string) (map[string]string, []*i18n.Msg) {
 	vars := map[string]string{}
 	refs := map[string]string{}
 	content = strings.TrimPrefix(content, "\ufeff")
@@ -68,9 +68,9 @@ func parseVars(content string) (map[string]string, []string) {
 			delete(refs, key)
 		}
 	}
-	var warns []string
+	var warns []*i18n.Msg
 	for _, k := range sortedKeys(refs) {
-		warns = append(warns, fmt.Sprintf("变量 %s 引用了外部环境变量 ${%s}，请填写实际值", k, refs[k]))
+		warns = append(warns, i18n.M("变量 %s 引用了外部环境变量 ${%s}，请填写实际值", k, refs[k]))
 	}
 	return vars, warns
 }
@@ -178,27 +178,26 @@ type Task struct {
 }
 
 // Summary 返回任务的可读概述。
-func (t Task) Summary() string {
+func (t Task) Summary() *i18n.Msg {
 	types := map[string]string{"v4": "A", "v6": "AAAA", "both": "A + AAAA"}[t.IPType]
-	records := "无"
+	var records any = i18n.Text("无")
 	if len(t.Records) > 0 {
 		records = strings.Join(t.Records, "、")
 	}
 	args, _ := cfst.BuildArgs(t.SpeedTest, "", "")
-	params := "全部默认"
+	var params any = i18n.Text("全部默认")
 	if len(args) > 6 {
 		// 去掉末尾由程序控制的 -f/-o/-p
 		params = strings.Join(args[:len(args)-6], " ")
 	}
-	cron := t.Cron
-	if cron == "" {
-		cron = "仅手动执行"
+	var cron any = t.Cron
+	if t.Cron == "" {
+		cron = i18n.Text("仅手动执行")
 	}
-	s := fmt.Sprintf("目标记录（%s）: %s；非默认参数: %s；执行周期: %s", types, records, params, cron)
 	if t.SpeedTest.IPSource == "custom" {
-		s += "；使用自定义 IP 段"
+		return i18n.M("目标记录（%s）: %s；非默认参数: %s；执行周期: %s；使用自定义 IP 段", types, records, params, cron)
 	}
-	return s
+	return i18n.M("目标记录（%s）: %s；非默认参数: %s；执行周期: %s", types, records, params, cron)
 }
 
 // Plan 为转换结果。
@@ -207,11 +206,11 @@ type Plan struct {
 	Notifiers    []Notifier
 	Task         *Task
 	GithubMirror string // 空表示未配置
-	Warnings     []string
+	Warnings     []*i18n.Msg
 }
 
 func (p *Plan) warn(format string, a ...any) {
-	p.Warnings = append(p.Warnings, fmt.Sprintf(format, a...))
+	p.Warnings = append(p.Warnings, i18n.M(format, a...))
 }
 
 // DefaultCron 为旧版 Docker 镜像的默认执行周期。
@@ -438,12 +437,12 @@ func convertTask(p *Plan, vars map[string]string, base store.SpeedTestConfig) *T
 }
 
 // ParseParams 把 CFST_PARAMS 映射为结构化测速参数，无法映射的参数保留到附加参数。
-func ParseParams(params string, base store.SpeedTestConfig) (store.SpeedTestConfig, []string) {
+func ParseParams(params string, base store.SpeedTestConfig) (store.SpeedTestConfig, []*i18n.Msg) {
 	st := base
-	var warns []string
+	var warns []*i18n.Msg
 	args, err := cfst.SplitArgs(params)
 	if err != nil {
-		return st, []string{"CFST_PARAMS 解析失败（" + err.Error() + "），已忽略"}
+		return st, []*i18n.Msg{i18n.M("CFST_PARAMS 解析失败（%v），已忽略", err)}
 	}
 	var extra []string
 	for i := 0; i < len(args); i++ {
@@ -468,7 +467,7 @@ func ParseParams(params string, base store.SpeedTestConfig) (store.SpeedTestConf
 			v, ok := value()
 			n, err := strconv.Atoi(v)
 			if !ok || err != nil {
-				warns = append(warns, fmt.Sprintf("CFST_PARAMS 中 %s 的值无效: %q，已忽略", arg, v))
+				warns = append(warns, i18n.M("CFST_PARAMS 中 %s 的值无效: %q，已忽略", arg, v))
 				return
 			}
 			*dst = n
@@ -477,7 +476,7 @@ func ParseParams(params string, base store.SpeedTestConfig) (store.SpeedTestConf
 			v, ok := value()
 			n, err := strconv.ParseFloat(v, 64)
 			if !ok || err != nil {
-				warns = append(warns, fmt.Sprintf("CFST_PARAMS 中 %s 的值无效: %q，已忽略", arg, v))
+				warns = append(warns, i18n.M("CFST_PARAMS 中 %s 的值无效: %q，已忽略", arg, v))
 				return
 			}
 			*dst = n
@@ -532,7 +531,7 @@ func ParseParams(params string, base store.SpeedTestConfig) (store.SpeedTestConf
 			st.IPSource, st.IPv4Ranges, st.IPv6Ranges = "custom", strings.Join(v4, "\n"), strings.Join(v6, "\n")
 		case "f":
 			v, _ := value()
-			warns = append(warns, fmt.Sprintf("CFST_PARAMS 中的 -f %s 未迁移：IP 段文件请在「cfst 管理」中编辑，或在任务中使用自定义 IP 段", v))
+			warns = append(warns, i18n.M("CFST_PARAMS 中的 -f %s 未迁移：IP 段文件请在「cfst 管理」中编辑，或在任务中使用自定义 IP 段", v))
 		case "o", "p":
 			// 由程序控制，忽略
 			value()

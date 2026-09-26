@@ -23,6 +23,6 @@ const emit = defineEmits<{ (e: 'pick', t: TypeMeta): void }>()
       </div>
       <ChevronRight class="text-muted-foreground mt-2 size-4 shrink-0 transition-transform group-hover:translate-x-0.5" />
     </button>
-    <p v-if="!types.length" class="text-muted-foreground col-span-full py-6 text-center text-sm">无法获取类型列表</p>
+    <p v-if="!types.length" class="text-muted-foreground col-span-full py-6 text-center text-sm">{{ $t('components.typePicker.empty') }}</p>
   </div>
 </template>

@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -10,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+	"github.com/lonelyman0108/cfst-ddns/internal/i18n"
 	"github.com/lonelyman0108/cfst-ddns/internal/legacy"
 	"github.com/lonelyman0108/cfst-ddns/internal/notify"
 	"github.com/lonelyman0108/cfst-ddns/internal/provider"
@@ -49,23 +49,28 @@ type legacyPreview struct {
 	Warnings []string `json:"warnings"`
 }
 
-// legacyPlan 解析 v1 配置并用 Schema 规范化、校验账号与渠道配置。
-func legacyPlan(content string) *legacy.Plan {
+// legacyPlan 解析 v1 配置并用 Schema 规范化、校验账号与渠道配置；导入后的默认名称按请求语言翻译。
+func legacyPlan(content string, l i18n.Lang) *legacy.Plan {
 	p := legacy.Parse(content, DefaultTask().SpeedTest)
 	if a := p.Account; a != nil {
+		a.Name = i18n.T(l, a.Name)
 		meta, _ := provider.Meta(a.Provider)
 		a.Config = meta.ApplyDefaults(meta.Clean(a.Config))
 		if err := meta.Validate(a.Config); err != nil {
-			p.Warnings = append(p.Warnings, "DNS 账号配置无效（"+err.Error()+"），未导入账号与任务")
+			p.Warnings = append(p.Warnings, i18n.M("DNS 账号配置无效（%v），未导入账号与任务", err))
 			p.Account, p.Task = nil, nil
 		}
 	}
+	if t := p.Task; t != nil {
+		t.Name = i18n.T(l, t.Name)
+	}
 	valid := p.Notifiers[:0]
 	for _, n := range p.Notifiers {
+		n.Name = i18n.T(l, n.Name)
 		meta, _ := notify.Meta(n.Type)
 		n.Config = meta.ApplyDefaults(meta.Clean(n.Config))
 		if err := meta.Validate(n.Config); err != nil {
-			p.Warnings = append(p.Warnings, n.Name+" 配置无效（"+err.Error()+"），未导入")
+			p.Warnings = append(p.Warnings, i18n.M("%s 配置无效（%v），未导入", n.Name, err))
 			continue
 		}
 		valid = append(valid, n)
@@ -74,8 +79,17 @@ func legacyPlan(content string) *legacy.Plan {
 	return p
 }
 
-func previewOf(p *legacy.Plan) legacyPreview {
-	out := legacyPreview{Accounts: []legacyAccount{}, Notifiers: []legacyNotifier{}, Tasks: []legacyTask{}, Warnings: p.Warnings}
+// localizeWarnings 按语言输出警告列表，始终返回非 nil 切片。
+func localizeWarnings(l i18n.Lang, warns []*i18n.Msg) []string {
+	out := make([]string, 0, len(warns))
+	for _, w := range warns {
+		out = append(out, w.Localize(l))
+	}
+	return out
+}
+
+func previewOf(p *legacy.Plan, l i18n.Lang) legacyPreview {
+	out := legacyPreview{Accounts: []legacyAccount{}, Notifiers: []legacyNotifier{}, Tasks: []legacyTask{}, Warnings: localizeWarnings(l, p.Warnings)}
 	if a := p.Account; a != nil {
 		meta, _ := provider.Meta(a.Provider)
 		out.Accounts = append(out.Accounts, legacyAccount{a.Name, a.Provider, meta.Masked(a.Config)})
@@ -85,12 +99,9 @@ func previewOf(p *legacy.Plan) legacyPreview {
 		out.Notifiers = append(out.Notifiers, legacyNotifier{n.Name, n.Type, meta.Masked(n.Config), n.OnSuccess, n.OnFailure, n.OnlyOnChange})
 	}
 	if t := p.Task; t != nil {
-		out.Tasks = append(out.Tasks, legacyTask{t.Name, t.Cron, t.IPType, t.Summary()})
+		out.Tasks = append(out.Tasks, legacyTask{t.Name, t.Cron, t.IPType, t.Summary().Localize(l)})
 	}
 	out.Settings.GithubMirror = p.GithubMirror
-	if out.Warnings == nil {
-		out.Warnings = []string{}
-	}
 	return out
 }
 
@@ -107,9 +118,10 @@ func (s *Server) importLegacy(c *gin.Context) {
 		failMsg(c, http.StatusBadRequest, "请粘贴 v1 的配置内容")
 		return
 	}
-	p := legacyPlan(req.Content)
+	l := lang(c)
+	p := legacyPlan(req.Content, l)
 	if !req.Apply {
-		c.JSON(http.StatusOK, previewOf(p))
+		c.JSON(http.StatusOK, previewOf(p, l))
 		return
 	}
 
@@ -119,7 +131,7 @@ func (s *Server) importLegacy(c *gin.Context) {
 		Tasks     int `json:"tasks"`
 	}
 	var created counts
-	warnings := append([]string{}, p.Warnings...)
+	warnings := append([]*i18n.Msg{}, p.Warnings...)
 
 	// 先完成网络请求（拆分目标记录），再在一个事务中写入全部数据
 	var targets []store.Target
@@ -131,7 +143,7 @@ func (s *Server) importLegacy(c *gin.Context) {
 		txs := s.Store.WithDB(tx)
 		var account *store.Account
 		if a := p.Account; a != nil {
-			account = &store.Account{Name: a.Name, Provider: a.Provider, Config: a.Config, Remark: "从 v1 配置导入"}
+			account = &store.Account{Name: a.Name, Provider: a.Provider, Config: a.Config, Remark: i18n.T(l, "从 v1 配置导入")}
 			if err := txs.SaveAccount(account); err != nil {
 				return err
 			}
@@ -163,13 +175,13 @@ func (s *Server) importLegacy(c *gin.Context) {
 			}
 			if len(nt.Targets) > 0 {
 				if err := normalizeTaskIn(txs, &nt); err != nil {
-					warnings = append(warnings, "任务校验失败（"+err.Error()+"），已创建为停用状态，请编辑后启用")
+					warnings = append(warnings, i18n.M("任务校验失败（%v），已创建为停用状态，请编辑后启用", err))
 					nt.Enabled = false
 				}
 			} else {
 				// 没有目标记录的任务无法执行，先停用，等用户补充后再启用
 				nt.Enabled = false
-				warnings = append(warnings, "任务已创建但未启用：没有可用的目标记录，请编辑任务补充后启用")
+				warnings = append(warnings, i18n.M("任务已创建但未启用：没有可用的目标记录，请编辑任务补充后启用"))
 			}
 			if err := tx.Create(&nt).Error; err != nil {
 				return err
@@ -180,19 +192,19 @@ func (s *Server) importLegacy(c *gin.Context) {
 		return nil
 	})
 	if err != nil {
-		fail(c, http.StatusInternalServerError, fmt.Errorf("导入失败，数据未改动: %w", err))
+		fail(c, http.StatusInternalServerError, i18n.Errorf("导入失败，数据未改动: %w", err))
 		return
 	}
 	if task != nil {
 		s.Scheduler.Sync(task)
 	}
 	s.Log.Info("已导入 v1 配置", "accounts", created.Accounts, "notifiers", created.Notifiers, "tasks", created.Tasks)
-	c.JSON(http.StatusOK, gin.H{"created": created, "warnings": warnings})
+	c.JSON(http.StatusOK, gin.H{"created": created, "warnings": localizeWarnings(l, warnings)})
 }
 
 // legacyTargets 用账号的域名列表拆分完整域名；拆不出的记录进入 warnings，不猜测主域名。
 // 返回的目标记录尚未填写 AccountID。
-func legacyTargets(ctx context.Context, a *legacy.Account, records []string, warnings *[]string) []store.Target {
+func legacyTargets(ctx context.Context, a *legacy.Account, records []string, warnings *[]*i18n.Msg) []store.Target {
 	targets := []store.Target{}
 	if len(records) == 0 {
 		return targets
@@ -209,13 +221,13 @@ func legacyTargets(ctx context.Context, a *legacy.Account, records []string, war
 		cancel()
 	}
 	if err != nil {
-		*warnings = append(*warnings, "获取「"+a.Name+"」的域名列表失败（"+err.Error()+"），以下记录未加入任务: "+strings.Join(records, "、"))
+		*warnings = append(*warnings, i18n.M("获取「%s」的域名列表失败（%v），以下记录未加入任务: %s", a.Name, err, strings.Join(records, "、")))
 		return targets
 	}
 	for _, r := range records {
 		domain, rr, ok := legacy.SplitRecord(r, domains)
 		if !ok {
-			*warnings = append(*warnings, "账号「"+a.Name+"」下找不到 "+r+" 所属的主域名，未加入任务")
+			*warnings = append(*warnings, i18n.M("账号「%s」下找不到 %s 所属的主域名，未加入任务", a.Name, r))
 			continue
 		}
 		targets = append(targets, store.Target{Domain: domain, RR: rr, TTL: ttl})

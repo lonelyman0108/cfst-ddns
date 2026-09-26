@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { toast } from 'vue-sonner'
 import { ArrowLeft, Bell, CircleCheck, CircleX, EllipsisVertical, ExternalLink, Loader2, Pencil, Plus, RefreshCw, Send, Trash2 } from '@lucide/vue'
 import { notifiersApi } from '@/api'
@@ -31,6 +32,7 @@ import { confirm } from '@/composables/useConfirm'
 import { useMetaStore } from '@/stores/meta'
 import { fromNow } from '@/utils/format'
 
+const { t } = useI18n()
 const meta = useMetaStore()
 const list = ref<Notifier[]>([])
 const loading = ref(false)
@@ -145,7 +147,7 @@ async function test() {
 }
 
 async function save() {
-  dlg.nameError = dlg.form.name.trim() ? '' : '请填写名称'
+  dlg.nameError = dlg.form.name.trim() ? '' : t('notifiers.nameRequired')
   const ok = schemaRef.value?.validate() ?? false
   if (dlg.nameError || !ok) return
   dlg.saving = true
@@ -153,7 +155,7 @@ async function save() {
   try {
     if (editing.value) await notifiersApi.update(dlg.id, body)
     else await notifiersApi.create(body)
-    toast.success('通知渠道已保存')
+    toast.success(t('notifiers.saved'))
     dlg.open = false
     load()
   } catch {
@@ -167,8 +169,8 @@ async function testSaved(n: Notifier) {
   testing.value[n.id] = true
   try {
     const r = await notifiersApi.testSaved(n.id)
-    if (r.ok) toast.success('测试消息已发送', { description: r.message || undefined })
-    else toast.error('发送失败', { description: r.message || undefined })
+    if (r.ok) toast.success(t('notifiers.testSent'), { description: r.message || undefined })
+    else toast.error(t('notifiers.sendFailed'), { description: r.message || undefined })
   } catch {
     /* 已提示 */
   } finally {
@@ -178,15 +180,15 @@ async function testSaved(n: Notifier) {
 
 async function remove(n: Notifier) {
   const ok = await confirm({
-    title: `删除通知渠道「${n.name}」？`,
-    description: '引用它的任务将不再发送该渠道的通知。',
-    confirmText: '删除',
+    title: t('notifiers.deleteTitle', { name: n.name }),
+    description: t('notifiers.deleteDescription'),
+    confirmText: t('common.delete'),
     destructive: true,
   })
   if (!ok) return
   try {
     await notifiersApi.remove(n.id)
-    toast.success('通知渠道已删除')
+    toast.success(t('notifiers.deleted'))
     load()
   } catch {
     /* 已提示 */
@@ -196,17 +198,17 @@ async function remove(n: Notifier) {
 
 <template>
   <div class="flex flex-col gap-4">
-    <PageHeader title="通知渠道" description="任务执行完成后推送结果">
-      <Button variant="outline" size="sm" :disabled="loading" @click="load"><RefreshCw :class="loading ? 'animate-spin' : ''" />刷新</Button>
-      <Button size="sm" @click="openCreate"><Plus />添加通知渠道</Button>
+    <PageHeader :title="t('notifiers.title')" :description="t('notifiers.description')">
+      <Button variant="outline" size="sm" :disabled="loading" @click="load"><RefreshCw :class="loading ? 'animate-spin' : ''" />{{ t('common.refresh') }}</Button>
+      <Button size="sm" @click="openCreate"><Plus />{{ t('notifiers.add') }}</Button>
     </PageHeader>
 
     <div v-if="!loaded" class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
       <Skeleton v-for="i in 3" :key="i" class="h-44 rounded-xl" />
     </div>
     <Card v-else-if="!list.length" class="py-0">
-      <EmptyState :icon="Bell" title="还没有通知渠道" description="支持 Bark、Telegram、企业微信、钉钉、飞书、邮件等">
-        <Button size="sm" @click="openCreate"><Plus />添加通知渠道</Button>
+      <EmptyState :icon="Bell" :title="t('notifiers.emptyTitle')" :description="t('notifiers.emptyDescription')">
+        <Button size="sm" @click="openCreate"><Plus />{{ t('notifiers.add') }}</Button>
       </EmptyState>
     </Card>
     <div v-else class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -217,7 +219,7 @@ async function remove(n: Notifier) {
             <div class="grid min-w-0 gap-0.5">
               <CardTitle class="truncate" :title="n.name">{{ n.name }}</CardTitle>
               <CardDescription class="truncate text-xs">
-                {{ [n.name === meta.notifierName(n.type) ? '' : meta.notifierName(n.type), n.enabled ? '' : '已停用'].filter(Boolean).join(' · ') || '已启用' }}
+                {{ [n.name === meta.notifierName(n.type) ? '' : meta.notifierName(n.type), n.enabled ? '' : t('common.disabled')].filter(Boolean).join(' · ') || t('common.enabled') }}
               </CardDescription>
             </div>
           </div>
@@ -225,7 +227,7 @@ async function remove(n: Notifier) {
             <Switch
               :model-value="n.enabled"
               :disabled="toggling[n.id]"
-              :aria-label="n.enabled ? '停用' : '启用'"
+              :aria-label="n.enabled ? t('common.disable') : t('common.enable')"
               @update:model-value="toggleEnabled(n, $event)"
             />
             <DropdownMenu>
@@ -233,28 +235,28 @@ async function remove(n: Notifier) {
                 <Button variant="ghost" size="icon" class="-mr-2 size-8"><EllipsisVertical /></Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" class="w-36">
-                <DropdownMenuItem @select="openEdit(n)"><Pencil />编辑</DropdownMenuItem>
-                <DropdownMenuItem @select="testSaved(n)"><Send />发送测试</DropdownMenuItem>
+                <DropdownMenuItem @select="openEdit(n)"><Pencil />{{ t('common.edit') }}</DropdownMenuItem>
+                <DropdownMenuItem @select="testSaved(n)"><Send />{{ t('notifiers.sendTest') }}</DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem variant="destructive" @select="remove(n)"><Trash2 />删除</DropdownMenuItem>
+                <DropdownMenuItem variant="destructive" @select="remove(n)"><Trash2 />{{ t('common.delete') }}</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </CardAction>
         </CardHeader>
         <CardContent class="flex flex-1 flex-wrap content-start items-center gap-1.5">
-          <span class="text-muted-foreground text-xs">触发：</span>
-          <ToneBadge v-if="n.onSuccess" tone="success">成功</ToneBadge>
-          <ToneBadge v-if="n.onFailure" tone="danger">失败</ToneBadge>
-          <ToneBadge v-if="n.onlyOnChange" tone="warning">仅 IP 变化时</ToneBadge>
-          <span v-if="!n.onSuccess && !n.onFailure" class="text-muted-foreground text-xs">不触发</span>
+          <span class="text-muted-foreground text-xs">{{ t('notifiers.triggerPrefix') }}</span>
+          <ToneBadge v-if="n.onSuccess" tone="success">{{ t('notifiers.onSuccessShort') }}</ToneBadge>
+          <ToneBadge v-if="n.onFailure" tone="danger">{{ t('notifiers.onFailureShort') }}</ToneBadge>
+          <ToneBadge v-if="n.onlyOnChange" tone="warning">{{ t('notifiers.onlyOnChange') }}</ToneBadge>
+          <span v-if="!n.onSuccess && !n.onFailure" class="text-muted-foreground text-xs">{{ t('notifiers.never') }}</span>
         </CardContent>
         <CardFooter class="flex items-center justify-between border-t [.border-t]:pt-3">
-          <span class="text-muted-foreground text-xs">更新于 {{ fromNow(n.updatedAt) }}</span>
+          <span class="text-muted-foreground text-xs">{{ t('common.updatedAt', { time: fromNow(n.updatedAt) }) }}</span>
           <div class="flex gap-1">
             <Button variant="outline" size="sm" :disabled="testing[n.id]" @click="testSaved(n)">
-              <Loader2 v-if="testing[n.id]" class="animate-spin" /><Send v-else />测试
+              <Loader2 v-if="testing[n.id]" class="animate-spin" /><Send v-else />{{ t('common.test') }}
             </Button>
-            <Button variant="outline" size="sm" @click="openEdit(n)"><Pencil />编辑</Button>
+            <Button variant="outline" size="sm" @click="openEdit(n)"><Pencil />{{ t('common.edit') }}</Button>
           </div>
         </CardFooter>
       </Card>
@@ -263,8 +265,8 @@ async function remove(n: Notifier) {
     <Dialog v-model:open="dlg.open">
       <DialogContent class="flex max-h-[90vh] flex-col gap-0 p-0 sm:max-w-xl">
         <DialogHeader class="border-b px-5 py-3.5">
-          <DialogTitle>{{ editing ? '编辑通知渠道' : dlg.step === 1 ? '选择通知类型' : '添加通知渠道' }}</DialogTitle>
-          <DialogDescription>{{ dlg.step === 1 ? '选择接收通知的平台' : '配置推送参数与触发条件' }}</DialogDescription>
+          <DialogTitle>{{ editing ? t('notifiers.editTitle') : dlg.step === 1 ? t('notifiers.pickTitle') : t('notifiers.createTitle') }}</DialogTitle>
+          <DialogDescription>{{ dlg.step === 1 ? t('notifiers.pickDescription') : t('notifiers.formDescription') }}</DialogDescription>
         </DialogHeader>
 
         <div class="flex-1 overflow-y-auto px-5 py-4">
@@ -276,45 +278,45 @@ async function remove(n: Notifier) {
                 <div class="flex items-center gap-2 text-sm font-medium">
                   {{ typeMeta.name }}
                   <button v-if="!editing" type="button" class="text-primary flex items-center gap-0.5 text-xs font-normal hover:underline" @click="dlg.step = 1">
-                    <ArrowLeft class="size-3" />更换
+                    <ArrowLeft class="size-3" />{{ t('notifiers.change') }}
                   </button>
                 </div>
                 <p v-if="typeMeta.description" class="text-muted-foreground mt-1 text-xs leading-relaxed">{{ typeMeta.description }}</p>
               </div>
               <Button v-if="typeMeta.docsUrl" variant="outline" size="sm" as-child>
-                <a :href="typeMeta.docsUrl" target="_blank" rel="noopener"><ExternalLink />文档</a>
+                <a :href="typeMeta.docsUrl" target="_blank" rel="noopener"><ExternalLink />{{ t('notifiers.docs') }}</a>
               </Button>
             </div>
             <div class="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-[1fr_auto]">
-              <FormItem label="名称" required for="nt-name" :error="dlg.nameError">
+              <FormItem :label="t('common.name')" required for="nt-name" :error="dlg.nameError">
                 <Input id="nt-name" v-model="dlg.form.name" maxlength="64" />
               </FormItem>
-              <FormItem label="启用">
+              <FormItem :label="t('common.enable')">
                 <div class="flex h-9 items-center"><Switch v-model="dlg.form.enabled" /></div>
               </FormItem>
             </div>
             <SchemaForm v-if="typeMeta" :key="dlg.key" ref="schemaRef" v-model="dlg.form.config" :fields="typeMeta.fields" :editing="editing" />
-            <Alert v-else variant="destructive"><AlertTitle>未知的通知类型：{{ dlg.form.type }}</AlertTitle></Alert>
+            <Alert v-else variant="destructive"><AlertTitle>{{ t('notifiers.unknownType', { type: dlg.form.type }) }}</AlertTitle></Alert>
 
             <Separator />
-            <FormItem label="触发条件">
+            <FormItem :label="t('notifiers.trigger')">
               <div class="flex flex-wrap gap-4">
                 <label class="flex cursor-pointer items-center gap-2 text-sm">
-                  <Checkbox :model-value="dlg.form.onSuccess" @update:model-value="dlg.form.onSuccess = !!$event" />执行成功时
+                  <Checkbox :model-value="dlg.form.onSuccess" @update:model-value="dlg.form.onSuccess = !!$event" />{{ t('notifiers.onSuccess') }}
                 </label>
                 <label class="flex cursor-pointer items-center gap-2 text-sm">
-                  <Checkbox :model-value="dlg.form.onFailure" @update:model-value="dlg.form.onFailure = !!$event" />执行失败时
+                  <Checkbox :model-value="dlg.form.onFailure" @update:model-value="dlg.form.onFailure = !!$event" />{{ t('notifiers.onFailure') }}
                 </label>
               </div>
             </FormItem>
-            <FormItem label="仅 IP 变化时" help="只在本次执行实际修改了 DNS 记录时通知，避免重复提醒">
+            <FormItem :label="t('notifiers.onlyOnChange')" :help="t('notifiers.onlyOnChangeHelp')">
               <div class="flex h-9 items-center"><Switch v-model="dlg.form.onlyOnChange" /></div>
             </FormItem>
 
             <Alert v-if="dlg.result" :class="dlg.result.ok ? 'border-success/40 bg-success/5' : 'border-destructive/40 bg-destructive/5'">
               <CircleCheck v-if="dlg.result.ok" class="text-success!" />
               <CircleX v-else class="text-destructive!" />
-              <AlertTitle :class="dlg.result.ok ? 'text-success' : 'text-destructive'">{{ dlg.result.ok ? '测试消息已发送' : '发送失败' }}</AlertTitle>
+              <AlertTitle :class="dlg.result.ok ? 'text-success' : 'text-destructive'">{{ dlg.result.ok ? t('notifiers.testSent') : t('notifiers.sendFailed') }}</AlertTitle>
               <AlertDescription v-if="dlg.result.message">{{ dlg.result.message }}</AlertDescription>
             </Alert>
           </div>
@@ -322,11 +324,11 @@ async function remove(n: Notifier) {
 
         <DialogFooter v-if="dlg.step === 2" class="border-t px-5 py-3 sm:justify-between">
           <Button variant="outline" :disabled="dlg.testing || !typeMeta" @click="test">
-            <Loader2 v-if="dlg.testing" class="animate-spin" /><Send v-else />发送测试
+            <Loader2 v-if="dlg.testing" class="animate-spin" /><Send v-else />{{ t('notifiers.sendTest') }}
           </Button>
           <div class="flex gap-2">
-            <Button variant="ghost" @click="dlg.open = false">取消</Button>
-            <Button :disabled="dlg.saving || !typeMeta" @click="save"><Loader2 v-if="dlg.saving" class="animate-spin" />保存</Button>
+            <Button variant="ghost" @click="dlg.open = false">{{ t('common.cancel') }}</Button>
+            <Button :disabled="dlg.saving || !typeMeta" @click="save"><Loader2 v-if="dlg.saving" class="animate-spin" />{{ t('common.save') }}</Button>
           </div>
         </DialogFooter>
       </DialogContent>

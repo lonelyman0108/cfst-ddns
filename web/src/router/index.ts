@@ -1,9 +1,12 @@
+import { watchEffect } from 'vue'
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { onUnauthorized } from '@/api/http'
+import { t } from '@/i18n'
 import { useAuthStore } from '@/stores/auth'
 
 declare module 'vue-router' {
   interface RouteMeta {
+    /** 文案 key，使用处 t() */
     title?: string
     public?: boolean
     /** 侧栏高亮的菜单路径 */
@@ -16,30 +19,30 @@ const routes: RouteRecordRaw[] = [
     path: '/login',
     name: 'login',
     component: () => import('@/views/LoginView.vue'),
-    meta: { title: '登录', public: true },
+    meta: { title: 'nav.login', public: true },
   },
   {
     path: '/',
     component: () => import('@/layouts/MainLayout.vue'),
     children: [
-      { path: '', name: 'dashboard', component: () => import('@/views/DashboardView.vue'), meta: { title: '仪表盘', menu: '/' } },
-      { path: 'tasks', name: 'tasks', component: () => import('@/views/TaskListView.vue'), meta: { title: '任务', menu: '/tasks' } },
-      { path: 'tasks/new', name: 'task-new', component: () => import('@/views/TaskEditView.vue'), meta: { title: '新建任务', menu: '/tasks' } },
-      { path: 'tasks/:id(\\d+)', name: 'task-edit', component: () => import('@/views/TaskEditView.vue'), meta: { title: '编辑任务', menu: '/tasks' } },
-      { path: 'runs', name: 'runs', component: () => import('@/views/RunListView.vue'), meta: { title: '执行历史', menu: '/runs' } },
-      { path: 'runs/:id(\\d+)', name: 'run-detail', component: () => import('@/views/RunDetailView.vue'), meta: { title: '执行详情', menu: '/runs' } },
-      { path: 'accounts', name: 'accounts', component: () => import('@/views/AccountsView.vue'), meta: { title: 'DNS 账号', menu: '/accounts' } },
-      { path: 'notifiers', name: 'notifiers', component: () => import('@/views/NotifiersView.vue'), meta: { title: '通知渠道', menu: '/notifiers' } },
-      { path: 'cfst', name: 'cfst', component: () => import('@/views/CfstView.vue'), meta: { title: 'cfst 管理', menu: '/cfst' } },
-      { path: 'settings', name: 'settings', component: () => import('@/views/SettingsView.vue'), meta: { title: '系统设置', menu: '/settings' } },
-      { path: 'logs', name: 'logs', component: () => import('@/views/LogsView.vue'), meta: { title: '系统日志', menu: '/logs' } },
-      { path: 'welcome', name: 'welcome', component: () => import('@/views/WelcomeView.vue'), meta: { title: '快速开始', menu: '/' } },
-      { path: 'help', name: 'help', component: () => import('@/views/HelpView.vue'), meta: { title: '帮助', menu: '/help' } },
+      { path: '', name: 'dashboard', component: () => import('@/views/DashboardView.vue'), meta: { title: 'nav.dashboard', menu: '/' } },
+      { path: 'tasks', name: 'tasks', component: () => import('@/views/TaskListView.vue'), meta: { title: 'nav.tasks', menu: '/tasks' } },
+      { path: 'tasks/new', name: 'task-new', component: () => import('@/views/TaskEditView.vue'), meta: { title: 'nav.taskNew', menu: '/tasks' } },
+      { path: 'tasks/:id(\\d+)', name: 'task-edit', component: () => import('@/views/TaskEditView.vue'), meta: { title: 'nav.taskEdit', menu: '/tasks' } },
+      { path: 'runs', name: 'runs', component: () => import('@/views/RunListView.vue'), meta: { title: 'nav.runs', menu: '/runs' } },
+      { path: 'runs/:id(\\d+)', name: 'run-detail', component: () => import('@/views/RunDetailView.vue'), meta: { title: 'nav.runDetail', menu: '/runs' } },
+      { path: 'accounts', name: 'accounts', component: () => import('@/views/AccountsView.vue'), meta: { title: 'nav.accounts', menu: '/accounts' } },
+      { path: 'notifiers', name: 'notifiers', component: () => import('@/views/NotifiersView.vue'), meta: { title: 'nav.notifiers', menu: '/notifiers' } },
+      { path: 'cfst', name: 'cfst', component: () => import('@/views/CfstView.vue'), meta: { title: 'nav.cfst', menu: '/cfst' } },
+      { path: 'settings', name: 'settings', component: () => import('@/views/SettingsView.vue'), meta: { title: 'nav.settings', menu: '/settings' } },
+      { path: 'logs', name: 'logs', component: () => import('@/views/LogsView.vue'), meta: { title: 'nav.logs', menu: '/logs' } },
+      { path: 'welcome', name: 'welcome', component: () => import('@/views/WelcomeView.vue'), meta: { title: 'nav.welcome', menu: '/' } },
+      { path: 'help', name: 'help', component: () => import('@/views/HelpView.vue'), meta: { title: 'nav.help', menu: '/help' } },
       {
         path: 'import/legacy',
         name: 'import-legacy',
         component: () => import('@/views/LegacyImportView.vue'),
-        meta: { title: '从 v1 导入', menu: '/settings' },
+        meta: { title: 'nav.importLegacy', menu: '/settings' },
       },
     ],
   },
@@ -69,8 +72,10 @@ router.beforeEach((to) => {
   return true
 })
 
-router.afterEach((to) => {
-  document.title = to.meta.title ? `${to.meta.title} - cfst-ddns` : 'cfst-ddns'
+// 页面标题随路由与语言切换更新
+watchEffect(() => {
+  const key = router.currentRoute.value.meta.title
+  document.title = key ? `${t(key)} - cfst-ddns` : 'cfst-ddns'
 })
 
 // 401：清除登录状态并跳转登录页

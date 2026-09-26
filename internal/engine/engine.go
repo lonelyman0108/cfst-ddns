@@ -12,13 +12,14 @@ import (
 	"time"
 
 	"github.com/lonelyman0108/cfst-ddns/internal/cfst"
+	"github.com/lonelyman0108/cfst-ddns/internal/i18n"
 	"github.com/lonelyman0108/cfst-ddns/internal/logbus"
 	"github.com/lonelyman0108/cfst-ddns/internal/provider"
 	"github.com/lonelyman0108/cfst-ddns/internal/store"
 )
 
 // ErrBusy 表示任务已在队列或运行中。
-var ErrBusy = errors.New("该任务已在执行队列中")
+var ErrBusy = i18n.New("该任务已在执行队列中")
 
 // Engine 串行执行任务（多个测速同时运行会互相抢占带宽，结果失真）。
 type Engine struct {
@@ -85,7 +86,7 @@ func (e *Engine) Enqueue(taskID uint, trigger string, dryRun bool) (uint, error)
 	default:
 		delete(e.pending, taskID)
 		e.Store.DB.Model(run).Updates(map[string]any{"status": store.StatusFailed, "message": "执行队列已满"})
-		return 0, errors.New("执行队列已满")
+		return 0, i18n.New("执行队列已满")
 	}
 	return run.ID, nil
 }
@@ -112,7 +113,7 @@ func (e *Engine) Cancel(runID uint) error {
 			return nil
 		}
 	}
-	return errors.New("执行不在运行中")
+	return i18n.New("执行不在运行中")
 }
 
 func (e *Engine) finishPending(run *store.Run) {

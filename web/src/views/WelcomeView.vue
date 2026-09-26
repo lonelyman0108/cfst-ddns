@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { ArrowLeft, ArrowRight, Check, LayoutDashboard } from '@lucide/vue'
 import { onboardingApi } from '@/api'
 import type { OnboardingState } from '@/api/types-p9'
@@ -17,6 +18,7 @@ import { cn } from '@/lib/utils'
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 
 const state = ref<OnboardingState | null>(null)
 const current = ref(-1)
@@ -73,10 +75,10 @@ function finish() {
   <div class="mx-auto flex w-full max-w-3xl flex-col gap-5">
     <div class="flex flex-wrap items-end justify-between gap-3">
       <div>
-        <h1 class="page-title">快速开始</h1>
-        <p class="text-muted-foreground mt-0.5">5 步完成配置，已完成 {{ doneCount }}/{{ ONBOARDING_STEPS.length }}</p>
+        <h1 class="page-title">{{ t('onboarding.wizard.title') }}</h1>
+        <p class="text-muted-foreground mt-0.5">{{ t('onboarding.wizard.progress', { done: doneCount, total: ONBOARDING_STEPS.length }) }}</p>
       </div>
-      <Button variant="ghost" size="sm" @click="finish">稍后再说</Button>
+      <Button variant="ghost" size="sm" @click="finish">{{ t('onboarding.wizard.later') }}</Button>
     </div>
 
     <!-- 步骤条 -->
@@ -99,7 +101,7 @@ function finish() {
               )
             "
           >
-            <Check v-if="done(i)" class="text-success size-3.5" />{{ s.title }}
+            <Check v-if="done(i)" class="text-success size-3.5" />{{ t(s.title) }}
           </span>
         </button>
       </li>
@@ -108,11 +110,11 @@ function finish() {
     <Skeleton v-if="current < 0" class="h-72 rounded-xl" />
     <Card v-else>
       <CardHeader>
-        <div class="text-muted-foreground text-xs">第 {{ current + 1 }} 步，共 {{ ONBOARDING_STEPS.length }} 步{{ step.optional ? ' · 可选' : '' }}</div>
+        <div class="text-muted-foreground text-xs">{{ t('onboarding.wizard.stepOf', { n: current + 1, total: ONBOARDING_STEPS.length }) }}{{ step.optional ? t('onboarding.wizard.optional') : '' }}</div>
         <CardTitle class="flex items-center gap-2 text-base">
-          <component :is="step.icon" class="text-muted-foreground size-4" />{{ step.title }}
+          <component :is="step.icon" class="text-muted-foreground size-4" />{{ t(step.title) }}
         </CardTitle>
-        <CardDescription>{{ step.description }}</CardDescription>
+        <CardDescription>{{ t(step.description) }}</CardDescription>
       </CardHeader>
       <CardContent class="min-w-0">
         <StepCfst v-if="step.key === 'cfst'" @changed="onChanged" />
@@ -122,12 +124,12 @@ function finish() {
         <StepRun v-else @changed="refresh" />
       </CardContent>
       <CardFooter class="flex items-center justify-between gap-2 border-t">
-        <Button v-if="current > 0" variant="ghost" @click="go(current - 1)"><ArrowLeft />上一步</Button>
+        <Button v-if="current > 0" variant="ghost" @click="go(current - 1)"><ArrowLeft />{{ t('common.prev') }}</Button>
         <span v-else />
         <div class="flex gap-2">
-          <Button v-if="current > 0 && !done(current) && !isLast" variant="outline" @click="go(current + 1)">跳过</Button>
-          <Button v-if="isLast" :variant="state?.run ? 'default' : 'outline'" @click="finish"><LayoutDashboard />进入仪表盘</Button>
-          <Button v-else :disabled="!canNext" @click="go(current + 1)">下一步<ArrowRight /></Button>
+          <Button v-if="current > 0 && !done(current) && !isLast" variant="outline" @click="go(current + 1)">{{ t('common.skip') }}</Button>
+          <Button v-if="isLast" :variant="state?.run ? 'default' : 'outline'" @click="finish"><LayoutDashboard />{{ t('onboarding.wizard.toDashboard') }}</Button>
+          <Button v-else :disabled="!canNext" @click="go(current + 1)">{{ t('common.next') }}<ArrowRight /></Button>
         </div>
       </CardFooter>
     </Card>

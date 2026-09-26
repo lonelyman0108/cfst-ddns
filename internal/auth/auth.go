@@ -2,7 +2,6 @@
 package auth
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -12,6 +11,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/lonelyman0108/cfst-ddns/internal/i18n"
 	"github.com/lonelyman0108/cfst-ddns/internal/store"
 )
 
@@ -51,10 +51,10 @@ type Token struct {
 func ValidateCredentials(username, password string) error {
 	username = strings.TrimSpace(username)
 	if username == "" || utf8.RuneCountInString(username) > 32 {
-		return errors.New("用户名长度需为 1-32 个字符")
+		return i18n.New("用户名长度需为 1-32 个字符")
 	}
 	if utf8.RuneCountInString(password) < 6 {
-		return errors.New("密码至少 6 位")
+		return i18n.New("密码至少 6 位")
 	}
 	return nil
 }
@@ -62,7 +62,7 @@ func ValidateCredentials(username, password string) error {
 // Setup 创建管理员（仅未初始化时）。
 func (s *Service) Setup(username, password string) (*Token, error) {
 	if s.store.Initialized() {
-		return nil, errors.New("系统已初始化")
+		return nil, i18n.New("系统已初始化")
 	}
 	if err := ValidateCredentials(username, password); err != nil {
 		return nil, err
@@ -81,16 +81,16 @@ func (s *Service) Setup(username, password string) (*Token, error) {
 // Login 校验密码并签发令牌；同一 IP 15 分钟内失败 10 次后暂时锁定。
 func (s *Service) Login(ip, username, password string) (*Token, error) {
 	if s.locked(ip) {
-		return nil, errors.New("登录失败次数过多，请 15 分钟后再试")
+		return nil, i18n.New("登录失败次数过多，请 15 分钟后再试")
 	}
 	u, err := s.store.GetUser()
 	if err != nil {
-		return nil, errors.New("系统未初始化")
+		return nil, i18n.New("系统未初始化")
 	}
 	if u.Username != strings.TrimSpace(username) ||
 		bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)) != nil {
 		s.fail(ip)
-		return nil, errors.New("用户名或密码错误")
+		return nil, i18n.New("用户名或密码错误")
 	}
 	s.mu.Lock()
 	delete(s.failures, ip)
@@ -125,7 +125,7 @@ func (s *Service) ChangePassword(oldPwd, newPwd string) (*Token, error) {
 		return nil, err
 	}
 	if bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(oldPwd)) != nil {
-		return nil, errors.New("原密码错误")
+		return nil, i18n.New("原密码错误")
 	}
 	return s.SetPassword(u.Username, newPwd)
 }
@@ -173,11 +173,11 @@ func (s *Service) Verify(token string) (string, error) {
 		return s.secret, nil
 	})
 	if err != nil {
-		return "", errors.New("登录已失效，请重新登录")
+		return "", i18n.New("登录已失效，请重新登录")
 	}
 	u, err := s.store.GetUser()
 	if err != nil || u.Username != c.Subject || u.TokenVersion != c.Ver {
-		return "", errors.New("登录已失效，请重新登录")
+		return "", i18n.New("登录已失效，请重新登录")
 	}
 	return u.Username, nil
 }
