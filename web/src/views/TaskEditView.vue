@@ -43,6 +43,8 @@ import SuggestInput from '@/components/SuggestInput.vue'
 import ToneBadge from '@/components/ToneBadge.vue'
 import { confirm } from '@/composables/useConfirm'
 import { useMetaStore } from '@/stores/meta'
+import { describeCron } from '@/utils/cron'
+import { fmtTime, fromNow, ipTypeLabel } from '@/utils/format'
 
 const route = useRoute()
 const router = useRouter()
@@ -57,6 +59,7 @@ const saving = ref(false)
 const accounts = ref<Account[]>([])
 const notifiers = ref<Notifier[]>([])
 const advancedOpen = ref(false)
+const nextRuns = ref<string[]>([])
 
 const DEFAULT_SPEED: SpeedTestConfig = {
   threads: 200,
@@ -220,8 +223,17 @@ function toggleNotifier(id: number, on: boolean) {
   form.notifierIds = [...s]
 }
 
-/** 每个目标将写入的记录类型（按 IP 类型展开为 A / AAAA） */
-const recordTypes = computed(() => (form.ipType === 'both' ? ['A', 'AAAA'] : form.ipType === 'v6' ? ['AAAA'] : ['A']))
+/** 摘要：将写入的记录（按 IP 类型展开为 A / AAAA） */
+const summaryRecords = computed(() => {
+  const types = form.ipType === 'both' ? ['A', 'AAAA'] : form.ipType === 'v6' ? ['AAAA'] : ['A']
+  const out: { key: string; type: string; fqdn: string }[] = []
+  form.targets.forEach((t, i) => {
+    const f = fqdn(t)
+    if (f) for (const ty of types) out.push({ key: `${i}-${ty}`, type: ty, fqdn: f })
+  })
+  return out
+})
+
 
 // ---------- 保存 ----------
 function validate(): string {
@@ -295,7 +307,7 @@ async function save() {
 </script>
 
 <template>
-  <div class="mx-auto w-full max-w-5xl">
+  <div class="mx-auto w-full max-w-[1320px]">
     <!-- 页头：返回、标题、启用开关（取消 / 保存只在吸底栏） -->
     <div class="mb-4 flex flex-wrap items-center gap-3">
       <Button variant="ghost" size="icon" class="size-8" @click="router.push('/tasks')"><ArrowLeft /></Button>
@@ -308,7 +320,7 @@ async function save() {
       </label>
     </div>
 
-    <div v-if="loading" class="grid grid-cols-1 gap-4">
+    <div v-if="loading" class="grid grid-cols-1 max-w-5xl gap-4">
       <Skeleton v-for="i in 4" :key="i" class="h-40 rounded-xl" />
     </div>
 
@@ -316,7 +328,7 @@ async function save() {
       <Button variant="outline" size="sm" @click="load">重试</Button>
     </EmptyState>
 
-    <div v-else class="grid grid-cols-1 items-start gap-4">
+    <div v-else class="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
       <form class="grid grid-cols-1 min-w-0 gap-4" @submit.prevent="save">
         <!-- 基本信息 -->
         <Card>
@@ -337,7 +349,7 @@ async function save() {
               </Tabs>
             </FormItem>
             <FormItem label="执行周期" class="md:col-span-3">
-              <CronInput v-model="form.cron" />
+              <CronInput v-model="form.cron" @next="nextRuns = $event" />
             </FormItem>
           </CardContent>
         </Card>
@@ -521,9 +533,6 @@ async function save() {
                 </div>
                 <div class="flex flex-wrap items-center gap-x-3 gap-y-1 px-0.5 text-xs">
                   <span :class="['font-mono break-all', fqdn(t) ? 'text-primary' : 'text-muted-foreground']">{{ fqdn(t) || '未填写域名' }}</span>
-                  <span v-if="fqdn(t)" class="inline-flex gap-1" title="将写入的记录类型">
-                    <ToneBadge v-for="ty in recordTypes" :key="ty" class="px-1 font-mono">{{ ty }}</ToneBadge>
-                  </span>
                   <span v-if="isCloudflare(t.accountId)" class="text-muted-foreground">TTL 1 = 自动</span>
                   <button type="button" class="text-muted-foreground hover:text-foreground inline-flex items-center gap-1" @click="viewRecords(t)">
                     <Search class="size-3" />查看现有记录
@@ -583,6 +592,48 @@ async function save() {
         </div>
       </form>
 
+      <!-- 右侧摘要（xl 以上） -->
+      <aside class="hidden xl:sticky xl:top-18 xl:block">
+        <Card>
+          <CardHeader>
+            <CardTitle>摘要</CardTitle>
+          </CardHeader>
+          <CardContent class="grid grid-cols-1 gap-3 text-sm">
+            <div>
+              <div class="text-muted-foreground text-xs">状态</div>
+              <div class="mt-0.5 flex items-center gap-2">
+                <ToneBadge :tone="form.enabled ? 'success' : 'neutral'">{{ form.enabled ? '已启用' : '已停用' }}</ToneBadge>
+                <ToneBadge>{{ ipTypeLabel[form.ipType] }}</ToneBadge>
+              </div>
+            </div>
+            <div>
+              <div class="text-muted-foreground text-xs">执行周期</div>
+              <div class="mt-0.5">{{ describeCron(form.cron) }}</div>
+              <div v-if="form.cron.trim() && nextRuns.length" class="text-muted-foreground text-xs tabular-nums">
+                下次 {{ fmtTime(nextRuns[0], 'MM-DD HH:mm') }}（{{ fromNow(nextRuns[0]) }}）
+              </div>
+            </div>
+            <div>
+              <div class="text-muted-foreground text-xs">每种类型写入</div>
+              <div class="mt-0.5 tabular-nums">前 {{ form.update.recordCount || 1 }} 个 IP{{ form.update.skipUnchanged ? ' · 未变化跳过' : '' }}</div>
+            </div>
+            <div>
+              <div class="text-muted-foreground text-xs">将写入的记录（{{ summaryRecords.length }}）</div>
+              <ul v-if="summaryRecords.length" class="mt-1 grid grid-cols-1 gap-1">
+                <li v-for="r in summaryRecords" :key="r.key" class="flex min-w-0 items-center gap-1.5">
+                  <ToneBadge class="shrink-0 px-1">{{ r.type }}</ToneBadge>
+                  <span class="text-code min-w-0 truncate font-mono" :title="r.fqdn">{{ r.fqdn }}</span>
+                </li>
+              </ul>
+              <p v-else class="text-muted-foreground mt-0.5 text-xs">尚未填写目标记录</p>
+            </div>
+            <div>
+              <div class="text-muted-foreground text-xs">通知渠道</div>
+              <div class="mt-0.5">{{ form.notifierIds.length ? `${form.notifierIds.length} 个` : '不通知' }}</div>
+            </div>
+          </CardContent>
+        </Card>
+      </aside>
     </div>
 
     <Dialog v-model:open="rec.open">
