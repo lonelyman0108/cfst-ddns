@@ -59,8 +59,8 @@ func (e *Engine) Start(ctx context.Context) {
 	}()
 }
 
-// Enqueue 为任务创建一次执行并排队。
-func (e *Engine) Enqueue(taskID uint, trigger string) (uint, error) {
+// Enqueue 为任务创建一次执行并排队；dryRun 为试运行（只测速，不写 DNS、不通知）。
+func (e *Engine) Enqueue(taskID uint, trigger string, dryRun bool) (uint, error) {
 	task, err := e.Store.GetTask(taskID)
 	if err != nil {
 		return 0, err
@@ -70,12 +70,16 @@ func (e *Engine) Enqueue(taskID uint, trigger string) (uint, error) {
 	if _, busy := e.pending[taskID]; busy {
 		return 0, ErrBusy
 	}
-	run := &store.Run{TaskID: task.ID, TaskName: task.Name, Trigger: trigger, Status: store.StatusQueued}
+	run := &store.Run{TaskID: task.ID, TaskName: task.Name, Trigger: trigger, DryRun: dryRun, Status: store.StatusQueued}
 	if err := e.Store.DB.Create(run).Error; err != nil {
 		return 0, err
 	}
 	e.pending[taskID] = run.ID
-	e.Hub.Open(run.ID).Printf("任务「%s」已加入队列（触发方式: %s）", task.Name, trigger)
+	mode := ""
+	if dryRun {
+		mode = "，试运行"
+	}
+	e.Hub.Open(run.ID).Printf("任务「%s」已加入队列（触发方式: %s%s）", task.Name, trigger, mode)
 	select {
 	case e.queue <- run.ID:
 	default:
@@ -174,7 +178,7 @@ func (e *Engine) execute(parent context.Context, runID uint) {
 	}
 	rl.Printf("结束，耗时 %s", time.Duration(run.DurationMs)*time.Millisecond)
 
-	if task != nil && run.Status != store.StatusCanceled {
+	if task != nil && run.Status != store.StatusCanceled && !run.DryRun {
 		e.notify(task, &run, rl)
 	}
 	run.Log = rl.Text()
@@ -208,7 +212,9 @@ func recordType(ipType string) string {
 // runTask 为执行主体；返回的 error 表示整体失败，部分失败通过 run.Status 表达。
 func (e *Engine) runTask(ctx context.Context, task *store.Task, run *store.Run, rl *logbus.RunLog) error {
 	rl.Printf("开始执行任务「%s」，测速类型: %s，目标记录: %d 条", task.Name, task.IPType, len(task.Targets))
-	if len(task.Targets) == 0 {
+	if run.DryRun {
+		rl.Printf("本次为试运行：只测速，不修改 DNS、不发送通知")
+	} else if len(task.Targets) == 0 {
 		return errors.New("任务未配置目标记录")
 	}
 	count := task.Update.RecordCount
@@ -253,6 +259,12 @@ func (e *Engine) runTask(ctx context.Context, task *store.Task, run *store.Run, 
 	rl.Emit("status", *run)
 	if len(best) == 0 {
 		return errors.New("没有获得任何可用 IP，DNS 记录未修改")
+	}
+	if run.DryRun {
+		rl.Printf("试运行：跳过 DNS 同步与通知")
+		run.Status = store.StatusSuccess
+		run.Message = "试运行完成，未修改 DNS"
+		return nil
 	}
 
 	// 2. 同步 DNS

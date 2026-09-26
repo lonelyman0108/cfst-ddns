@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { toast } from 'vue-sonner'
-import { Copy, Download, HardDrive, KeyRound, Loader2, RefreshCw, Save, Server, Settings2, ShieldAlert, Upload, Webhook } from '@lucide/vue'
+import { Copy, Download, FileInput, HardDrive, KeyRound, Loader2, RefreshCw, Save, Server, Settings2, ShieldAlert, Upload, Webhook } from '@lucide/vue'
 import { backupApi, settingsApi, systemApi } from '@/api'
 import type { Settings, SystemInfo } from '@/api/types'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -12,10 +12,20 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import ChangePasswordDialog from '@/components/ChangePasswordDialog.vue'
 import FormItem from '@/components/FormItem.vue'
+import InlineLink from '@/components/InlineLink.vue'
 import NumInput from '@/components/NumInput.vue'
 import PageHeader from '@/components/PageHeader.vue'
+import SectionNav, { type NavSection } from '@/components/SectionNav.vue'
 import { confirm } from '@/composables/useConfirm'
 import { copyText, dayjs, fmtTime, fromNow, saveBlob } from '@/utils/format'
+
+const SECTIONS: NavSection[] = [
+  { id: 'general', title: '常规', icon: Settings2 },
+  { id: 'webhook', title: 'Webhook 触发', icon: Webhook },
+  { id: 'security', title: '账号安全', icon: KeyRound },
+  { id: 'backup', title: '备份与恢复', icon: HardDrive },
+  { id: 'system', title: '系统信息', icon: Server },
+]
 
 const settings = ref<Settings | null>(null)
 const form = reactive({ githubMirror: '', historyRetentionDays: 30 as number | undefined, notifyTitlePrefix: '' })
@@ -158,82 +168,82 @@ async function onFile(e: Event) {
 </script>
 
 <template>
-  <div class="mx-auto flex w-full max-w-4xl flex-col gap-4">
+  <div class="mx-auto flex w-full max-w-5xl flex-col gap-4">
     <PageHeader title="系统设置" description="常规选项、Webhook、备份与系统信息" />
 
-    <Card>
-      <CardHeader>
-        <CardTitle class="flex items-center gap-2"><Settings2 class="text-muted-foreground size-4" />常规</CardTitle>
-      </CardHeader>
-      <CardContent class="grid gap-3">
-        <Skeleton v-if="!settings" class="h-40" />
-        <template v-else>
-          <FormItem label="GitHub 镜像" for="mirror" tip="用于加速下载 cfst 安装包（Releases 列表仍直连 GitHub API）。">
-            <Input id="mirror" v-model="form.githubMirror" class="font-mono" placeholder="https://ghfast.top/{url}（留空直连 GitHub）" />
-            <template #help>
-              支持两种写法：<code>https://ghfast.top/{url}</code>（{url} 替换为完整下载地址），或 <code>https://mirror.example</code>（替换 <code>https://github.com</code> 前缀）。留空表示直连。
-            </template>
-          </FormItem>
-          <div class="grid gap-x-4 gap-y-3 sm:grid-cols-2">
-            <FormItem label="历史保留天数" help="超过的执行记录会被自动清理，0 表示不清理">
-              <NumInput v-model="form.historyRetentionDays" :min="0" :max="3650" class="max-w-40" />
+    <SectionNav :sections="SECTIONS">
+      <Card id="general" class="scroll-mt-20">
+        <CardHeader>
+          <CardTitle class="flex items-center gap-2"><Settings2 class="text-muted-foreground size-4" />常规</CardTitle>
+        </CardHeader>
+        <CardContent class="grid gap-3">
+          <Skeleton v-if="!settings" class="h-40" />
+          <template v-else>
+            <FormItem label="GitHub 镜像" for="mirror" tip="用于加速下载 cfst 安装包（Releases 列表仍直连 GitHub API）。">
+              <Input id="mirror" v-model="form.githubMirror" class="font-mono" placeholder="https://ghfast.top/{url}（留空直连 GitHub）" />
+              <template #help>
+                支持两种写法：<code>https://ghfast.top/{url}</code>（{url} 替换为完整下载地址），或 <code>https://mirror.example</code>（替换 <code>https://github.com</code> 前缀）。留空表示直连。
+              </template>
             </FormItem>
-            <FormItem label="通知标题前缀" for="prefix" help="多台设备部署时用于区分通知来源">
-              <Input id="prefix" v-model="form.notifyTitlePrefix" maxlength="32" placeholder="如 [家里 NAS]" />
+            <div class="grid gap-x-4 gap-y-3 sm:grid-cols-2">
+              <FormItem label="历史保留天数" help="超过的执行记录会被自动清理，0 表示不清理">
+                <NumInput v-model="form.historyRetentionDays" :min="0" :max="3650" class="max-w-40" />
+              </FormItem>
+              <FormItem label="通知标题前缀" for="prefix" help="多台设备部署时用于区分通知来源">
+                <Input id="prefix" v-model="form.notifyTitlePrefix" maxlength="32" placeholder="如 [家里 NAS]" />
+              </FormItem>
+            </div>
+          </template>
+        </CardContent>
+        <CardFooter class="justify-end border-t">
+          <Button :disabled="saving || !settings" @click="saveGeneral"><Loader2 v-if="saving" class="animate-spin" /><Save v-else />保存</Button>
+        </CardFooter>
+      </Card>
+
+      <Card id="webhook" class="scroll-mt-20">
+        <CardHeader>
+          <CardTitle class="flex items-center gap-2"><Webhook class="text-muted-foreground size-4" />Webhook 触发</CardTitle>
+          <CardDescription>允许外部系统通过 URL 触发任务执行（无需登录）</CardDescription>
+        </CardHeader>
+        <CardContent class="grid gap-3">
+          <label class="flex min-h-11 items-center justify-between gap-4 rounded-md border px-3 py-2">
+            <div>
+              <div class="text-sm font-medium">启用 Webhook 触发</div>
+              <div class="text-muted-foreground text-xs">关闭时所有 Webhook 调用都会被拒绝</div>
+            </div>
+            <Switch :model-value="settings?.hookEnabled ?? false" :disabled="!settings || hookSaving" @update:model-value="toggleHook" />
+          </label>
+          <template v-if="settings?.hookEnabled">
+            <FormItem label="令牌">
+              <div class="flex gap-2">
+                <Input :model-value="settings.hookToken" readonly class="font-mono" />
+                <Button variant="outline" size="icon" title="复制" @click="copyText(settings.hookToken)"><Copy /></Button>
+                <Button variant="outline" :disabled="regenerating" @click="regenerate">
+                  <Loader2 v-if="regenerating" class="animate-spin" /><RefreshCw v-else />重新生成
+                </Button>
+              </div>
             </FormItem>
-          </div>
-        </template>
-      </CardContent>
-      <CardFooter class="justify-end border-t">
-        <Button :disabled="saving || !settings" @click="saveGeneral"><Loader2 v-if="saving" class="animate-spin" /><Save v-else />保存</Button>
-      </CardFooter>
-    </Card>
+            <FormItem label="调用示例">
+              <div class="bg-term text-term-foreground group relative rounded-lg border border-zinc-800 p-3 pr-11 font-mono text-code break-all">
+                {{ curlExample }}
+                <button
+                  type="button"
+                  class="absolute top-2 right-2 rounded p-1.5 text-zinc-400 hover:bg-white/10 hover:text-white"
+                  title="复制"
+                  @click="copyText(curlExample)"
+                >
+                  <Copy class="size-3.5" />
+                </button>
+              </div>
+              <template #help>
+                将 <code>{taskId}</code> 替换为任务 ID（任务编辑页地址中的数字）。GET 与 POST 均可，返回 <code>{"runId": 123}</code>。
+              </template>
+            </FormItem>
+          </template>
+        </CardContent>
+      </Card>
 
-    <Card>
-      <CardHeader>
-        <CardTitle class="flex items-center gap-2"><Webhook class="text-muted-foreground size-4" />Webhook 触发</CardTitle>
-        <CardDescription>允许外部系统通过 URL 触发任务执行（无需登录）</CardDescription>
-      </CardHeader>
-      <CardContent class="grid gap-3">
-        <label class="flex min-h-11 items-center justify-between gap-4 rounded-md border px-3 py-2">
-          <div>
-            <div class="text-sm font-medium">启用 Webhook 触发</div>
-            <div class="text-muted-foreground text-xs">关闭时所有 Webhook 调用都会被拒绝</div>
-          </div>
-          <Switch :model-value="settings?.hookEnabled ?? false" :disabled="!settings || hookSaving" @update:model-value="toggleHook" />
-        </label>
-        <template v-if="settings?.hookEnabled">
-          <FormItem label="令牌">
-            <div class="flex gap-2">
-              <Input :model-value="settings.hookToken" readonly class="font-mono" />
-              <Button variant="outline" size="icon" title="复制" @click="copyText(settings.hookToken)"><Copy /></Button>
-              <Button variant="outline" :disabled="regenerating" @click="regenerate">
-                <Loader2 v-if="regenerating" class="animate-spin" /><RefreshCw v-else />重新生成
-              </Button>
-            </div>
-          </FormItem>
-          <FormItem label="调用示例">
-            <div class="bg-term text-term-foreground group relative rounded-lg border border-zinc-800 p-3 pr-11 font-mono text-code break-all">
-              {{ curlExample }}
-              <button
-                type="button"
-                class="absolute top-2 right-2 rounded p-1.5 text-zinc-400 hover:bg-white/10 hover:text-white"
-                title="复制"
-                @click="copyText(curlExample)"
-              >
-                <Copy class="size-3.5" />
-              </button>
-            </div>
-            <template #help>
-              将 <code>{taskId}</code> 替换为任务 ID（任务编辑页地址中的数字）。GET 与 POST 均可，返回 <code>{"runId": 123}</code>。
-            </template>
-          </FormItem>
-        </template>
-      </CardContent>
-    </Card>
-
-    <div class="grid gap-4 md:grid-cols-2">
-      <Card>
+      <Card id="security" class="scroll-mt-20">
         <CardHeader>
           <CardTitle class="flex items-center gap-2"><KeyRound class="text-muted-foreground size-4" />账号安全</CardTitle>
           <CardDescription>修改后其他设备上的登录会失效</CardDescription>
@@ -243,7 +253,7 @@ async function onFile(e: Event) {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card id="backup" class="scroll-mt-20">
         <CardHeader>
           <CardTitle class="flex items-center gap-2"><HardDrive class="text-muted-foreground size-4" />备份与恢复</CardTitle>
           <CardDescription>导出或导入全部配置</CardDescription>
@@ -262,34 +272,39 @@ async function onFile(e: Event) {
             </Button>
             <input ref="fileInput" type="file" accept=".json,application/json" class="hidden" @change="onFile" />
           </div>
+          <p class="text-muted-foreground text-xs">
+            从 v1（Bash 脚本版）升级？
+            <InlineLink to="/import/legacy" :icon="FileInput">从 v1 导入配置</InlineLink>
+          </p>
         </CardContent>
       </Card>
-    </div>
 
-    <Card>
-      <CardHeader>
-        <CardTitle class="flex items-center gap-2"><Server class="text-muted-foreground size-4" />系统信息</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <Skeleton v-if="!info" class="h-32" />
-        <dl v-else class="grid gap-x-8 gap-y-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
-          <div><dt class="text-muted-foreground text-xs">版本</dt><dd class="mt-0.5 font-medium">{{ info.version }}</dd></div>
-          <div><dt class="text-muted-foreground text-xs">提交</dt><dd class="mt-0.5 font-mono text-code">{{ info.commit || '-' }}</dd></div>
-          <div>
-            <dt class="text-muted-foreground text-xs">构建时间</dt>
-            <dd class="mt-0.5">{{ fmtTime(info.buildTime) !== '-' ? fmtTime(info.buildTime) : info.buildTime || '-' }}</dd>
-          </div>
-          <div><dt class="text-muted-foreground text-xs">Go 版本</dt><dd class="mt-0.5 font-mono text-code">{{ info.goVersion }}</dd></div>
-          <div><dt class="text-muted-foreground text-xs">平台</dt><dd class="mt-0.5 font-mono text-code">{{ info.os }}/{{ info.arch }}</dd></div>
-          <div><dt class="text-muted-foreground text-xs">时区</dt><dd class="mt-0.5">{{ info.timezone }}</dd></div>
-          <div>
-            <dt class="text-muted-foreground text-xs">启动时间</dt>
-            <dd class="mt-0.5">{{ fmtTime(info.startedAt) }} <span class="text-muted-foreground text-xs">· {{ fromNow(info.startedAt) }}</span></dd>
-          </div>
-          <div class="sm:col-span-2"><dt class="text-muted-foreground text-xs">数据目录</dt><dd class="mt-0.5 font-mono text-code break-all">{{ info.dataDir }}</dd></div>
-        </dl>
-      </CardContent>
-    </Card>
+      <Card id="system" class="scroll-mt-20">
+        <CardHeader>
+          <CardTitle class="flex items-center gap-2"><Server class="text-muted-foreground size-4" />系统信息</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Skeleton v-if="!info" class="h-32" />
+          <dl v-else class="grid gap-x-8 gap-y-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
+            <div><dt class="text-muted-foreground text-xs">版本</dt><dd class="mt-0.5 font-medium">{{ info.version }}</dd></div>
+            <div><dt class="text-muted-foreground text-xs">提交</dt><dd class="mt-0.5 font-mono text-code">{{ info.commit || '-' }}</dd></div>
+            <div>
+              <dt class="text-muted-foreground text-xs">构建时间</dt>
+              <dd class="mt-0.5">{{ fmtTime(info.buildTime) !== '-' ? fmtTime(info.buildTime) : info.buildTime || '-' }}</dd>
+            </div>
+            <div><dt class="text-muted-foreground text-xs">Go 版本</dt><dd class="mt-0.5 font-mono text-code">{{ info.goVersion }}</dd></div>
+            <div><dt class="text-muted-foreground text-xs">平台</dt><dd class="mt-0.5 font-mono text-code">{{ info.os }}/{{ info.arch }}</dd></div>
+            <div><dt class="text-muted-foreground text-xs">时区</dt><dd class="mt-0.5">{{ info.timezone }}</dd></div>
+            <div>
+              <dt class="text-muted-foreground text-xs">启动时间</dt>
+              <dd class="mt-0.5">{{ fmtTime(info.startedAt) }} <span class="text-muted-foreground text-xs">· {{ fromNow(info.startedAt) }}</span></dd>
+            </div>
+            <div class="sm:col-span-2"><dt class="text-muted-foreground text-xs">数据目录</dt><dd class="mt-0.5 font-mono text-code break-all">{{ info.dataDir }}</dd></div>
+          </dl>
+        </CardContent>
+      </Card>
+
+    </SectionNav>
 
     <ChangePasswordDialog v-model="pwdOpen" />
   </div>

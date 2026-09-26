@@ -185,6 +185,7 @@ type Settings struct {
 	HookEnabled          bool   `json:"hookEnabled"`
 	HookToken            string `json:"hookToken"`
 	NotifyTitlePrefix    string `json:"notifyTitlePrefix"`
+	OnboardingDismissed  bool   `json:"onboardingDismissed"` // 仪表盘入门清单是否已关闭
 }
 
 const (
@@ -193,6 +194,7 @@ const (
 	keyHookOn    = "hook_enabled"
 	keyHookToken = "hook_token"
 	keyPrefix    = "notify_title_prefix"
+	keyOnboard   = "onboarding_dismissed"
 	keyJWTSecret = "jwt_secret"
 )
 
@@ -228,6 +230,9 @@ func (s *Store) GetSettings() Settings {
 	if v, ok := s.get(keyPrefix); ok {
 		st.NotifyTitlePrefix = v
 	}
+	if v, ok := s.get(keyOnboard); ok {
+		st.OnboardingDismissed = v == "true"
+	}
 	return st
 }
 
@@ -240,6 +245,7 @@ func (s *Store) SaveSettings(st Settings) error {
 			keyHookOn:    strconv.FormatBool(st.HookEnabled),
 			keyHookToken: st.HookToken,
 			keyPrefix:    st.NotifyTitlePrefix,
+			keyOnboard:   strconv.FormatBool(st.OnboardingDismissed),
 		} {
 			if err := s.set(tx, k, v); err != nil {
 				return err

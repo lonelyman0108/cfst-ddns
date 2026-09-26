@@ -114,7 +114,7 @@ func (s *Scheduler) Sync(t *store.Task) {
 	}
 	id := t.ID
 	entry, err := s.cron.AddFunc(expr, func() {
-		if _, err := s.engine.Enqueue(id, "cron"); err != nil {
+		if _, err := s.engine.Enqueue(id, "cron", false); err != nil {
 			s.log.Warn("定时触发任务失败", "task", id, "err", err)
 		}
 	})

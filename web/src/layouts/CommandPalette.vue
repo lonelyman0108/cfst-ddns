@@ -3,7 +3,7 @@ import { ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMagicKeys, whenever } from '@vueuse/core'
 import { toast } from 'vue-sonner'
-import { ListChecks, Monitor, Moon, Play, Plus, Sun } from '@lucide/vue'
+import { FileInput, ListChecks, Monitor, Moon, Play, Plus, Rocket, Sun } from '@lucide/vue'
 import { errorStatus, runsApi, tasksApi } from '@/api'
 import type { Task } from '@/api/types'
 import {
@@ -17,6 +17,7 @@ import {
   CommandShortcut,
 } from '@/components/ui/command'
 import { useThemeStore } from '@/stores/theme'
+import { HELP_SECTIONS } from '@/components/help/sections'
 import { NAV } from './nav'
 
 const open = defineModel<boolean>({ default: false })
@@ -88,8 +89,17 @@ async function run(t: Task) {
         </CommandItem>
       </CommandGroup>
       <CommandSeparator />
+      <CommandGroup heading="帮助">
+        <CommandItem v-for="h in HELP_SECTIONS" :key="h.id" :value="`help:帮助 ${h.title} ${h.keywords}`" @select="go(`/help#${h.id}`)">
+          <component :is="h.icon" />{{ h.title }}
+          <CommandShortcut>帮助</CommandShortcut>
+        </CommandItem>
+      </CommandGroup>
+      <CommandSeparator />
       <CommandGroup heading="操作">
         <CommandItem value="action:新建任务" @select="go('/tasks/new')"><Plus />新建任务</CommandItem>
+        <CommandItem value="action:快速开始 引导 向导 welcome" @select="go('/welcome')"><Rocket />快速开始向导</CommandItem>
+        <CommandItem value="action:从 v1 导入 旧版 迁移 legacy" @select="go('/import/legacy')"><FileInput />从 v1 导入配置</CommandItem>
         <CommandItem value="action:亮色主题 light" @select="theme.setMode('light')"><Sun />亮色主题</CommandItem>
         <CommandItem value="action:暗色主题 dark" @select="theme.setMode('dark')"><Moon />暗色主题</CommandItem>
         <CommandItem value="action:跟随系统主题 system" @select="theme.setMode('system')"><Monitor />跟随系统主题</CommandItem>

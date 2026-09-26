@@ -236,6 +236,8 @@ export interface RunSummary {
   bestLatency: number
   bestSpeed: number
   changed: boolean
+  /** 试运行：只测速，不修改 DNS、不发通知 */
+  dryRun: boolean
   message: string
   createdAt: string
 }
@@ -352,6 +354,8 @@ export interface CfstRelease {
   assetAvailable: boolean
 }
 
+// cfst 导入 / 镜像测速相关类型见 types-p9.ts
+
 export type IPFileKind = 'v4' | 'v6'
 
 export interface IPFile {
@@ -366,4 +370,6 @@ export interface Settings {
   hookEnabled: boolean
   hookToken: string
   notifyTitlePrefix: string
+  /** 仪表盘入门清单已被关闭 */
+  onboardingDismissed: boolean
 }

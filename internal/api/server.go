@@ -2,7 +2,9 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
+	"io"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -108,6 +110,11 @@ func (s *Server) Handler() http.Handler {
 	a.GET("/cfst", s.cfstStatus)
 	a.GET("/cfst/releases", s.cfstReleases)
 	a.POST("/cfst/install", s.cfstInstall)
+	a.POST("/cfst/upload", s.cfstUpload)
+	a.GET("/cfst/scan", s.cfstScan)
+	a.POST("/cfst/adopt", s.cfstAdopt)
+	a.GET("/cfst/mirrors", s.cfstMirrors)
+	a.POST("/cfst/mirrors/test", s.cfstMirrorTest)
 	a.GET("/cfst/ipfile/:kind", s.getIPFile)
 	a.PUT("/cfst/ipfile/:kind", s.putIPFile)
 	a.POST("/cfst/ipfile/:kind/reset", s.resetIPFile)
@@ -117,6 +124,7 @@ func (s *Server) Handler() http.Handler {
 	a.POST("/settings/hook-token", s.regenHookToken)
 	a.GET("/backup", s.backup)
 	a.POST("/backup/restore", s.restore)
+	a.POST("/import/legacy", s.importLegacy)
 
 	r.NoRoute(s.static)
 	return r
@@ -216,6 +224,15 @@ func idParam(c *gin.Context) (uint, bool) {
 		return 0, false
 	}
 	return uint(id), true
+}
+
+// bindOptional 解析可省略的 JSON 请求体，空请求体视为全部默认值。
+func bindOptional(c *gin.Context, v any) bool {
+	if err := json.NewDecoder(c.Request.Body).Decode(v); err != nil && !errors.Is(err, io.EOF) {
+		failMsg(c, http.StatusBadRequest, "请求格式错误: "+err.Error())
+		return false
+	}
+	return true
 }
 
 func bind(c *gin.Context, v any) bool {

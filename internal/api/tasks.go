@@ -37,9 +37,9 @@ func DefaultTask() store.Task {
 
 func (s *Server) lastRuns() map[uint]*store.Run {
 	var runs []store.Run
-	// 每个任务最近一次执行
+	// 每个任务最近一次正式执行（不含试运行）
 	s.Store.DB.Select(store.SummaryColumns).
-		Where("id IN (?)", s.Store.DB.Model(&store.Run{}).Select("MAX(id)").Group("task_id")).
+		Where("id IN (?)", s.Store.DB.Model(&store.Run{}).Where("dry_run = ?", false).Select("MAX(id)").Group("task_id")).
 		Find(&runs)
 	out := map[uint]*store.Run{}
 	for i := range runs {
@@ -91,7 +91,10 @@ func (s *Server) getTask(c *gin.Context) {
 }
 
 // normalizeTask 校验并规范化任务字段。
-func (s *Server) normalizeTask(t *store.Task) error {
+func (s *Server) normalizeTask(t *store.Task) error { return normalizeTaskIn(s.Store, t) }
+
+// normalizeTaskIn 使用指定的 Store（如事务）校验目标账号是否存在。
+func normalizeTaskIn(st *store.Store, t *store.Task) error {
 	t.Name = strings.TrimSpace(t.Name)
 	if t.Name == "" {
 		return errors.New("任务名称不能为空")
@@ -105,18 +108,18 @@ func (s *Server) normalizeTask(t *store.Task) error {
 	default:
 		return errors.New("IP 类型必须为 v4、v6 或 both")
 	}
-	st := &t.SpeedTest
-	if st.Threads < 0 || st.Threads > 1000 {
+	sp := &t.SpeedTest
+	if sp.Threads < 0 || sp.Threads > 1000 {
 		return errors.New("延迟测速线程需在 1-1000 之间")
 	}
-	if st.MaxLossRate < 0 || st.MaxLossRate > 1 {
+	if sp.MaxLossRate < 0 || sp.MaxLossRate > 1 {
 		return errors.New("丢包率上限需在 0-1 之间")
 	}
-	if st.IPSource != "custom" {
-		st.IPSource = "default"
+	if sp.IPSource != "custom" {
+		sp.IPSource = "default"
 	} else {
-		if (t.IPType != "v6" && strings.TrimSpace(st.IPv4Ranges) == "") ||
-			(t.IPType != "v4" && strings.TrimSpace(st.IPv6Ranges) == "") {
+		if (t.IPType != "v6" && strings.TrimSpace(sp.IPv4Ranges) == "") ||
+			(t.IPType != "v4" && strings.TrimSpace(sp.IPv6Ranges) == "") {
 			return errors.New("自定义 IP 段不能为空")
 		}
 	}
@@ -140,7 +143,7 @@ func (s *Server) normalizeTask(t *store.Task) error {
 		if tg.Domain == "" {
 			return fmt.Errorf("第 %d 条目标记录的主域名不能为空", i+1)
 		}
-		if _, err := s.Store.GetAccount(tg.AccountID); err != nil {
+		if _, err := st.GetAccount(tg.AccountID); err != nil {
 			return fmt.Errorf("第 %d 条目标记录的 DNS 账号不存在", i+1)
 		}
 		key := fmt.Sprintf("%d|%s|%s|%s", tg.AccountID, tg.RR, tg.Domain, tg.Line)
@@ -266,8 +269,8 @@ func (s *Server) cloneTask(c *gin.Context) {
 	c.JSON(http.StatusOK, s.view(n, nil))
 }
 
-func (s *Server) enqueue(c *gin.Context, id uint, trigger string) {
-	runID, err := s.Engine.Enqueue(id, trigger)
+func (s *Server) enqueue(c *gin.Context, id uint, trigger string, dryRun bool) {
+	runID, err := s.Engine.Enqueue(id, trigger, dryRun)
 	if errors.Is(err, engine.ErrBusy) {
 		fail(c, http.StatusConflict, err)
 		return
@@ -276,7 +279,7 @@ func (s *Server) enqueue(c *gin.Context, id uint, trigger string) {
 		dbFail(c, err)
 		return
 	}
-	s.Log.Info("任务已触发", "task", id, "run", runID, "trigger", trigger)
+	s.Log.Info("任务已触发", "task", id, "run", runID, "trigger", trigger, "dryRun", dryRun)
 	c.JSON(http.StatusOK, gin.H{"runId": runID})
 }
 
@@ -285,7 +288,14 @@ func (s *Server) runTask(c *gin.Context) {
 	if !ok {
 		return
 	}
-	s.enqueue(c, id, "manual")
+	// 请求体可省略；{dryRun: true} 表示试运行
+	var req struct {
+		DryRun bool `json:"dryRun"`
+	}
+	if !bindOptional(c, &req) {
+		return
+	}
+	s.enqueue(c, id, "manual", req.DryRun)
 }
 
 func (s *Server) cronPreview(c *gin.Context) {

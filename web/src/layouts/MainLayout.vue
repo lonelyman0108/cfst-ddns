@@ -2,7 +2,8 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppLogo from '@/components/AppLogo.vue'
-import { ChevronsUpDown, KeyRound, LogOut, Monitor, Moon, Search, Sun } from '@lucide/vue'
+import { ChevronsUpDown, CircleHelp, KeyRound, LogOut, Monitor, Moon, Rocket, Search, Sun } from '@lucide/vue'
+import { systemApi } from '@/api'
 import {
   Sidebar,
   SidebarContent,
@@ -69,8 +70,14 @@ const themeMode = computed({
   set: (v: string) => theme.setMode(v as ThemeMode),
 })
 
+const version = ref('')
+
 onMounted(() => {
   auth.fetchMe().catch(() => {})
+  systemApi
+    .info()
+    .then((i) => (version.value = i.version))
+    .catch(() => {})
 })
 
 async function logout() {
@@ -139,14 +146,26 @@ async function logout() {
                 </SidebarMenuButton>
               </DropdownMenuTrigger>
               <DropdownMenuContent side="top" align="start" class="w-(--reka-dropdown-menu-trigger-width) min-w-56">
-                <DropdownMenuLabel class="text-muted-foreground text-xs font-normal">已登录为 {{ auth.username }}</DropdownMenuLabel>
+                <DropdownMenuLabel class="flex items-center gap-2 py-1.5 font-normal">
+                  <Avatar class="size-8 rounded-lg">
+                    <AvatarFallback class="bg-primary/15 text-primary rounded-lg font-semibold">
+                      {{ (auth.username || 'A').slice(0, 1).toUpperCase() }}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div class="grid min-w-0 flex-1 leading-tight">
+                    <span class="truncate text-sm font-medium">{{ auth.username || '管理员' }}</span>
+                    <span class="text-muted-foreground truncate text-xs">cfst-ddns {{ version || '' }}</span>
+                  </div>
+                </DropdownMenuLabel>
                 <DropdownMenuSeparator />
+                <DropdownMenuItem @select="pwdOpen = true"><KeyRound />修改密码</DropdownMenuItem>
+                <DropdownMenuItem @select="router.push('/welcome')"><Rocket />快速开始向导</DropdownMenuItem>
                 <DropdownMenuSub>
-                  <DropdownMenuSubTrigger>
+                  <DropdownMenuSubTrigger class="gap-2">
                     <Sun v-if="theme.mode === 'light'" class="text-muted-foreground size-4" />
                     <Moon v-else-if="theme.mode === 'dark'" class="text-muted-foreground size-4" />
                     <Monitor v-else class="text-muted-foreground size-4" />
-                    <span class="ml-2">主题</span>
+                    主题
                   </DropdownMenuSubTrigger>
                   <DropdownMenuSubContent>
                     <DropdownMenuRadioGroup v-model="themeMode">
@@ -156,7 +175,6 @@ async function logout() {
                     </DropdownMenuRadioGroup>
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
-                <DropdownMenuItem @select="pwdOpen = true"><KeyRound />修改密码</DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem variant="destructive" @select="logout"><LogOut />退出登录</DropdownMenuItem>
               </DropdownMenuContent>
@@ -202,6 +220,9 @@ async function logout() {
             <kbd class="bg-muted ml-auto rounded border px-1.5 font-mono text-xs">{{ isMac ? '⌘' : 'Ctrl' }} K</kbd>
           </Button>
           <Button variant="ghost" size="icon" class="size-8 md:hidden" @click="cmdOpen = true"><Search /></Button>
+          <Button variant="ghost" size="icon" class="size-8" as-child>
+            <router-link to="/help" aria-label="帮助" title="帮助"><CircleHelp /></router-link>
+          </Button>
           <Button variant="ghost" size="icon" class="size-8" :title="theme.dark ? '切换到亮色' : '切换到暗色'" @click="theme.toggle()">
             <Sun v-if="theme.dark" />
             <Moon v-else />

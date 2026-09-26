@@ -26,6 +26,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import CopyText from '@/components/CopyText.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import PageHeader from '@/components/PageHeader.vue'
+import OnboardingChecklist from '@/components/onboarding/OnboardingChecklist.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import ToneBadge from '@/components/ToneBadge.vue'
 import { fmtDuration, fmtLatency, fmtSpeed, fmtTime, fromNow, runTriggerLabel } from '@/utils/format'
@@ -79,6 +80,8 @@ function onMetric(v: unknown) {
         <RefreshCw :class="loading ? 'animate-spin' : ''" />刷新
       </Button>
     </PageHeader>
+
+    <OnboardingChecklist />
 
     <Alert v-if="cfst && !cfst.installed" variant="destructive" class="border-destructive/40 bg-destructive/5">
       <TriangleAlert />
@@ -200,7 +203,10 @@ function onMetric(v: unknown) {
             <CardDescription>每个目标记录最近一次写入的值</CardDescription>
           </CardHeader>
           <CardContent class="p-0">
-            <EmptyState v-if="!data.records?.length" :icon="Globe" compact title="暂无记录" description="任务执行成功后，这里会显示各域名当前解析到的 IP" />
+            <EmptyState v-if="!data.records?.length" :icon="Globe" compact title="暂无记录" description="任务执行成功后，这里会显示各域名当前解析到的 IP">
+              <Button v-if="!stats?.taskCount" size="sm" variant="outline" @click="router.push('/welcome')">快速开始</Button>
+              <Button v-else size="sm" variant="outline" @click="router.push('/tasks')">去执行任务</Button>
+            </EmptyState>
             <div v-else class="max-h-96 overflow-auto">
               <Table>
                 <TableHeader>
@@ -234,7 +240,8 @@ function onMetric(v: unknown) {
           </CardHeader>
           <CardContent class="p-0">
             <EmptyState v-if="!data.upcoming?.length" :icon="CalendarClock" compact title="没有排程" description="为任务设置执行周期后显示">
-              <Button size="sm" variant="outline" @click="router.push('/tasks')">管理任务</Button>
+              <Button v-if="!stats?.taskCount" size="sm" variant="outline" @click="router.push('/tasks/new')">新建任务</Button>
+              <Button v-else size="sm" variant="outline" @click="router.push('/tasks')">管理任务</Button>
             </EmptyState>
             <ul v-else class="divide-y">
               <li v-for="u in data.upcoming" :key="u.taskId + u.nextRunAt">
@@ -263,7 +270,9 @@ function onMetric(v: unknown) {
           </CardAction>
         </CardHeader>
         <CardContent>
-          <EmptyState v-if="!data.trend?.length" :icon="TrendingUp" compact title="暂无数据" description="任务成功执行后会在这里绘制趋势" />
+          <EmptyState v-if="!data.trend?.length" :icon="TrendingUp" compact title="暂无数据" description="任务成功执行后会在这里绘制趋势">
+            <Button size="sm" variant="outline" @click="router.push(stats?.taskCount ? '/tasks' : '/welcome')">{{ stats?.taskCount ? '去执行任务' : '快速开始' }}</Button>
+          </EmptyState>
           <TrendChart v-else :data="data.trend" :metric="metric" />
         </CardContent>
       </Card>
@@ -278,7 +287,8 @@ function onMetric(v: unknown) {
         </CardHeader>
         <CardContent class="p-0">
           <EmptyState v-if="!data.lastRuns?.length" :icon="History" compact title="暂无执行记录">
-            <Button size="sm" variant="outline" @click="router.push('/tasks')">去执行任务</Button>
+            <Button v-if="!stats?.taskCount" size="sm" variant="outline" @click="router.push('/welcome')">快速开始</Button>
+            <Button v-else size="sm" variant="outline" @click="router.push('/tasks')">去执行任务</Button>
           </EmptyState>
           <Table v-else>
             <TableHeader>

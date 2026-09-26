@@ -25,6 +25,7 @@ import EmptyState from '@/components/EmptyState.vue'
 import FormItem from '@/components/FormItem.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import SchemaForm, { mergeSchemaDefaults, schemaDefaults } from '@/components/SchemaForm.vue'
+import BrandIcon from '@/components/BrandIcon.vue'
 import ToneBadge from '@/components/ToneBadge.vue'
 import TypePicker from '@/components/TypePicker.vue'
 import { confirm } from '@/composables/useConfirm'
@@ -217,7 +218,12 @@ async function remove(n: Notifier) {
         </TableHeader>
         <TableBody>
           <TableRow v-for="n in list" :key="n.id">
-            <TableCell class="pl-5 font-medium">{{ n.name }}</TableCell>
+            <TableCell class="pl-5 font-medium">
+              <div class="flex items-center gap-2.5">
+                <BrandIcon kind="notifier" :type="n.type" :name="meta.notifierName(n.type)" class="size-7" />
+                <span class="truncate">{{ n.name }}</span>
+              </div>
+            </TableCell>
             <TableCell><ToneBadge tone="primary">{{ meta.notifierName(n.type) }}</ToneBadge></TableCell>
             <TableCell><Switch :model-value="n.enabled" :disabled="toggling[n.id]" @update:model-value="toggleEnabled(n, $event)" /></TableCell>
             <TableCell>
@@ -258,9 +264,10 @@ async function remove(n: Notifier) {
         </DialogHeader>
 
         <div class="flex-1 overflow-y-auto px-5 py-4">
-          <TypePicker v-if="dlg.step === 1" :types="meta.notifiers" @pick="pickType" />
+          <TypePicker v-if="dlg.step === 1" kind="notifier" :types="meta.notifiers" @pick="pickType" />
           <div v-else class="grid gap-3">
             <div v-if="typeMeta" class="bg-muted/40 flex items-start gap-3 rounded-lg border p-3">
+              <BrandIcon kind="notifier" :type="typeMeta.type" :name="typeMeta.name" class="size-9" />
               <div class="min-w-0 flex-1">
                 <div class="flex items-center gap-2 text-sm font-medium">
                   {{ typeMeta.name }}

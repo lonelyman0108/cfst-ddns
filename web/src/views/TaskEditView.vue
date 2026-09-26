@@ -33,6 +33,7 @@ import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
+import BrandIcon from '@/components/BrandIcon.vue'
 import CronInput from '@/components/CronInput.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import FormItem from '@/components/FormItem.vue'
@@ -157,10 +158,6 @@ function addTarget() {
 
 const accountById = (id: number) => accounts.value.find((a) => a.id === id)
 const isCloudflare = (id: number) => accountById(id)?.provider === 'cloudflare'
-
-/** 服务商短标识：Cloudflare → CF，其余取类型前两位大写 */
-const PROVIDER_BADGE: Record<string, string> = { cloudflare: 'CF', dnspod: 'DP', tencentcloud: 'TC', alidns: 'AL', huaweicloud: 'HW', godaddy: 'GD' }
-const providerBadge = (p: string) => PROVIDER_BADGE[p] ?? p.slice(0, 2).toUpperCase()
 
 function onAccountChange(t: Target, v: unknown) {
   t.accountId = Number(v)
@@ -512,18 +509,20 @@ async function save() {
                     <!-- 触发器只显示服务商徽标 + 账号名，避免截断；下拉项仍显示“名称 · 服务商” -->
                     <SelectTrigger class="col-span-2 w-full md:col-span-1">
                       <span v-if="accountById(t.accountId)" class="flex min-w-0 items-center gap-2">
-                        <span
-                          class="bg-primary/10 text-primary flex h-5 min-w-5 shrink-0 items-center justify-center rounded px-1 text-xs font-semibold"
+                        <BrandIcon
+                          kind="provider"
+                          :type="accountById(t.accountId)!.provider"
+                          :name="meta.providerName(accountById(t.accountId)!.provider)"
                           :title="meta.providerName(accountById(t.accountId)!.provider)"
-                        >
-                          {{ providerBadge(accountById(t.accountId)!.provider) }}
-                        </span>
+                          class="size-5 rounded"
+                        />
                         <span class="truncate">{{ accountById(t.accountId)!.name }}</span>
                       </span>
                       <SelectValue v-else placeholder="选择账号" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem v-for="a in accounts" :key="a.id" :value="a.id">
+                        <BrandIcon kind="provider" :type="a.provider" :name="meta.providerName(a.provider)" class="size-5 rounded" />
                         {{ a.name }} <span class="text-muted-foreground text-xs">· {{ meta.providerName(a.provider) }}</span>
                       </SelectItem>
                     </SelectContent>
@@ -598,6 +597,7 @@ async function save() {
               <div v-else class="divide-y rounded-md border">
                 <label v-for="nt in notifiers" :key="nt.id" class="hover:bg-accent/40 flex cursor-pointer items-center gap-3 px-3 py-2">
                   <Checkbox :model-value="form.notifierIds.includes(nt.id)" @update:model-value="toggleNotifier(nt.id, !!$event)" />
+                  <BrandIcon kind="notifier" :type="nt.type" :name="meta.notifierName(nt.type)" class="size-6" />
                   <span class="min-w-0 flex-1 truncate text-sm">{{ nt.name }}</span>
                   <span class="text-muted-foreground text-xs">{{ meta.notifierName(nt.type) }}{{ nt.enabled ? '' : ' · 已停用' }}</span>
                 </label>

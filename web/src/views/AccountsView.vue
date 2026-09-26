@@ -35,6 +35,7 @@ import EmptyState from '@/components/EmptyState.vue'
 import FormItem from '@/components/FormItem.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import SchemaForm, { mergeSchemaDefaults, schemaDefaults } from '@/components/SchemaForm.vue'
+import BrandIcon from '@/components/BrandIcon.vue'
 import ToneBadge from '@/components/ToneBadge.vue'
 import TypePicker from '@/components/TypePicker.vue'
 import { confirm } from '@/composables/useConfirm'
@@ -200,7 +201,10 @@ async function remove(a: Account) {
     <div v-else class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
       <Card v-for="a in list" :key="a.id">
         <CardHeader>
-          <CardTitle class="truncate">{{ a.name }}</CardTitle>
+          <CardTitle class="flex min-w-0 items-center gap-2.5">
+            <BrandIcon kind="provider" :type="a.provider" :name="meta.providerName(a.provider)" class="size-7" />
+            <span class="truncate">{{ a.name }}</span>
+          </CardTitle>
           <CardDescription class="flex items-center gap-2">
             <ToneBadge tone="primary">{{ meta.providerName(a.provider) }}</ToneBadge>
             <span class="text-xs">{{ a.taskCount ? `${a.taskCount} 个任务在用` : '未被引用' }}</span>
@@ -240,9 +244,10 @@ async function remove(a: Account) {
         </DialogHeader>
 
         <div class="flex-1 overflow-y-auto px-5 py-4">
-          <TypePicker v-if="dlg.step === 1" :types="meta.providers" @pick="pickProvider" />
+          <TypePicker v-if="dlg.step === 1" kind="provider" :types="meta.providers" @pick="pickProvider" />
           <div v-else class="grid gap-3">
             <div v-if="providerMeta" class="bg-muted/40 flex items-start gap-3 rounded-lg border p-3">
+              <BrandIcon kind="provider" :type="providerMeta.type" :name="providerMeta.name" class="size-9" />
               <div class="min-w-0 flex-1">
                 <div class="flex items-center gap-2 text-sm font-medium">
                   {{ providerMeta.name }}

@@ -3,7 +3,8 @@ import AppLogo from '@/components/AppLogo.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
-import { Loader2, Moon, RefreshCw, ServerCrash, Sun } from '@lucide/vue'
+import { FileJson, FileText, Loader2, Moon, RefreshCw, ServerCrash, Sun, X } from '@lucide/vue'
+import { backupApi } from '@/api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -24,6 +25,29 @@ const form = reactive({ username: '', password: '', confirm: '' })
 const errors = reactive<Record<string, string>>({})
 
 const isSetup = computed(() => auth.initialized === false)
+
+// 初始化后的去向：引导向导 / 从备份恢复 / 从 v1 导入
+const after = ref<'welcome' | 'restore' | 'legacy'>('welcome')
+const backup = ref<{ name: string; data: unknown } | null>(null)
+const backupInput = ref<HTMLInputElement>()
+
+async function onBackupFile(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  try {
+    backup.value = { name: file.name, data: JSON.parse(await file.text()) }
+    after.value = 'restore'
+  } catch {
+    toast.error('文件不是有效的 JSON')
+  }
+}
+
+function clearAfter() {
+  after.value = 'welcome'
+  backup.value = null
+}
 
 async function loadStatus() {
   statusLoading.value = true
@@ -57,10 +81,23 @@ async function submit() {
     const cred = { username: form.username.trim(), password: form.password }
     if (isSetup.value) {
       await auth.setup(cred)
+      if (after.value === 'restore' && backup.value) {
+        try {
+          await backupApi.restore(backup.value.data)
+          toast.success('管理员已创建，配置已从备份恢复')
+          router.replace('/')
+        } catch {
+          // 管理员已创建，恢复失败时去设置页的备份区重试
+          toast.warning('管理员已创建，但备份恢复失败', { description: '请在「系统设置 → 备份与恢复」中重新选择备份文件' })
+          router.replace('/settings#backup')
+        }
+        return
+      }
       toast.success('管理员已创建')
-    } else {
-      await auth.login(cred)
+      router.replace(after.value === 'legacy' ? '/import/legacy' : '/welcome')
+      return
     }
+    await auth.login(cred)
     const r = route.query.redirect
     router.replace(typeof r === 'string' && r.startsWith('/') ? r : '/')
   } catch {
@@ -128,9 +165,24 @@ async function submit() {
               </FormItem>
               <Button type="submit" class="mt-1 w-full" :disabled="loading">
                 <Loader2 v-if="loading" class="animate-spin" />
-                {{ isSetup ? '创建并登录' : '登录' }}
+                {{ isSetup ? (after === 'restore' ? '创建并恢复' : '创建并登录') : '登录' }}
               </Button>
             </form>
+            <template v-if="isSetup">
+              <div v-if="after !== 'welcome'" class="bg-muted/40 mt-4 flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+                <FileJson v-if="after === 'restore'" class="text-muted-foreground size-4 shrink-0" />
+                <FileText v-else class="text-muted-foreground size-4 shrink-0" />
+                <span class="min-w-0 flex-1 truncate">{{ after === 'restore' ? `创建后从「${backup?.name}」恢复` : '创建后导入 v1 配置' }}</span>
+                <button type="button" class="text-muted-foreground hover:text-foreground" title="取消" @click="clearAfter"><X class="size-4" /></button>
+              </div>
+              <div v-else class="text-muted-foreground mt-4 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs">
+                <span>已有配置？</span>
+                <button type="button" class="text-primary hover:underline" @click="backupInput?.click()">从备份恢复</button>
+                <span aria-hidden="true">·</span>
+                <button type="button" class="text-primary hover:underline" @click="after = 'legacy'">从 v1 导入</button>
+              </div>
+              <input ref="backupInput" type="file" accept=".json,application/json" class="hidden" @change="onBackupFile" />
+            </template>
           </CardContent>
         </template>
       </Card>

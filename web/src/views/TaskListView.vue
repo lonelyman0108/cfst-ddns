@@ -2,7 +2,7 @@
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
-import { Copy, EllipsisVertical, ListChecks, Pencil, Play, Plus, RefreshCw, Trash2 } from '@lucide/vue'
+import { Copy, EllipsisVertical, FlaskConical, ListChecks, Pencil, Play, Plus, RefreshCw, Trash2 } from '@lucide/vue'
 import { errorStatus, runsApi, tasksApi } from '@/api'
 import type { Task } from '@/api/types'
 import { Button } from '@/components/ui/button'
@@ -72,11 +72,11 @@ function openRun(runId: number) {
   sheetOpen.value = true
 }
 
-async function runNow(t: Task) {
+async function runNow(t: Task, dryRun = false) {
   running.value[t.id] = true
   try {
-    const { runId } = await tasksApi.run(t.id)
-    toast.success(`「${t.name}」已加入执行队列`)
+    const { runId } = await tasksApi.run(t.id, { dryRun })
+    toast.success(`「${t.name}」已加入执行队列`, dryRun ? { description: '试运行：只测速，不修改 DNS、不发送通知' } : undefined)
     openRun(runId)
     load(true)
   } catch (e) {
@@ -134,6 +134,7 @@ async function remove(t: Task) {
       </div>
       <EmptyState v-else-if="!tasks.length" :icon="ListChecks" title="还没有任务" description="创建一个任务：选择测速参数、目标 DNS 记录与执行周期">
         <Button size="sm" @click="router.push('/tasks/new')"><Plus />新建任务</Button>
+        <Button size="sm" variant="outline" @click="router.push({ path: '/welcome', query: { step: 'task' } })">从模板创建</Button>
       </EmptyState>
       <Table v-else>
         <TableHeader>
@@ -193,7 +194,9 @@ async function remove(t: Task) {
                   <DropdownMenuTrigger as-child>
                     <Button variant="ghost" size="icon" class="size-8"><EllipsisVertical /></Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" class="w-36">
+                  <DropdownMenuContent align="end" class="w-44">
+                    <DropdownMenuItem :disabled="running[t.id]" @select="runNow(t, true)"><FlaskConical />试运行（不改 DNS）</DropdownMenuItem>
+                    <DropdownMenuSeparator />
                     <DropdownMenuItem @select="router.push(`/tasks/${t.id}`)"><Pencil />编辑</DropdownMenuItem>
                     <DropdownMenuItem @select="clone(t)"><Copy />克隆</DropdownMenuItem>
                     <DropdownMenuSeparator />

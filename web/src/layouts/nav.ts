@@ -1,5 +1,5 @@
 import type { Component } from 'vue'
-import { Bell, CloudDownload, History, LayoutDashboard, ListChecks, ScrollText, Settings, UserRoundKey } from '@lucide/vue'
+import { Bell, CircleHelp, CloudDownload, History, LayoutDashboard, ListChecks, ScrollText, Settings, UserRoundKey } from '@lucide/vue'
 
 export interface NavItem {
   path: string
@@ -17,6 +17,7 @@ export const NAV: NavItem[] = [
   { path: '/cfst', title: 'cfst 管理', icon: CloudDownload, group: 'config' },
   { path: '/settings', title: '系统设置', icon: Settings, group: 'system' },
   { path: '/logs', title: '系统日志', icon: ScrollText, group: 'system' },
+  { path: '/help', title: '帮助', icon: CircleHelp, group: 'system' },
 ]
 
 export const NAV_GROUPS: { key: NavItem['group']; label: string }[] = [

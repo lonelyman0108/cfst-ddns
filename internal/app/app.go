@@ -120,8 +120,13 @@ func Serve(c Config, build api.BuildInfo, static fs.FS) error {
 		log.Info("已通过环境变量创建管理员", "username", c.AdminUser)
 	}
 
-	mgr := &cfst.Manager{Dir: filepath.Join(c.DataDir, "cfst"), Log: log,
-		Mirror: func() string { return st.GetSettings().GithubMirror }}
+	mgr := &cfst.Manager{Dir: filepath.Join(c.DataDir, "cfst"), BundleDir: c.BundleDir, Log: log,
+		Mirror: func() string { return st.GetSettings().GithubMirror },
+		Busy: func() bool {
+			var n int64
+			st.DB.Model(&store.Run{}).Where("status IN ?", []string{store.StatusQueued, store.StatusRunning}).Count(&n)
+			return n > 0
+		}}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	prepareCFST(ctx, c, mgr, log)

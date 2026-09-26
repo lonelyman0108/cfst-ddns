@@ -121,6 +121,9 @@ func SplitArgs(s string) ([]string, error) {
 
 // Run 执行一次测速并返回结果（按 cfst 排序）。
 func (m *Manager) Run(ctx context.Context, opt RunOptions, out Output) ([]store.SpeedResult, error) {
+	if m.isInstalling() {
+		return nil, errors.New("cfst 正在安装，请稍后")
+	}
 	if !m.Installed() {
 		return nil, errors.New("cfst 未安装，请先在「cfst 管理」中安装")
 	}

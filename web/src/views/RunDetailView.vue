@@ -20,7 +20,9 @@ function back() {
     <div class="flex items-center gap-3">
       <Button variant="ghost" size="icon" class="size-8" @click="back"><ArrowLeft /></Button>
       <div>
-        <h1 class="page-title">执行详情 <span class="text-muted-foreground font-mono">#{{ runId }}</span></h1>
+        <h1 class="page-title">
+          执行详情 <span class="text-muted-foreground font-mono">#{{ runId }}</span>
+        </h1>
         <p class="text-muted-foreground text-sm">测速结果、DNS 变更与完整日志</p>
       </div>
     </div>

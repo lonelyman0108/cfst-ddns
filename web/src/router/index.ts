@@ -33,6 +33,14 @@ const routes: RouteRecordRaw[] = [
       { path: 'cfst', name: 'cfst', component: () => import('@/views/CfstView.vue'), meta: { title: 'cfst 管理', menu: '/cfst' } },
       { path: 'settings', name: 'settings', component: () => import('@/views/SettingsView.vue'), meta: { title: '系统设置', menu: '/settings' } },
       { path: 'logs', name: 'logs', component: () => import('@/views/LogsView.vue'), meta: { title: '系统日志', menu: '/logs' } },
+      { path: 'welcome', name: 'welcome', component: () => import('@/views/WelcomeView.vue'), meta: { title: '快速开始', menu: '/' } },
+      { path: 'help', name: 'help', component: () => import('@/views/HelpView.vue'), meta: { title: '帮助', menu: '/help' } },
+      {
+        path: 'import/legacy',
+        name: 'import-legacy',
+        component: () => import('@/views/LegacyImportView.vue'),
+        meta: { title: '从 v1 导入', menu: '/settings' },
+      },
     ],
   },
   { path: '/:pathMatch(.*)*', redirect: '/' },
@@ -41,7 +49,12 @@ const routes: RouteRecordRaw[] = [
 const router = createRouter({
   history: createWebHistory('/'),
   routes,
-  scrollBehavior: () => ({ top: 0 }),
+  scrollBehavior: (to, from) => {
+    if (to.hash) return { el: to.hash, top: 72 }
+    // 同页仅改查询参数（如向导切换步骤）时保持位置
+    if (to.path === from.path) return false
+    return { top: 0 }
+  },
 })
 
 router.beforeEach((to) => {

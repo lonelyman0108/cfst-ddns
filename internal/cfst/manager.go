@@ -32,9 +32,11 @@ const (
 
 // Manager 管理 cfst 安装目录。
 type Manager struct {
-	Dir    string // 安装目录，如 data/cfst
-	Mirror func() string
-	Log    *slog.Logger
+	Dir       string // 安装目录，如 data/cfst
+	BundleDir string // 预置 cfst 目录（bundled 镜像），用于自动识别
+	Mirror    func() string
+	Busy      func() bool // 是否有任务排队或运行中（安装、导入前检查），可为 nil
+	Log       *slog.Logger
 
 	mu         sync.Mutex
 	installing bool
@@ -222,18 +224,11 @@ func (m *Manager) latestTag(ctx context.Context) string {
 
 // Install 下载并安装指定版本（"latest" 或空表示最新）。
 func (m *Manager) Install(ctx context.Context, version string) (string, error) {
-	m.mu.Lock()
-	if m.installing {
-		m.mu.Unlock()
-		return "", errors.New("正在安装中，请稍候")
+	done, err := m.begin()
+	if err != nil {
+		return "", err
 	}
-	m.installing = true
-	m.mu.Unlock()
-	defer func() {
-		m.mu.Lock()
-		m.installing = false
-		m.mu.Unlock()
-	}()
+	defer done()
 
 	if version == "" || version == "latest" {
 		version = m.latestTag(ctx)
@@ -276,9 +271,12 @@ func extract(asset string, data []byte) (map[string][]byte, error) {
 		if !ok {
 			return nil
 		}
-		b, err := io.ReadAll(io.LimitReader(r, 64<<20))
+		b, err := io.ReadAll(io.LimitReader(r, MaxUploadSize+1))
 		if err != nil {
 			return err
+		}
+		if len(b) > MaxUploadSize {
+			return fmt.Errorf("%s 超过 64MB", filepath.Base(name))
 		}
 		out[key] = b
 		return nil
@@ -351,15 +349,24 @@ func (m *Manager) installFiles(files map[string][]byte, version string) error {
 		cur, err := os.ReadFile(m.IPFile(kind))
 		// 仅在用户未修改过 IP 段文件时覆盖
 		if err != nil || bytes.Equal(cur, oldDefault) {
-			if err := os.WriteFile(m.IPFile(kind), data, 0o644); err != nil {
+			if err := writeAtomic(m.IPFile(kind), data, 0o644); err != nil {
 				return err
 			}
 		}
-		if err := os.WriteFile(m.defaultIPFile(kind), data, 0o644); err != nil {
+		if err := writeAtomic(m.defaultIPFile(kind), data, 0o644); err != nil {
 			return err
 		}
 	}
-	return os.WriteFile(filepath.Join(m.Dir, "VERSION"), []byte(version+"\n"), 0o644)
+	return writeAtomic(filepath.Join(m.Dir, "VERSION"), []byte(version+"\n"), 0o644)
+}
+
+// writeAtomic 先写临时文件再重命名。
+func writeAtomic(path string, data []byte, perm os.FileMode) error {
+	tmp := path + ".new"
+	if err := os.WriteFile(tmp, data, perm); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
 }
 
 // InstallFromDir 从预置目录（bundled 镜像）复制安装。

@@ -172,6 +172,14 @@ async function doPurge() {
 
     <Card class="gap-0 overflow-hidden py-0">
       <div v-if="!loaded" class="grid gap-3 p-5"><Skeleton v-for="i in 6" :key="i" class="h-10" /></div>
+      <EmptyState
+        v-else-if="!items.length && (query.taskId !== ALL || query.status !== ALL)"
+        :icon="History"
+        title="没有符合条件的记录"
+        description="换个筛选条件试试"
+      >
+        <Button size="sm" variant="outline" @click="(query.taskId = ALL), (query.status = ALL), applyFilter()">清除筛选</Button>
+      </EmptyState>
       <EmptyState v-else-if="!items.length" :icon="History" title="暂无执行记录" description="执行任务后会在这里记录每次的结果">
         <Button size="sm" variant="outline" @click="router.push('/tasks')">前往任务</Button>
       </EmptyState>
@@ -193,7 +201,12 @@ async function doPurge() {
         <TableBody>
           <TableRow v-for="r in items" :key="r.id">
             <TableCell class="text-muted-foreground pl-5 font-mono text-code">{{ r.id }}</TableCell>
-            <TableCell><StatusBadge :status="r.status" /></TableCell>
+            <TableCell>
+              <div class="flex items-center gap-1.5">
+                <StatusBadge :status="r.status" />
+                <ToneBadge v-if="r.dryRun" tone="info" title="只测速，不修改 DNS、不发送通知">试运行</ToneBadge>
+              </div>
+            </TableCell>
             <TableCell>
               <router-link :to="`/tasks/${r.taskId}`" class="font-medium hover:underline">{{ r.taskName }}</router-link>
               <div class="text-muted-foreground text-xs">{{ runTriggerLabel[r.trigger] ?? r.trigger }}</div>

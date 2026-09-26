@@ -144,6 +144,7 @@ type Run struct {
 	TaskID      uint          `gorm:"index" json:"taskId"`
 	TaskName    string        `json:"taskName"`
 	Trigger     string        `gorm:"size:16" json:"trigger"`
+	DryRun      bool          `gorm:"not null;default:false" json:"dryRun"` // 试运行：只测速，不写 DNS、不通知
 	Status      string        `gorm:"size:16;index" json:"status"`
 	StartedAt   *time.Time    `json:"startedAt"`
 	FinishedAt  *time.Time    `json:"finishedAt"`
@@ -161,7 +162,7 @@ type Run struct {
 }
 
 // SummaryColumns 为列表查询时需要的列（不含大字段）。
-var SummaryColumns = []string{"id", "task_id", "task_name", "trigger", "status", "started_at", "finished_at",
+var SummaryColumns = []string{"id", "task_id", "task_name", "trigger", "dry_run", "status", "started_at", "finished_at",
 	"duration_ms", "best_ipv4", "best_ipv6", "best_latency", "best_speed", "changed", "message", "created_at"}
 
 // RecordState 记录每个目标最近一次写入的值，用于仪表盘。

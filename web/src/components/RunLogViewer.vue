@@ -240,6 +240,7 @@ defineExpose({ reload: start })
         <CardContent class="grid gap-3">
           <div class="flex flex-wrap items-center gap-2">
             <StatusBadge :status="summary.status" />
+            <ToneBadge v-if="summary.dryRun" tone="info" title="只测速，不修改 DNS、不发送通知">试运行</ToneBadge>
             <router-link :to="`/tasks/${summary.taskId}`" class="font-semibold hover:underline">
               {{ summary.taskName || `任务 #${summary.taskId}` }}
             </router-link>
