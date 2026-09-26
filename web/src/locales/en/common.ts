@@ -1,5 +1,6 @@
 // 各页面共用的通用词汇（仅由主会话维护；模块专属文案放在各自的命名空间文件）
 export default {
+  followBrowser: 'Browser default ({lang})',
   language: "Language",
   save: "Save",
   cancel: "Cancel",

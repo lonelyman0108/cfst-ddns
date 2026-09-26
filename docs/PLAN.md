@@ -141,7 +141,7 @@ data/cfst-ddns.db   data/secret.key   data/cfst/{cfst[.exe], ip.txt, ipv6.txt, *
 - 验证：`go vet ./... && go test ./...`；`pnpm build`；浏览器走通引导全流程、上传导入、试运行、v1 导入
 
 ### P10 多语言 — ✅（分支 `feat/onboarding-and-icons`，2026-09-27 用户确认范围）
-- [x] 前端接入 vue-i18n：简体中文 / 繁體中文 / English / 日本語，按浏览器语言自动选择、记住选择，页头与登录页提供切换（lucide `Languages` 图标）；dayjs 相对时间、页面标题随语言切换
+- [x] 前端接入 vue-i18n：简体中文 / 繁體中文 / English / 日本語，默认「跟随浏览器」（浏览器语言变化时自动切换），也可固定为某种语言并记住选择，页头与登录页提供切换（lucide `Languages` 图标）；dayjs 相对时间、页面标题随语言切换
 - [x] 文案按命名空间拆分在 `web/src/locales/<lang>/*.ts`（913 个键，四种语言键完全一致）
 - [x] 后端 `internal/i18n`：按 `Accept-Language`（SSE 用 `?lang=`）返回服务商 / 通知渠道表单字段与接口错误提示；测试保证所有表单文案与错误模板都有三种译文
 - [x] 执行结果与 DNS 变更说明：后端写入 `messageKey` / `messageArgs`，前端按语言显示；旧记录按已知中文原文反查

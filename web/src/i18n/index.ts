@@ -1,3 +1,4 @@
+import { ref } from 'vue'
 import { createI18n, type Composer } from 'vue-i18n'
 // 直接引用 dayjs 而非 @/utils/format，避免与 format.ts（依赖 t）形成循环导入
 import dayjs from 'dayjs'
@@ -32,15 +33,25 @@ function fromNavigator(): Locale {
   return 'en'
 }
 
-function initialLocale(): Locale {
+/** 用户选择：具体语言，或 auto（跟随浏览器，默认） */
+export type LocalePreference = Locale | 'auto'
+
+function loadPreference(): LocalePreference {
   try {
     const saved = localStorage.getItem(STORAGE_KEY)
     if (LOCALES.some((l) => l.value === saved)) return saved as Locale
   } catch {
-    /* 隐私模式等场景读取失败时按浏览器语言 */
+    /* 隐私模式等场景读取失败时跟随浏览器 */
   }
-  return fromNavigator()
+  return 'auto'
 }
+
+export const localePreference = ref<LocalePreference>(loadPreference())
+
+/** 浏览器语言对应的界面语言（「跟随浏览器」时使用） */
+export const browserLocale = ref<Locale>(fromNavigator())
+
+const resolve = (p: LocalePreference): Locale => (p === 'auto' ? browserLocale.value : p)
 
 // 文案按模块动态合并，无法静态推导结构，这里放宽为任意消息对象
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -49,7 +60,7 @@ type Messages = Record<string, any>
 export const i18n = createI18n({
   legacy: false,
   globalInjection: true,
-  locale: initialLocale(),
+  locale: resolve(localePreference.value),
   fallbackLocale: 'zh-CN',
   messages: { 'zh-CN': zhCN, 'zh-TW': zhTW, en, ja } as Record<Locale, Messages>,
   missingWarn: false,
@@ -73,14 +84,23 @@ function apply(l: Locale) {
   dayjs.locale(LOCALES.find((x) => x.value === l)?.dayjs ?? 'en')
 }
 
-export function setLocale(l: Locale) {
-  g.locale.value = l
+export function setLocalePreference(p: LocalePreference) {
+  localePreference.value = p
   try {
-    localStorage.setItem(STORAGE_KEY, l)
+    if (p === 'auto') localStorage.removeItem(STORAGE_KEY)
+    else localStorage.setItem(STORAGE_KEY, p)
   } catch {
     /* 忽略 */
   }
+  const l = resolve(p)
+  g.locale.value = l
   apply(l)
 }
+
+// 跟随浏览器时，浏览器语言设置变化后同步切换
+window.addEventListener('languagechange', () => {
+  browserLocale.value = fromNavigator()
+  if (localePreference.value === 'auto') setLocalePreference('auto')
+})
 
 apply(currentLocale())
