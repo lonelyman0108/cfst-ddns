@@ -1,16 +1,21 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/lonelyman0108/cfst-ddns/internal/i18n"
 	"github.com/lonelyman0108/cfst-ddns/internal/notify"
 	"github.com/lonelyman0108/cfst-ddns/internal/provider"
+	"github.com/lonelyman0108/cfst-ddns/internal/schema"
 )
 
 type credentials struct {
@@ -72,14 +77,50 @@ func (s *Server) authPassword(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ok": true, "token": tok.Token, "expiresAt": tok.ExpiresAt, "username": tok.Username})
 }
 
-func (s *Server) metaProviders(c *gin.Context) { c.JSON(http.StatusOK, provider.Metas()) }
-func (s *Server) metaNotifiers(c *gin.Context) { c.JSON(http.StatusOK, notify.Metas()) }
+func (s *Server) metaProviders(c *gin.Context) {
+	c.JSON(http.StatusOK, localizeMetas(lang(c), provider.Metas()))
+}
+func (s *Server) metaNotifiers(c *gin.Context) {
+	c.JSON(http.StatusOK, localizeMetas(lang(c), notify.Metas()))
+}
+
+// localizeMetas 返回按语言翻译后的元数据副本，不修改注册表。
+func localizeMetas(l i18n.Lang, metas []schema.TypeMeta) []schema.TypeMeta {
+	out := make([]schema.TypeMeta, len(metas))
+	for i, m := range metas {
+		out[i] = m.Localize(l)
+	}
+	return out
+}
+
+// timezoneName 返回可读的时区，如 "Asia/Shanghai (UTC+08:00)"。
+// time.Local 的名字恒为 "Local"，需从 TZ 或 /etc/localtime 的链接目标推断真实名称。
+func timezoneName() string {
+	name := os.Getenv("TZ")
+	if name == "" {
+		name = time.Local.String()
+	}
+	if name == "Local" {
+		name = ""
+		if p, err := filepath.EvalSymlinks("/etc/localtime"); err == nil {
+			if i := strings.Index(p, "zoneinfo/"); i >= 0 {
+				name = p[i+len("zoneinfo/"):]
+			}
+		}
+	}
+	abbr, off := time.Now().Zone()
+	if name == "" {
+		name = abbr
+	}
+	sign := '+'
+	if off < 0 {
+		sign, off = '-', -off
+	}
+	return fmt.Sprintf("%s (UTC%c%02d:%02d)", name, sign, off/3600, off%3600/60)
+}
 
 func (s *Server) systemInfo(c *gin.Context) {
-	tz := os.Getenv("TZ")
-	if tz == "" {
-		tz = time.Local.String()
-	}
+	tz := timezoneName()
 	c.JSON(http.StatusOK, gin.H{
 		"version": s.Build.Version, "commit": s.Build.Commit, "buildTime": s.Build.BuildTime,
 		"goVersion": runtime.Version(), "os": runtime.GOOS, "arch": runtime.GOARCH,

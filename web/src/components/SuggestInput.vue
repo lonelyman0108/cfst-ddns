@@ -87,7 +87,7 @@ function onKey(e: KeyboardEvent) {
         "
         @mousedown.prevent="pick(o)"
       >
-        <span class="flex-1 truncate">{{ o }}</span>
+        <span class="flex-1 truncate" :title="o">{{ o }}</span>
         <Check v-if="o === model" class="size-4" />
       </button>
     </div>

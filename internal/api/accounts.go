@@ -3,13 +3,13 @@ package api
 import (
 	"context"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 
 	"github.com/lonelyman0108/cfst-ddns/internal/engine"
+	"github.com/lonelyman0108/cfst-ddns/internal/i18n"
 	"github.com/lonelyman0108/cfst-ddns/internal/notify"
 	"github.com/lonelyman0108/cfst-ddns/internal/provider"
 	"github.com/lonelyman0108/cfst-ddns/internal/schema"
@@ -79,7 +79,7 @@ func (s *Server) createAccount(c *gin.Context) {
 	a := store.Account{Name: strings.TrimSpace(req.Name), Provider: req.Provider,
 		Config: meta.ApplyDefaults(meta.Clean(req.Config)), Remark: req.Remark}
 	if a.Name == "" {
-		a.Name = meta.Name
+		a.Name = i18n.T(lang(c), meta.Name)
 	}
 	if err := meta.Validate(a.Config); err != nil {
 		fail(c, http.StatusBadRequest, err)
@@ -139,36 +139,37 @@ func (s *Server) deleteAccount(c *gin.Context) {
 	okJSON(c)
 }
 
-func testResult(c *gin.Context, err error, success string) {
+// testResult 输出测试结果；success 为成功时的可翻译文案。
+func testResult(c *gin.Context, err error, success *i18n.Msg) {
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"ok": false, "message": err.Error()})
+		c.JSON(http.StatusOK, gin.H{"ok": false, "message": i18n.Localize(lang(c), err)})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"ok": true, "message": success})
+	c.JSON(http.StatusOK, gin.H{"ok": true, "message": success.Localize(lang(c))})
 }
 
-func testProvider(p provider.Provider) (string, error) {
+func testProvider(p provider.Provider) (*i18n.Msg, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	if err := p.Test(ctx); err != nil {
-		return "", err
+		return nil, err
 	}
 	domains, err := p.ListDomains(ctx)
 	if err != nil {
-		return "凭据有效（无法列出域名: " + err.Error() + "）", nil
+		return i18n.M("凭据有效（无法列出域名: %v）", err), nil
 	}
 	if len(domains) == 0 {
-		return "凭据有效，但账号下没有域名", nil
+		return i18n.M("凭据有效，但账号下没有域名"), nil
 	}
 	shown := domains
 	if len(shown) > 5 {
 		shown = shown[:5]
 	}
-	msg := "连接成功，共 " + strconv.Itoa(len(domains)) + " 个域名：" + strings.Join(shown, ", ")
+	list := strings.Join(shown, ", ")
 	if len(domains) > 5 {
-		msg += " …"
+		list += " …"
 	}
-	return msg, nil
+	return i18n.M("连接成功，共 %d 个域名：%s", len(domains), list), nil
 }
 
 func (s *Server) testAccountConfig(c *gin.Context) {
@@ -189,7 +190,7 @@ func (s *Server) testAccountConfig(c *gin.Context) {
 	}
 	p, err := provider.New(req.Provider, cfg)
 	if err != nil {
-		testResult(c, err, "")
+		testResult(c, err, nil)
 		return
 	}
 	msg, err := testProvider(p)
@@ -309,7 +310,7 @@ func (s *Server) createNotifier(c *gin.Context) {
 	n := store.Notifier{Name: strings.TrimSpace(req.Name), Type: req.Type, Enabled: req.Enabled,
 		Config: meta.ApplyDefaults(meta.Clean(req.Config)), OnSuccess: req.OnSuccess, OnFailure: req.OnFailure, OnlyOnChange: req.OnlyOnChange}
 	if n.Name == "" {
-		n.Name = meta.Name
+		n.Name = i18n.T(lang(c), meta.Name)
 	}
 	if err := meta.Validate(n.Config); err != nil {
 		fail(c, http.StatusBadRequest, err)
@@ -402,7 +403,7 @@ func (s *Server) testNotifierConfig(c *gin.Context) {
 		n = &store.Notifier{Type: saved.Type, Config: meta.Merge(saved.Config, req.Config)}
 	}
 	err := engine.Send(n, testMessage(s.Store.GetSettings().NotifyTitlePrefix))
-	testResult(c, err, "发送成功")
+	testResult(c, err, i18n.M("发送成功"))
 }
 
 func (s *Server) testNotifier(c *gin.Context) {
@@ -416,5 +417,5 @@ func (s *Server) testNotifier(c *gin.Context) {
 		return
 	}
 	err = engine.Send(n, testMessage(s.Store.GetSettings().NotifyTitlePrefix))
-	testResult(c, err, "发送成功")
+	testResult(c, err, i18n.M("发送成功"))
 }

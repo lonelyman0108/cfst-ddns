@@ -2,7 +2,6 @@
 package scheduler
 
 import (
-	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
@@ -11,6 +10,7 @@ import (
 	"github.com/robfig/cron/v3"
 
 	"github.com/lonelyman0108/cfst-ddns/internal/engine"
+	"github.com/lonelyman0108/cfst-ddns/internal/i18n"
 	"github.com/lonelyman0108/cfst-ddns/internal/store"
 )
 
@@ -23,7 +23,7 @@ func Validate(expr string) error {
 		return nil
 	}
 	if _, err := Parser.Parse(expr); err != nil {
-		return fmt.Errorf("cron 表达式无效: %v", err)
+		return i18n.Errorf("cron 表达式无效: %v", err)
 	}
 	return nil
 }
@@ -32,7 +32,7 @@ func Validate(expr string) error {
 func Preview(expr string, n int) ([]time.Time, error) {
 	s, err := Parser.Parse(expr)
 	if err != nil {
-		return nil, fmt.Errorf("cron 表达式无效: %v", err)
+		return nil, i18n.Errorf("cron 表达式无效: %v", err)
 	}
 	out := make([]time.Time, 0, n)
 	t := time.Now()
@@ -114,7 +114,7 @@ func (s *Scheduler) Sync(t *store.Task) {
 	}
 	id := t.ID
 	entry, err := s.cron.AddFunc(expr, func() {
-		if _, err := s.engine.Enqueue(id, "cron"); err != nil {
+		if _, err := s.engine.Enqueue(id, "cron", false); err != nil {
 			s.log.Warn("定时触发任务失败", "task", id, "err", err)
 		}
 	})

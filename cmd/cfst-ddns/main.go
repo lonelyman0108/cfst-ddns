@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"runtime/debug"
 	"time"
 
 	"github.com/lonelyman0108/cfst-ddns/internal/api"
@@ -22,6 +23,34 @@ var (
 	commit    = "none"
 	buildTime = "unknown"
 )
+
+// fillFromVCS 在未通过 -ldflags 注入时，用 go build 自动嵌入的 Git 信息补充提交号与时间。
+// go run 不嵌入 VCS 信息，此时保持默认值。
+func fillFromVCS() {
+	info, ok := debug.ReadBuildInfo()
+	if !ok || commit != "none" {
+		return
+	}
+	var dirty bool
+	for _, st := range info.Settings {
+		switch st.Key {
+		case "vcs.revision":
+			commit = st.Value
+			if len(commit) > 7 {
+				commit = commit[:7]
+			}
+		case "vcs.time":
+			if buildTime == "unknown" {
+				buildTime = st.Value
+			}
+		case "vcs.modified":
+			dirty = st.Value == "true"
+		}
+	}
+	if dirty && commit != "none" {
+		commit += "-dirty"
+	}
+}
 
 const usage = `cfst-ddns %s
 
@@ -49,6 +78,7 @@ func main() {
 	if len(args) > 0 && args[0] != "" && args[0][0] != '-' {
 		cmd, args = args[0], args[1:]
 	}
+	fillFromVCS()
 	build := api.BuildInfo{Version: version, Commit: commit, BuildTime: buildTime}
 
 	var err error

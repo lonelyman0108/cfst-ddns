@@ -8,7 +8,6 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -22,6 +21,7 @@ import (
 	"time"
 
 	"github.com/lonelyman0108/cfst-ddns/internal/httpx"
+	"github.com/lonelyman0108/cfst-ddns/internal/i18n"
 )
 
 const (
@@ -32,9 +32,11 @@ const (
 
 // Manager 管理 cfst 安装目录。
 type Manager struct {
-	Dir    string // 安装目录，如 data/cfst
-	Mirror func() string
-	Log    *slog.Logger
+	Dir       string // 安装目录，如 data/cfst
+	BundleDir string // 预置 cfst 目录（bundled 镜像），用于自动识别
+	Mirror    func() string
+	Busy      func() bool // 是否有任务排队或运行中（安装、导入前检查），可为 nil
+	Log       *slog.Logger
 
 	mu         sync.Mutex
 	installing bool
@@ -130,7 +132,7 @@ func AssetName(goos, goarch, arm string) (string, error) {
 		}
 		arch = "armv" + arm
 	default:
-		return "", fmt.Errorf("不支持的 CPU 架构: %s", goarch)
+		return "", i18n.Errorf("不支持的 CPU 架构: %s", goarch)
 	}
 	switch goos {
 	case "linux":
@@ -138,7 +140,7 @@ func AssetName(goos, goarch, arm string) (string, error) {
 	case "windows", "darwin":
 		return "cfst_" + goos + "_" + arch + ".zip", nil
 	default:
-		return "", fmt.Errorf("不支持的操作系统: %s", goos)
+		return "", i18n.Errorf("不支持的操作系统: %s", goos)
 	}
 }
 
@@ -160,10 +162,10 @@ func (m *Manager) Releases(ctx context.Context) ([]Release, error) {
 	resp, err := httpx.Do(ctx, httpx.Request{URL: "https://api.github.com/repos/" + repo + "/releases?per_page=20",
 		Header: map[string]string{"Accept": "application/vnd.github+json"}})
 	if err != nil {
-		return nil, fmt.Errorf("访问 GitHub API 失败: %w", err)
+		return nil, i18n.Errorf("访问 GitHub API 失败: %w", err)
 	}
 	if !resp.OK() {
-		return nil, fmt.Errorf("GitHub API 返回 HTTP %d: %s", resp.Status, httpx.Snippet(resp.Body))
+		return nil, i18n.Errorf("GitHub API 返回 HTTP %d: %s", resp.Status, httpx.Snippet(resp.Body))
 	}
 	var raw []struct {
 		TagName     string    `json:"tag_name"`
@@ -222,18 +224,11 @@ func (m *Manager) latestTag(ctx context.Context) string {
 
 // Install 下载并安装指定版本（"latest" 或空表示最新）。
 func (m *Manager) Install(ctx context.Context, version string) (string, error) {
-	m.mu.Lock()
-	if m.installing {
-		m.mu.Unlock()
-		return "", errors.New("正在安装中，请稍候")
+	done, err := m.begin()
+	if err != nil {
+		return "", err
 	}
-	m.installing = true
-	m.mu.Unlock()
-	defer func() {
-		m.mu.Lock()
-		m.installing = false
-		m.mu.Unlock()
-	}()
+	defer done()
 
 	if version == "" || version == "latest" {
 		version = m.latestTag(ctx)
@@ -250,14 +245,14 @@ func (m *Manager) Install(ctx context.Context, version string) (string, error) {
 	defer cancel()
 	resp, err := httpx.Do(dctx, httpx.Request{URL: url, Retries: 2})
 	if err != nil {
-		return "", fmt.Errorf("下载失败（国内网络建议在设置中配置 GitHub 镜像）: %w", err)
+		return "", i18n.Errorf("下载失败（国内网络建议在设置中配置 GitHub 镜像）: %w", err)
 	}
 	if !resp.OK() {
-		return "", fmt.Errorf("下载失败: HTTP %d %s", resp.Status, url)
+		return "", i18n.Errorf("下载失败: HTTP %d %s", resp.Status, url)
 	}
 	files, err := extract(asset, resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("解压失败: %w", err)
+		return "", i18n.Errorf("解压失败: %w", err)
 	}
 	if err := m.installFiles(files, version); err != nil {
 		return "", err
@@ -276,9 +271,12 @@ func extract(asset string, data []byte) (map[string][]byte, error) {
 		if !ok {
 			return nil
 		}
-		b, err := io.ReadAll(io.LimitReader(r, 64<<20))
+		b, err := io.ReadAll(io.LimitReader(r, MaxUploadSize+1))
 		if err != nil {
 			return err
+		}
+		if len(b) > MaxUploadSize {
+			return i18n.Errorf("%s 超过 64MB", filepath.Base(name))
 		}
 		out[key] = b
 		return nil
@@ -321,7 +319,7 @@ func extract(asset string, data []byte) (map[string][]byte, error) {
 		}
 	}
 	if out["bin"] == nil {
-		return nil, errors.New("压缩包中未找到 cfst 可执行文件")
+		return nil, i18n.New("压缩包中未找到 cfst 可执行文件")
 	}
 	return out, nil
 }
@@ -336,7 +334,7 @@ func (m *Manager) installFiles(files map[string][]byte, version string) error {
 		return err
 	}
 	if err := os.Rename(tmp, m.BinPath()); err != nil {
-		return fmt.Errorf("替换可执行文件失败（测速是否正在运行？）: %w", err)
+		return i18n.Errorf("替换可执行文件失败（测速是否正在运行？）: %w", err)
 	}
 	for _, kind := range []string{"v4", "v6"} {
 		name := "ip.txt"
@@ -351,15 +349,24 @@ func (m *Manager) installFiles(files map[string][]byte, version string) error {
 		cur, err := os.ReadFile(m.IPFile(kind))
 		// 仅在用户未修改过 IP 段文件时覆盖
 		if err != nil || bytes.Equal(cur, oldDefault) {
-			if err := os.WriteFile(m.IPFile(kind), data, 0o644); err != nil {
+			if err := writeAtomic(m.IPFile(kind), data, 0o644); err != nil {
 				return err
 			}
 		}
-		if err := os.WriteFile(m.defaultIPFile(kind), data, 0o644); err != nil {
+		if err := writeAtomic(m.defaultIPFile(kind), data, 0o644); err != nil {
 			return err
 		}
 	}
-	return os.WriteFile(filepath.Join(m.Dir, "VERSION"), []byte(version+"\n"), 0o644)
+	return writeAtomic(filepath.Join(m.Dir, "VERSION"), []byte(version+"\n"), 0o644)
+}
+
+// writeAtomic 先写临时文件再重命名。
+func writeAtomic(path string, data []byte, perm os.FileMode) error {
+	tmp := path + ".new"
+	if err := os.WriteFile(tmp, data, perm); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
 }
 
 // InstallFromDir 从预置目录（bundled 镜像）复制安装。
@@ -407,7 +414,7 @@ func (m *Manager) WriteIPFile(kind, content string) error {
 func (m *Manager) ResetIPFile(kind string) (string, error) {
 	b, err := os.ReadFile(m.defaultIPFile(kind))
 	if err != nil {
-		return "", errors.New("没有可恢复的默认文件，请先安装 cfst")
+		return "", i18n.New("没有可恢复的默认文件，请先安装 cfst")
 	}
 	return string(b), os.WriteFile(m.IPFile(kind), b, 0o644)
 }

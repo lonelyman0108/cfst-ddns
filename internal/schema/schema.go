@@ -2,9 +2,10 @@
 package schema
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/lonelyman0108/cfst-ddns/internal/i18n"
 )
 
 // Config 为服务商/通知渠道配置，所有值统一以字符串保存。
@@ -100,11 +101,11 @@ func (m TypeMeta) Validate(cfg Config) error {
 		}
 		v := cfg.Get(f.Key)
 		if f.Required && v == "" {
-			return fmt.Errorf("%s 不能为空", f.Label)
+			return i18n.Errorf("%s 不能为空", i18n.Text(f.Label))
 		}
 		if f.Type == Number && v != "" {
 			if _, err := strconv.ParseFloat(v, 64); err != nil {
-				return fmt.Errorf("%s 必须是数字", f.Label)
+				return i18n.Errorf("%s 必须是数字", i18n.Text(f.Label))
 			}
 		}
 		if f.Type == Select && v != "" && len(f.Options) > 0 {
@@ -116,7 +117,7 @@ func (m TypeMeta) Validate(cfg Config) error {
 				}
 			}
 			if !ok {
-				return fmt.Errorf("%s 取值无效: %s", f.Label, v)
+				return i18n.Errorf("%s 取值无效: %s", i18n.Text(f.Label), v)
 			}
 		}
 	}
@@ -158,6 +159,54 @@ func (m TypeMeta) Merge(old, incoming Config) Config {
 		v, ok := incoming[f.Key]
 		if !ok || v == Mask {
 			out[f.Key] = old[f.Key]
+		}
+	}
+	return out
+}
+
+// Localize 返回按语言翻译了名称、说明、字段名、帮助、占位符与选项名的深拷贝，不修改原值。
+func (m TypeMeta) Localize(l i18n.Lang) TypeMeta {
+	out := m
+	out.Name = i18n.T(l, m.Name)
+	out.Description = i18n.T(l, m.Description)
+	out.Fields = make([]Field, len(m.Fields))
+	for i, f := range m.Fields {
+		f.Label = i18n.T(l, f.Label)
+		f.Help = i18n.T(l, f.Help)
+		f.Placeholder = i18n.T(l, f.Placeholder)
+		if f.Options != nil {
+			opts := make([]Option, len(f.Options))
+			for j, o := range f.Options {
+				o.Label = i18n.T(l, o.Label)
+				opts[j] = o
+			}
+			f.Options = opts
+		}
+		if f.ShowIf != nil {
+			c := *f.ShowIf
+			f.ShowIf = &c
+		}
+		out.Fields[i] = f
+	}
+	return out
+}
+
+// Texts 返回元数据中全部需要翻译的原文（非空），用于检查翻译目录是否完整。
+func (m TypeMeta) Texts() []string {
+	var out []string
+	add := func(s string) {
+		if s != "" {
+			out = append(out, s)
+		}
+	}
+	add(m.Name)
+	add(m.Description)
+	for _, f := range m.Fields {
+		add(f.Label)
+		add(f.Help)
+		add(f.Placeholder)
+		for _, o := range f.Options {
+			add(o.Label)
 		}
 	}
 	return out

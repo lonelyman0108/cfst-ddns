@@ -126,6 +126,29 @@ data/cfst-ddns.db   data/secret.key   data/cfst/{cfst[.exe], ip.txt, ipv6.txt, *
 - [x] 接入 release-please 自动生成 CHANGELOG 与发版；v2 变化一览移入 `docs/MIGRATION.md`；删除 `scripts/generate-changelog.sh`
 - [x] Git 规范：`CONTRIBUTING.md`、`AGENTS.md`、PR 标题检查（`pr-title.yml`）、本地 `commit-msg` 钩子（`.githooks/`）
 
+### P9 引导、图标与 cfst 导入 — ✅（分支 `feat/onboarding-and-icons`，2026-09-26 用户确认范围）
+- [x] 首次引导向导 `/welcome`：cfst → DNS 账号 → 通知（可跳过）→ 首个任务（模板）→ 试跑
+- [x] 初始化页支持从备份恢复；仪表盘入门清单（可关闭，状态存 `onboardingDismissed`）
+- [x] 帮助页（快速上手 / 参数说明 / 常见问题 / Webhook / 备份迁移），⌘K 可搜索
+- [x] 品牌图标：6 个服务商 + 11 个渠道全部为本地 logo（simple-icons / Iconify 开源图标集 / 官网 favicon，来源见 `web/src/assets/brands`）
+- [x] cfst 页：操作列统一；最新版提示；上传导入（压缩包 / 裸二进制，校验文件头平台）；自动识别已有 cfst
+- [x] GitHub 镜像测速与一键选用
+- [x] 任务试运行（只测速，不写 DNS、不通知）
+- [x] v1 配置导入（预览 → 确认创建）
+- [x] 空状态补操作入口；移动端逐页检查
+- [x] 系统设置页分节导航（与帮助页共用 `SectionNav`）；正文行内图标链接统一为 `InlineLink`；侧栏用户菜单重排
+- 接口契约：`docs/API.md`（P9 新增部分）
+- 验证：`go vet ./... && go test ./...`；`pnpm build`；浏览器走通引导全流程、上传导入、试运行、v1 导入
+
+### P10 多语言 — ✅（分支 `feat/onboarding-and-icons`，2026-09-27 用户确认范围）
+- [x] 前端接入 vue-i18n：简体中文 / 繁體中文 / English / 日本語，默认「跟随浏览器」（浏览器语言变化时自动切换），也可固定为某种语言并记住选择，页头与登录页提供切换（lucide `Languages` 图标）；dayjs 相对时间、页面标题随语言切换
+- [x] 文案按命名空间拆分在 `web/src/locales/<lang>/*.ts`（913 个键，四种语言键完全一致）
+- [x] 后端 `internal/i18n`：按 `Accept-Language`（SSE 用 `?lang=`）返回服务商 / 通知渠道表单字段与接口错误提示；测试保证所有表单文案与错误模板都有三种译文
+- [x] 执行结果与 DNS 变更说明：后端写入 `messageKey` / `messageArgs`，前端按语言显示；旧记录按已知中文原文反查
+- [x] 不翻译（用户确认）：测速日志、通知正文、上游服务商原始报错
+- [x] README 默认改为英文，新增 `README.zh-CN.md`、`README.zh-TW.md`、`README.ja.md`；发布包附带全部语言 README
+- 验证：`go vet`、`go test ./...`；`pnpm build`；脚本核对四种语言键一致、代码引用的键均存在；英文界面 18 个页面无残留中文（测试数据除外）；en / ja 在 1440 / 1024 / 390 宽度下无溢出（日文「デュアルスタック」过长已改为「両方」）；实测切换语言即时生效（含后端返回的类型名与页面标题）
+
 ## 4. 验证记录
 
 | 日期 | 阶段 | 内容 | 结果 |
@@ -140,6 +163,7 @@ data/cfst-ddns.db   data/secret.key   data/cfst/{cfst[.exe], ip.txt, ipv6.txt, *
 | 2026-09-24 | 集成 | 前端嵌入后二进制 28MB（`-s -w`）；8080 实例仪表盘渲染正常、控制台无错误；6 个服务商、11 个渠道全部注册 | 通过 |
 | 2026-09-24 | P3–P5 | 本机冒烟：自动下载 cfst v2.3.5（Windows）→ 初始化/登录 → 建账号/任务 → 真实测速（自定义 3 个 /24、`-dd`）→ SSE 实时日志 → DNS 失败被正确记录为 failed → 重复触发 409 → Webhook 触发 + 取消 → 备份导出 | 通过；本机有 TUN 代理，延迟约 1 ms 不可信（已写入 README 注意事项） |
 | 2026-09-25 | P7 | CI 失败原因：`pnpm/action-setup` 未指定版本 → `packageManager: pnpm@10.34.5`（本地 `--frozen-lockfile` 通过）；触发收紧为 main/PR/tag/手动；接入 release-please；`actionlint` 通过 | 通过（待 CI 实测） |
+| 2026-09-26 | P9 | `go vet`、`go test ./...`（新增 importer / legacy / dryrun 测试）；`pnpm build`；浏览器（隔离实例 + 全新数据目录）：初始化 → `/welcome`（cfst 就绪、服务商/渠道图标）→ v1 导入预览与应用（假凭据下任务按设计停用并提示）→ 任务列表试运行（抽屉显示试运行徽标、实时日志、取消后 `dryRun=true`）→ 仪表盘入门清单 4/5 → `/help#faq` 锚点；390px 宽度下 15 个页面无横向滚动；亮色模式图标检查 | 通过；DNS 账号连通性与真实写入未测（无真实凭据） |
 
 ## 5. 阻塞与风险
 
@@ -148,5 +172,6 @@ data/cfst-ddns.db   data/secret.key   data/cfst/{cfst[.exe], ip.txt, ipv6.txt, *
 - ⚠ SMTP 的 ssl/starttls 路径无单测。
 
 - ⚠ 本机无 Docker：镜像构建只能依赖 CI。
+- ⚠ P9 品牌图标：DNSPod、Bark、Server 酱、PushPlus 为官网 favicon 位图（非矢量）；Gotify 图标为 CC BY 4.0（selfh.st），已在文件内注明。
 - ⚠ `network_mode: host` 在 Docker Desktop（Windows/macOS）上无效，测速结果会失真，文档需注明。
 - ⚠ 各云厂商 API 未用真实凭据验证时，仅保证签名与请求格式正确（单测），需用户用真实账号冒烟。

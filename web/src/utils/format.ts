@@ -1,11 +1,10 @@
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
-import 'dayjs/locale/zh-cn'
 import { toast } from 'vue-sonner'
 import type { DNSChangeAction, IPType, RunStatus, RunTrigger } from '@/api/types'
+import { t } from '@/i18n'
 
 dayjs.extend(relativeTime)
-dayjs.locale('zh-cn')
 
 export { dayjs }
 
@@ -28,10 +27,10 @@ export function fromNow(t?: string | null): string {
 export function fmtDuration(ms?: number | null): string {
   if (!ms || ms <= 0) return '-'
   const s = Math.round(ms / 1000)
-  if (s < 60) return `${s} 秒`
+  if (s < 60) return t('format.duration.s', { s })
   const m = Math.floor(s / 60)
-  if (m < 60) return `${m} 分 ${s % 60} 秒`
-  return `${Math.floor(m / 60)} 时 ${m % 60} 分`
+  if (m < 60) return t('format.duration.ms', { m, s: s % 60 })
+  return t('format.duration.hm', { h: Math.floor(m / 60), m: m % 60 })
 }
 
 export function fmtLatency(v?: number | null): string {
@@ -49,7 +48,7 @@ export function fmtPercent(v?: number | null): string {
   return `${(v * 100).toFixed(1)}%`
 }
 
-export async function copyText(text: string, tip = '已复制') {
+export async function copyText(text: string, tip?: string) {
   try {
     if (navigator.clipboard && window.isSecureContext) {
       await navigator.clipboard.writeText(text)
@@ -64,35 +63,47 @@ export async function copyText(text: string, tip = '已复制') {
       document.execCommand('copy')
       document.body.removeChild(ta)
     }
-    toast.success(tip)
+    toast.success(tip ?? t('common.copied'))
   } catch {
-    toast.error('复制失败，请手动复制')
+    toast.error(t('format.copyFailed'))
   }
 }
 
 export type Tone = 'primary' | 'success' | 'warning' | 'danger' | 'info' | 'neutral'
 
-export const runStatusMeta: Record<RunStatus, { label: string; type: Tone }> = {
-  queued: { label: '排队中', type: 'neutral' },
-  running: { label: '运行中', type: 'primary' },
-  success: { label: '成功', type: 'success' },
-  partial: { label: '部分成功', type: 'warning' },
-  failed: { label: '失败', type: 'danger' },
-  canceled: { label: '已取消', type: 'neutral' },
+// label 用 getter 按当前语言取文案：模板/computed 中读取时随语言切换而更新，调用方仍按对象下标访问
+const labeled = (key: string, type: Tone) => ({
+  get label() {
+    return t(key)
+  },
+  type,
+})
+
+export const runStatusMeta: Record<RunStatus, { readonly label: string; type: Tone }> = {
+  queued: labeled('format.status.queued', 'neutral'),
+  running: labeled('format.status.running', 'primary'),
+  success: labeled('format.status.success', 'success'),
+  partial: labeled('format.status.partial', 'warning'),
+  failed: labeled('format.status.failed', 'danger'),
+  canceled: labeled('format.status.canceled', 'neutral'),
 }
 
 export const runTriggerLabel: Record<RunTrigger, string> = {
-  manual: '手动',
-  cron: '定时',
+  get manual() {
+    return t('format.trigger.manual')
+  },
+  get cron() {
+    return t('format.trigger.cron')
+  },
   hook: 'Webhook',
 }
 
-export const changeActionMeta: Record<DNSChangeAction, { label: string; type: Tone }> = {
-  create: { label: '新建', type: 'success' },
-  update: { label: '更新', type: 'info' },
-  delete: { label: '删除', type: 'warning' },
-  skip: { label: '跳过', type: 'neutral' },
-  error: { label: '错误', type: 'danger' },
+export const changeActionMeta: Record<DNSChangeAction, { readonly label: string; type: Tone }> = {
+  create: labeled('format.action.create', 'success'),
+  update: labeled('format.action.update', 'info'),
+  delete: labeled('format.action.delete', 'warning'),
+  skip: labeled('format.action.skip', 'neutral'),
+  error: labeled('format.action.error', 'danger'),
 }
 
 export const ipTypeLabel: Record<IPType, string> = {
@@ -115,4 +126,43 @@ export function saveBlob(blob: Blob, filename: string) {
   a.click()
   document.body.removeChild(a)
   setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+// ---------- 执行 / DNS 变更说明 ----------
+// 后端在 messageKey 中给出固定说明的代码；早期记录只有中文原文，按已知文案反查以便同样随语言显示；
+// 上游服务商报错等没有固定文案的内容原样显示。
+const LEGACY_RUN_MESSAGES: Record<string, string> = {
+  已取消: 'canceled',
+  '试运行完成，未修改 DNS': 'dryRunDone',
+  'DNS 记录已更新': 'dnsUpdated',
+  'IP 未变化': 'ipUnchanged',
+  '服务重启，执行被中断': 'interrupted',
+  任务未配置目标记录: 'noTargets',
+  '没有获得任何可用 IP，DNS 记录未修改': 'noIP',
+  '全部 DNS 记录更新失败': 'allFailed',
+}
+
+interface Described {
+  message?: string
+  messageKey?: string
+  messageArgs?: Record<string, unknown>
+}
+
+export function runMessage(r: Described): string {
+  if (r.messageKey) return t(`messages.run.${r.messageKey}`, r.messageArgs)
+  const m = r.message || ''
+  const key = LEGACY_RUN_MESSAGES[m]
+  if (key) return t(`messages.run.${key}`)
+  const partial = /^(\d+)\/(\d+) 条记录更新失败$/.exec(m)
+  if (partial) return t('messages.run.partialFailed', { failed: Number(partial[1]), total: Number(partial[2]) })
+  return m
+}
+
+export function changeMessage(c: Described): string {
+  if (c.messageKey) return t(`messages.change.${c.messageKey}`, c.messageArgs)
+  const m = c.message || ''
+  if (m === '无可用 IP，保留原记录') return t('messages.change.keptNoIP')
+  const acc = /^DNS 账号不可用: (.*)$/s.exec(m)
+  if (acc) return t('messages.change.accountUnavailable', { error: acc[1] })
+  return m
 }

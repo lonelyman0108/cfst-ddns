@@ -22,6 +22,9 @@ result_ddns.txt*
 *.tmp
 *.bak
 
+# AI 编排工具的本地状态（oh-my-claudecode）
+.omc/
+
 # 系统 / IDE
 .DS_Store
 Thumbs.db

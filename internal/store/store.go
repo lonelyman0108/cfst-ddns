@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -15,6 +14,7 @@ import (
 	"gorm.io/gorm/clause"
 	"gorm.io/gorm/logger"
 
+	"github.com/lonelyman0108/cfst-ddns/internal/i18n"
 	"github.com/lonelyman0108/cfst-ddns/internal/schema"
 	"github.com/lonelyman0108/cfst-ddns/internal/secret"
 )
@@ -185,6 +185,7 @@ type Settings struct {
 	HookEnabled          bool   `json:"hookEnabled"`
 	HookToken            string `json:"hookToken"`
 	NotifyTitlePrefix    string `json:"notifyTitlePrefix"`
+	OnboardingDismissed  bool   `json:"onboardingDismissed"` // 仪表盘入门清单是否已关闭
 }
 
 const (
@@ -193,6 +194,7 @@ const (
 	keyHookOn    = "hook_enabled"
 	keyHookToken = "hook_token"
 	keyPrefix    = "notify_title_prefix"
+	keyOnboard   = "onboarding_dismissed"
 	keyJWTSecret = "jwt_secret"
 )
 
@@ -228,6 +230,9 @@ func (s *Store) GetSettings() Settings {
 	if v, ok := s.get(keyPrefix); ok {
 		st.NotifyTitlePrefix = v
 	}
+	if v, ok := s.get(keyOnboard); ok {
+		st.OnboardingDismissed = v == "true"
+	}
 	return st
 }
 
@@ -240,6 +245,7 @@ func (s *Store) SaveSettings(st Settings) error {
 			keyHookOn:    strconv.FormatBool(st.HookEnabled),
 			keyHookToken: st.HookToken,
 			keyPrefix:    st.NotifyTitlePrefix,
+			keyOnboard:   strconv.FormatBool(st.OnboardingDismissed),
 		} {
 			if err := s.set(tx, k, v); err != nil {
 				return err
@@ -303,7 +309,7 @@ func (s *Store) UpsertRecordState(st RecordState) error {
 // PurgeRuns 删除早于指定天数的执行记录。
 func (s *Store) PurgeRuns(days int) (int64, error) {
 	if days <= 0 {
-		return 0, errors.New("天数必须大于 0")
+		return 0, i18n.New("天数必须大于 0")
 	}
 	before := time.Now().AddDate(0, 0, -days)
 	res := s.DB.Where("created_at < ? AND status NOT IN ?", before, []string{StatusQueued, StatusRunning}).Delete(&Run{})

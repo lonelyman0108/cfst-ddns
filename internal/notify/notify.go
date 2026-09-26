@@ -6,10 +6,10 @@ package notify
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"sync"
 
+	"github.com/lonelyman0108/cfst-ddns/internal/i18n"
 	"github.com/lonelyman0108/cfst-ddns/internal/schema"
 )
 
@@ -89,7 +89,7 @@ func New(t string, cfg schema.Config) (Notifier, error) {
 	e, ok := registry[t]
 	mu.RUnlock()
 	if !ok {
-		return nil, fmt.Errorf("不支持的通知渠道: %s", t)
+		return nil, i18n.Errorf("不支持的通知渠道: %s", t)
 	}
 	cfg = e.meta.ApplyDefaults(cfg)
 	if err := e.meta.Validate(cfg); err != nil {

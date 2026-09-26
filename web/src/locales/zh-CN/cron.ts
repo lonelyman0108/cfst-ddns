@@ -1,0 +1,36 @@
+// 执行周期：预设、cron 描述与 CronInput 组件文案
+export default {
+  presets: {
+    every30m: '每 30 分钟',
+    hourly: '每小时',
+    every6h: '每 6 小时',
+    every12h: '每 12 小时',
+    daily3: '每天 3 点',
+    manual: '仅手动',
+  },
+  at: {
+    daily0: '每天 0 点',
+    weekly: '每周日 0 点',
+    monthly: '每月 1 日 0 点',
+    yearly: '每年 1 月 1 日 0 点',
+  },
+  everyDuration: '每隔 {d}',
+  everyNMin: '每 {n} 分钟',
+  everyMinute: '每分钟',
+  everyNHour: '每 {n} 小时',
+  everyNHourAt: '每 {n} 小时（第 {m} 分）',
+  hourlyAt: '每小时第 {m} 分',
+  dailyAt: '每天 {time}',
+  weeklyAt: '每周{day} {time}',
+  monthlyAt: '每月 {d} 日 {time}',
+  sep: '、',
+  weekday: { 0: '日', 1: '一', 2: '二', 3: '三', 4: '四', 5: '五', 6: '六' },
+  input: {
+    custom: '自定义 cron',
+    placeholder: '分 时 日 月 周，如 0 */2 * * *',
+    manualHint: '不自动执行，仅可手动或通过 Webhook 触发',
+    next: '下次',
+    rel: '（{rel}）',
+    showMore: '查看更多',
+  },
+}

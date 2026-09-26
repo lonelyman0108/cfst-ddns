@@ -10,8 +10,9 @@ export const tasksApi = {
   setEnabled: (id: number, enabled: boolean) => patch<Task>(`/api/tasks/${id}/enabled`, { enabled }),
   remove: (id: number) => del<OkResponse>(`/api/tasks/${id}`),
   clone: (id: number) => post<Task>(`/api/tasks/${id}/clone`),
-  /** 已在运行或排队时返回 409 */
-  run: (id: number) => post<RunStarted>(`/api/tasks/${id}/run`),
+  /** 已在运行或排队时返回 409；dryRun 只测速，不修改 DNS、不发通知 */
+  run: (id: number, opts?: { dryRun?: boolean }) =>
+    post<RunStarted>(`/api/tasks/${id}/run`, opts?.dryRun ? { dryRun: true } : undefined),
 }
 
 export const cronApi = {

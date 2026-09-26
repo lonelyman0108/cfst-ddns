@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"sort"
@@ -13,6 +14,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+	"github.com/lonelyman0108/cfst-ddns/internal/cfst"
+	"github.com/lonelyman0108/cfst-ddns/internal/i18n"
 	"github.com/lonelyman0108/cfst-ddns/internal/notify"
 	"github.com/lonelyman0108/cfst-ddns/internal/provider"
 	"github.com/lonelyman0108/cfst-ddns/internal/store"
@@ -28,9 +31,11 @@ func (s *Server) dashboard(c *gin.Context) {
 	db.Model(&store.Task{}).Where("enabled = ?", true).Count(&enabledCount)
 	db.Model(&store.Account{}).Count(&accountCount)
 	db.Model(&store.Notifier{}).Count(&notifierCount)
-	db.Model(&store.Run{}).Where("created_at >= ?", since).Count(&runs24h)
-	db.Model(&store.Run{}).Where("created_at >= ? AND status = ?", since, store.StatusSuccess).Count(&success24h)
-	db.Model(&store.Run{}).Where("created_at >= ? AND status IN ?", since, []string{store.StatusFailed, store.StatusPartial}).Count(&failed24h)
+	// 试运行不计入统计
+	recent := func() *gorm.DB { return db.Model(&store.Run{}).Where("created_at >= ? AND dry_run = ?", since, false) }
+	recent().Count(&runs24h)
+	recent().Where("status = ?", store.StatusSuccess).Count(&success24h)
+	recent().Where("status IN ?", []string{store.StatusFailed, store.StatusPartial}).Count(&failed24h)
 
 	active := []store.Run{}
 	db.Select(store.SummaryColumns).Where("status IN ?", []string{store.StatusQueued, store.StatusRunning}).Order("id").Find(&active)
@@ -78,7 +83,7 @@ func (s *Server) dashboard(c *gin.Context) {
 	}
 	var trendRuns []store.Run
 	db.Select("id, task_id, task_name, best_ipv4, best_ipv6, best_latency, best_speed, finished_at, created_at").
-		Where("status IN ? AND best_latency > 0", []string{store.StatusSuccess, store.StatusPartial}).
+		Where("status IN ? AND best_latency > 0 AND dry_run = ?", []string{store.StatusSuccess, store.StatusPartial}, false).
 		Order("id DESC").Limit(50).Find(&trendRuns)
 	trend := []point{}
 	for i := len(trendRuns) - 1; i >= 0; i-- {
@@ -129,15 +134,13 @@ func (s *Server) cfstInstall(c *gin.Context) {
 	if !bind(c, &req) {
 		return
 	}
-	var active int64
-	s.Store.DB.Model(&store.Run{}).Where("status = ?", store.StatusRunning).Count(&active)
-	if active > 0 {
-		failMsg(c, http.StatusConflict, "有任务正在测速，请稍后再安装")
-		return
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 	defer cancel()
 	v, err := s.CFST.Install(ctx, strings.TrimSpace(req.Version))
+	if errors.Is(err, cfst.ErrInstalling) || errors.Is(err, cfst.ErrTaskActive) {
+		fail(c, http.StatusConflict, err)
+		return
+	}
 	if err != nil {
 		s.Log.Error("安装 cfst 失败", "err", err)
 		fail(c, http.StatusBadGateway, err)
@@ -274,7 +277,7 @@ func (s *Server) hookRun(c *gin.Context) {
 	if !ok {
 		return
 	}
-	s.enqueue(c, id, "hook")
+	s.enqueue(c, id, "hook", false)
 }
 
 // ---------- 备份与恢复 ----------
@@ -331,13 +334,13 @@ func (s *Server) restore(c *gin.Context) {
 	}
 	for _, a := range b.Accounts {
 		if _, ok := provider.Meta(a.Provider); !ok {
-			failMsg(c, http.StatusBadRequest, "备份中包含不支持的 DNS 服务商: "+a.Provider)
+			failMsg(c, http.StatusBadRequest, "备份中包含不支持的 DNS 服务商: %s", a.Provider)
 			return
 		}
 	}
 	for _, n := range b.Notifiers {
 		if _, ok := notify.Meta(n.Type); !ok {
-			failMsg(c, http.StatusBadRequest, "备份中包含不支持的通知渠道: "+n.Type)
+			failMsg(c, http.StatusBadRequest, "备份中包含不支持的通知渠道: %s", n.Type)
 			return
 		}
 	}
@@ -368,7 +371,7 @@ func (s *Server) restore(c *gin.Context) {
 		return txs.SaveSettings(b.Settings)
 	})
 	if err != nil {
-		fail(c, http.StatusInternalServerError, fmt.Errorf("恢复失败，数据未改动: %w", err))
+		fail(c, http.StatusInternalServerError, i18n.Errorf("恢复失败，数据未改动: %w", err))
 		return
 	}
 	for _, t := range old {

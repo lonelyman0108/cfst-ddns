@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lonelyman0108/cfst-ddns/internal/i18n"
 	"github.com/lonelyman0108/cfst-ddns/internal/schema"
 )
 
@@ -53,11 +54,11 @@ func (s *smtpNotifier) addresses() (*mail.Address, []*mail.Address, error) {
 		fromStr = s.cfg.Get("username")
 	}
 	if fromStr == "" {
-		return nil, nil, errors.New("邮件: 发件人与用户名不能同时为空")
+		return nil, nil, i18n.New("邮件: 发件人与用户名不能同时为空")
 	}
 	from, err := mail.ParseAddress(fromStr)
 	if err != nil {
-		return nil, nil, fmt.Errorf("邮件: 发件人地址无效: %s", fromStr)
+		return nil, nil, i18n.Errorf("邮件: 发件人地址无效: %s", fromStr)
 	}
 	var to []*mail.Address
 	for _, p := range strings.FieldsFunc(s.cfg.Get("to"), func(r rune) bool { return r == ',' || r == ';' || r == '，' }) {
@@ -66,12 +67,12 @@ func (s *smtpNotifier) addresses() (*mail.Address, []*mail.Address, error) {
 		}
 		a, err := mail.ParseAddress(p)
 		if err != nil {
-			return nil, nil, fmt.Errorf("邮件: 收件人地址无效: %s", p)
+			return nil, nil, i18n.Errorf("邮件: 收件人地址无效: %s", p)
 		}
 		to = append(to, a)
 	}
 	if len(to) == 0 {
-		return nil, nil, errors.New("邮件: 收件人不能为空")
+		return nil, nil, i18n.New("邮件: 收件人不能为空")
 	}
 	return from, to, nil
 }

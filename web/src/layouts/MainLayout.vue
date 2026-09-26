@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import AppLogo from '@/components/AppLogo.vue'
-import { ChevronsUpDown, KeyRound, LogOut, Monitor, Moon, Search, Sun } from '@lucide/vue'
+import LanguageSwitcher from '@/components/LanguageSwitcher.vue'
+import { ChevronsUpDown, CircleHelp, KeyRound, LogOut, Monitor, Moon, Rocket, Search, Sun } from '@lucide/vue'
+import { systemApi } from '@/api'
 import {
   Sidebar,
   SidebarContent,
@@ -55,6 +58,7 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const theme = useThemeStore()
+const { t } = useI18n()
 
 const pwdOpen = ref(false)
 const cmdOpen = ref(false)
@@ -69,12 +73,18 @@ const themeMode = computed({
   set: (v: string) => theme.setMode(v as ThemeMode),
 })
 
+const version = ref('')
+
 onMounted(() => {
   auth.fetchMe().catch(() => {})
+  systemApi
+    .info()
+    .then((i) => (version.value = i.version))
+    .catch(() => {})
 })
 
 async function logout() {
-  const ok = await confirm({ title: '退出登录', description: '确定要退出当前账号吗？', confirmText: '退出' })
+  const ok = await confirm({ title: t('layout.logout'), description: t('layout.logoutConfirm'), confirmText: t('layout.logoutAction') })
   if (!ok) return
   auth.reset()
   router.replace({ name: 'login' })
@@ -92,9 +102,9 @@ async function logout() {
                 <div class="flex size-8 shrink-0 items-center justify-center">
                   <AppLogo class="size-8" />
                 </div>
-                <div class="grid flex-1 text-left leading-tight">
+                <div class="grid grid-cols-1 flex-1 text-left leading-tight">
                   <span class="truncate font-semibold">cfst-ddns</span>
-                  <span class="text-muted-foreground truncate text-xs">优选 IP 自动解析</span>
+                  <span class="text-muted-foreground truncate text-xs">{{ t('layout.tagline') }}</span>
                 </div>
               </router-link>
             </SidebarMenuButton>
@@ -104,14 +114,14 @@ async function logout() {
 
       <SidebarContent>
         <SidebarGroup v-for="g in NAV_GROUPS" :key="g.key">
-          <SidebarGroupLabel>{{ g.label }}</SidebarGroupLabel>
+          <SidebarGroupLabel>{{ t(g.label) }}</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem v-for="n in NAV.filter((x) => x.group === g.key)" :key="n.path">
-                <SidebarMenuButton as-child :is-active="activeMenu === n.path" :tooltip="n.title">
+                <SidebarMenuButton as-child :is-active="activeMenu === n.path" :tooltip="t(n.title)">
                   <router-link :to="n.path">
                     <component :is="n.icon" />
-                    <span>{{ n.title }}</span>
+                    <span>{{ t(n.title) }}</span>
                   </router-link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -131,34 +141,45 @@ async function logout() {
                       {{ (auth.username || 'A').slice(0, 1).toUpperCase() }}
                     </AvatarFallback>
                   </Avatar>
-                  <div class="grid flex-1 text-left text-sm leading-tight">
-                    <span class="truncate font-medium">{{ auth.username || '管理员' }}</span>
-                    <span class="text-muted-foreground truncate text-xs">管理员</span>
+                  <div class="grid grid-cols-1 flex-1 text-left text-sm leading-tight">
+                    <span class="truncate font-medium">{{ auth.username || t('layout.admin') }}</span>
+                    <span class="text-muted-foreground truncate text-xs">{{ t('layout.admin') }}</span>
                   </div>
                   <ChevronsUpDown class="ml-auto size-4" />
                 </SidebarMenuButton>
               </DropdownMenuTrigger>
               <DropdownMenuContent side="top" align="start" class="w-(--reka-dropdown-menu-trigger-width) min-w-56">
-                <DropdownMenuLabel class="text-muted-foreground text-xs font-normal">已登录为 {{ auth.username }}</DropdownMenuLabel>
+                <DropdownMenuLabel class="flex items-center gap-2 py-1.5 font-normal">
+                  <Avatar class="size-8 rounded-lg">
+                    <AvatarFallback class="bg-primary/15 text-primary rounded-lg font-semibold">
+                      {{ (auth.username || 'A').slice(0, 1).toUpperCase() }}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div class="grid grid-cols-1 min-w-0 flex-1 leading-tight">
+                    <span class="truncate text-sm font-medium">{{ auth.username || t('layout.admin') }}</span>
+                    <span class="text-muted-foreground truncate text-xs">cfst-ddns {{ version || '' }}</span>
+                  </div>
+                </DropdownMenuLabel>
                 <DropdownMenuSeparator />
+                <DropdownMenuItem @select="pwdOpen = true"><KeyRound />{{ t('layout.changePassword') }}</DropdownMenuItem>
+                <DropdownMenuItem @select="router.push('/welcome')"><Rocket />{{ t('layout.quickStartWizard') }}</DropdownMenuItem>
                 <DropdownMenuSub>
-                  <DropdownMenuSubTrigger>
+                  <DropdownMenuSubTrigger class="gap-2">
                     <Sun v-if="theme.mode === 'light'" class="text-muted-foreground size-4" />
                     <Moon v-else-if="theme.mode === 'dark'" class="text-muted-foreground size-4" />
                     <Monitor v-else class="text-muted-foreground size-4" />
-                    <span class="ml-2">主题</span>
+                    {{ t('layout.theme') }}
                   </DropdownMenuSubTrigger>
                   <DropdownMenuSubContent>
                     <DropdownMenuRadioGroup v-model="themeMode">
-                      <DropdownMenuRadioItem value="light">亮色</DropdownMenuRadioItem>
-                      <DropdownMenuRadioItem value="dark">暗色</DropdownMenuRadioItem>
-                      <DropdownMenuRadioItem value="system">跟随系统</DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="light">{{ t('layout.themeLight') }}</DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="dark">{{ t('layout.themeDark') }}</DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="system">{{ t('layout.themeSystem') }}</DropdownMenuRadioItem>
                     </DropdownMenuRadioGroup>
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
-                <DropdownMenuItem @select="pwdOpen = true"><KeyRound />修改密码</DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem variant="destructive" @select="logout"><LogOut />退出登录</DropdownMenuItem>
+                <DropdownMenuItem variant="destructive" @select="logout"><LogOut />{{ t('layout.logout') }}</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </SidebarMenuItem>
@@ -181,12 +202,12 @@ async function logout() {
             <BreadcrumbSeparator class="hidden sm:block" />
             <template v-if="isSubPage && current">
               <BreadcrumbItem>
-                <BreadcrumbLink as-child><router-link :to="current.path">{{ current.title }}</router-link></BreadcrumbLink>
+                <BreadcrumbLink as-child><router-link :to="current.path">{{ t(current.title) }}</router-link></BreadcrumbLink>
               </BreadcrumbItem>
               <BreadcrumbSeparator />
             </template>
             <BreadcrumbItem class="min-w-0">
-              <BreadcrumbPage class="truncate">{{ route.meta.title }}</BreadcrumbPage>
+              <BreadcrumbPage class="truncate">{{ route.meta.title ? t(route.meta.title) : '' }}</BreadcrumbPage>
             </BreadcrumbItem>
           </BreadcrumbList>
         </Breadcrumb>
@@ -198,11 +219,15 @@ async function logout() {
             @click="cmdOpen = true"
           >
             <Search class="size-4" />
-            <span>搜索或执行命令…</span>
-            <kbd class="bg-muted ml-auto rounded border px-1.5 font-mono text-xs">{{ isMac ? '⌘' : 'Ctrl' }} K</kbd>
+            <span class="min-w-0 truncate">{{ t('layout.searchPlaceholder') }}</span>
+            <kbd class="bg-muted ml-auto shrink-0 rounded border px-1.5 font-mono text-xs">{{ isMac ? '⌘' : 'Ctrl' }} K</kbd>
           </Button>
           <Button variant="ghost" size="icon" class="size-8 md:hidden" @click="cmdOpen = true"><Search /></Button>
-          <Button variant="ghost" size="icon" class="size-8" :title="theme.dark ? '切换到亮色' : '切换到暗色'" @click="theme.toggle()">
+          <Button variant="ghost" size="icon" class="size-8" as-child>
+            <router-link to="/help" :aria-label="t('common.help')" :title="t('common.help')"><CircleHelp /></router-link>
+          </Button>
+          <LanguageSwitcher />
+          <Button variant="ghost" size="icon" class="size-8" :title="theme.dark ? t('layout.switchToLight') : t('layout.switchToDark')" @click="theme.toggle()">
             <Sun v-if="theme.dark" />
             <Moon v-else />
           </Button>

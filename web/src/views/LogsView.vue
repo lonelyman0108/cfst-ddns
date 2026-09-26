@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { RefreshCw, Search, Table2, Terminal } from '@lucide/vue'
 import { systemApi } from '@/api'
 import type { LogLine } from '@/api/types'
@@ -15,6 +16,7 @@ import PageHeader from '@/components/PageHeader.vue'
 import ToneBadge from '@/components/ToneBadge.vue'
 import { fmtTime, type Tone } from '@/utils/format'
 
+const { t } = useI18n()
 const lines = ref<LogLine[]>([])
 const loading = ref(false)
 const level = ref('ALL')
@@ -91,41 +93,41 @@ function setLimit(v: unknown) {
 
 <template>
   <div class="flex flex-col gap-4">
-    <PageHeader title="系统日志" description="应用运行日志（内存环形缓冲）">
+    <PageHeader :title="t('logs.title')" :description="t('logs.description')">
       <Tabs :model-value="view" @update:model-value="setView">
         <TabsList class="h-8">
-          <TabsTrigger value="terminal" class="text-xs"><Terminal class="size-3.5" />终端</TabsTrigger>
-          <TabsTrigger value="table" class="text-xs"><Table2 class="size-3.5" />表格</TabsTrigger>
+          <TabsTrigger value="terminal" class="text-xs"><Terminal class="size-3.5" />{{ t('logs.terminal') }}</TabsTrigger>
+          <TabsTrigger value="table" class="text-xs"><Table2 class="size-3.5" />{{ t('logs.table') }}</TabsTrigger>
         </TabsList>
       </Tabs>
-      <Button variant="outline" size="sm" :disabled="loading" @click="load()"><RefreshCw :class="loading ? 'animate-spin' : ''" />刷新</Button>
+      <Button variant="outline" size="sm" :disabled="loading" @click="load()"><RefreshCw :class="loading ? 'animate-spin' : ''" />{{ t('common.refresh') }}</Button>
     </PageHeader>
 
     <div class="flex flex-wrap items-center gap-2">
       <Select v-model="level">
         <SelectTrigger class="w-36"><SelectValue /></SelectTrigger>
         <SelectContent>
-          <SelectItem value="ALL">全部级别</SelectItem>
-          <SelectItem value="DEBUG">DEBUG 及以上</SelectItem>
-          <SelectItem value="INFO">INFO 及以上</SelectItem>
-          <SelectItem value="WARN">WARN 及以上</SelectItem>
-          <SelectItem value="ERROR">仅 ERROR</SelectItem>
+          <SelectItem value="ALL">{{ t('logs.allLevels') }}</SelectItem>
+          <SelectItem value="DEBUG">{{ t('logs.atLeast', { level: 'DEBUG' }) }}</SelectItem>
+          <SelectItem value="INFO">{{ t('logs.atLeast', { level: 'INFO' }) }}</SelectItem>
+          <SelectItem value="WARN">{{ t('logs.atLeast', { level: 'WARN' }) }}</SelectItem>
+          <SelectItem value="ERROR">{{ t('logs.only', { level: 'ERROR' }) }}</SelectItem>
         </SelectContent>
       </Select>
       <div class="relative">
         <Search class="text-muted-foreground absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
-        <Input v-model="keyword" placeholder="搜索关键字" class="w-56 pl-8" />
+        <Input v-model="keyword" :placeholder="t('logs.keyword')" class="w-56 pl-8" />
       </div>
       <Select :model-value="limit" @update:model-value="setLimit">
         <SelectTrigger class="w-32"><SelectValue /></SelectTrigger>
         <SelectContent>
-          <SelectItem v-for="n in ['200', '500', '1000', '2000']" :key="n" :value="n">最近 {{ n }} 条</SelectItem>
+          <SelectItem v-for="n in ['200', '500', '1000', '2000']" :key="n" :value="n">{{ t('logs.recent', { n }) }}</SelectItem>
         </SelectContent>
       </Select>
       <label class="flex cursor-pointer items-center gap-2 text-sm">
-        <Switch v-model="auto" />自动刷新（3 秒）
+        <Switch v-model="auto" />{{ t('logs.autoRefresh') }}
       </label>
-      <span class="text-muted-foreground ml-auto text-xs tabular-nums">{{ filtered.length }} / {{ lines.length }} 条</span>
+      <span class="text-muted-foreground ml-auto text-xs tabular-nums">{{ t('logs.count', { shown: filtered.length, total: lines.length }) }}</span>
     </div>
 
     <LogPanel v-if="view === 'terminal'" :text="text" :live="auto" title="cfst-ddns · app.log" height="calc(100vh - 290px)" />
@@ -134,9 +136,9 @@ function setLimit(v: unknown) {
         <Table>
           <TableHeader class="bg-card sticky top-0">
             <TableRow>
-              <TableHead class="w-44 pl-5">时间</TableHead>
-              <TableHead class="w-24">级别</TableHead>
-              <TableHead class="pr-5">内容</TableHead>
+              <TableHead class="w-44 pl-5">{{ t('logs.time') }}</TableHead>
+              <TableHead class="w-24">{{ t('logs.level') }}</TableHead>
+              <TableHead class="pr-5">{{ t('logs.message') }}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -146,7 +148,7 @@ function setLimit(v: unknown) {
               <TableCell class="pr-5 font-mono text-code break-all whitespace-pre-wrap">{{ l.message }}</TableCell>
             </TableRow>
             <TableRow v-if="!filtered.length">
-              <TableCell colspan="3" class="text-muted-foreground py-10 text-center">暂无日志</TableCell>
+              <TableCell colspan="3" class="text-muted-foreground py-10 text-center">{{ t('logs.empty') }}</TableCell>
             </TableRow>
           </TableBody>
         </Table>

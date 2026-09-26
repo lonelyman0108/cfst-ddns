@@ -236,7 +236,12 @@ export interface RunSummary {
   bestLatency: number
   bestSpeed: number
   changed: boolean
+  /** 试运行：只测速，不修改 DNS、不发通知 */
+  dryRun: boolean
   message: string
+  /** 固定说明的代码，前端据此按语言显示；上游报错等无代码时直接显示 message */
+  messageKey?: string
+  messageArgs?: Record<string, unknown>
   createdAt: string
 }
 
@@ -265,10 +270,15 @@ export interface DNSChange {
   oldValue: string
   newValue: string
   message: string
+  /** 固定说明的代码，前端据此按语言显示；上游报错等无代码时直接显示 message */
+  messageKey?: string
+  messageArgs?: Record<string, unknown>
 }
 
 export interface RunDetail extends RunSummary {
   results: SpeedResult[]
+  /** 各 IP 类型实际测得的结果数；results 只保存前 100 个（旧记录无此字段） */
+  resultTotals?: Partial<Record<'v4' | 'v6', number>>
   changes: DNSChange[]
   log: string
 }
@@ -352,6 +362,8 @@ export interface CfstRelease {
   assetAvailable: boolean
 }
 
+// cfst 导入 / 镜像测速相关类型见 types-p9.ts
+
 export type IPFileKind = 'v4' | 'v6'
 
 export interface IPFile {
@@ -366,4 +378,6 @@ export interface Settings {
   hookEnabled: boolean
   hookToken: string
   notifyTitlePrefix: string
+  /** 仪表盘入门清单已被关闭 */
+  onboardingDismissed: boolean
 }

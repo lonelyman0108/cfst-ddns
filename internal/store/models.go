@@ -136,33 +136,43 @@ type DNSChange struct {
 	OldValue    string `json:"oldValue"`
 	NewValue    string `json:"newValue"`
 	Message     string `json:"message"`
+	// MessageKey / MessageArgs 供前端按语言显示 Message；上游原始报错等无固定文案的情况为空
+	MessageKey  string         `json:"messageKey,omitempty"`
+	MessageArgs map[string]any `json:"messageArgs,omitempty"`
 }
 
 // Run 为一次任务执行记录。
 type Run struct {
-	ID          uint          `gorm:"primaryKey" json:"id"`
-	TaskID      uint          `gorm:"index" json:"taskId"`
-	TaskName    string        `json:"taskName"`
-	Trigger     string        `gorm:"size:16" json:"trigger"`
-	Status      string        `gorm:"size:16;index" json:"status"`
-	StartedAt   *time.Time    `json:"startedAt"`
-	FinishedAt  *time.Time    `json:"finishedAt"`
-	DurationMs  int64         `json:"durationMs"`
-	BestIPv4    string        `gorm:"column:best_ipv4" json:"bestIPv4"`
-	BestIPv6    string        `gorm:"column:best_ipv6" json:"bestIPv6"`
-	BestLatency float64       `json:"bestLatency"`
-	BestSpeed   float64       `json:"bestSpeed"`
-	Changed     bool          `json:"changed"`
-	Message     string        `json:"message"`
-	Log         string        `json:"log,omitempty"`
-	Results     []SpeedResult `gorm:"serializer:json" json:"results,omitempty"`
-	Changes     []DNSChange   `gorm:"serializer:json" json:"changes,omitempty"`
-	CreatedAt   time.Time     `gorm:"index" json:"createdAt"`
+	ID          uint       `gorm:"primaryKey" json:"id"`
+	TaskID      uint       `gorm:"index" json:"taskId"`
+	TaskName    string     `json:"taskName"`
+	Trigger     string     `gorm:"size:16" json:"trigger"`
+	DryRun      bool       `gorm:"not null;default:false" json:"dryRun"` // 试运行：只测速，不写 DNS、不通知
+	Status      string     `gorm:"size:16;index" json:"status"`
+	StartedAt   *time.Time `json:"startedAt"`
+	FinishedAt  *time.Time `json:"finishedAt"`
+	DurationMs  int64      `json:"durationMs"`
+	BestIPv4    string     `gorm:"column:best_ipv4" json:"bestIPv4"`
+	BestIPv6    string     `gorm:"column:best_ipv6" json:"bestIPv6"`
+	BestLatency float64    `json:"bestLatency"`
+	BestSpeed   float64    `json:"bestSpeed"`
+	Changed     bool       `json:"changed"`
+	Message     string     `json:"message"`
+	// MessageKey / MessageArgs 供前端按语言显示 Message（中文原文仍用于通知与日志）；无固定文案的错误为空
+	MessageKey  string         `json:"messageKey,omitempty"`
+	MessageArgs map[string]any `gorm:"serializer:json" json:"messageArgs,omitempty"`
+	Log         string         `json:"log,omitempty"`
+	Results     []SpeedResult  `gorm:"serializer:json" json:"results,omitempty"`
+	// ResultTotals 为各 IP 类型实际测得的结果数（Results 只保存前 MaxStoredResults 个）
+	ResultTotals map[string]int `gorm:"serializer:json" json:"resultTotals,omitempty"`
+	Changes      []DNSChange    `gorm:"serializer:json" json:"changes,omitempty"`
+	CreatedAt    time.Time      `gorm:"index" json:"createdAt"`
 }
 
 // SummaryColumns 为列表查询时需要的列（不含大字段）。
-var SummaryColumns = []string{"id", "task_id", "task_name", "trigger", "status", "started_at", "finished_at",
-	"duration_ms", "best_ipv4", "best_ipv6", "best_latency", "best_speed", "changed", "message", "created_at"}
+var SummaryColumns = []string{"id", "task_id", "task_name", "trigger", "dry_run", "status", "started_at", "finished_at",
+	"duration_ms", "best_ipv4", "best_ipv6", "best_latency", "best_speed", "changed", "message", "message_key", "message_args",
+	"created_at"}
 
 // RecordState 记录每个目标最近一次写入的值，用于仪表盘。
 type RecordState struct {

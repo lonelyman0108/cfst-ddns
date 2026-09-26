@@ -2,7 +2,9 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
+	"io"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -17,6 +19,7 @@ import (
 	"github.com/lonelyman0108/cfst-ddns/internal/auth"
 	"github.com/lonelyman0108/cfst-ddns/internal/cfst"
 	"github.com/lonelyman0108/cfst-ddns/internal/engine"
+	"github.com/lonelyman0108/cfst-ddns/internal/i18n"
 	"github.com/lonelyman0108/cfst-ddns/internal/logbus"
 	"github.com/lonelyman0108/cfst-ddns/internal/scheduler"
 	"github.com/lonelyman0108/cfst-ddns/internal/store"
@@ -108,6 +111,11 @@ func (s *Server) Handler() http.Handler {
 	a.GET("/cfst", s.cfstStatus)
 	a.GET("/cfst/releases", s.cfstReleases)
 	a.POST("/cfst/install", s.cfstInstall)
+	a.POST("/cfst/upload", s.cfstUpload)
+	a.GET("/cfst/scan", s.cfstScan)
+	a.POST("/cfst/adopt", s.cfstAdopt)
+	a.GET("/cfst/mirrors", s.cfstMirrors)
+	a.POST("/cfst/mirrors/test", s.cfstMirrorTest)
 	a.GET("/cfst/ipfile/:kind", s.getIPFile)
 	a.PUT("/cfst/ipfile/:kind", s.putIPFile)
 	a.POST("/cfst/ipfile/:kind/reset", s.resetIPFile)
@@ -117,6 +125,7 @@ func (s *Server) Handler() http.Handler {
 	a.POST("/settings/hook-token", s.regenHookToken)
 	a.GET("/backup", s.backup)
 	a.POST("/backup/restore", s.restore)
+	a.POST("/import/legacy", s.importLegacy)
 
 	r.NoRoute(s.static)
 	return r
@@ -145,12 +154,12 @@ func (s *Server) requireAuth(allowQuery bool) gin.HandlerFunc {
 			tok = c.Query("token")
 		}
 		if tok == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "未登录"})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": i18n.T(lang(c), "未登录")})
 			return
 		}
 		user, err := s.Auth.Verify(tok)
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": i18n.Localize(lang(c), err)})
 			return
 		}
 		c.Set("user", user)
@@ -162,7 +171,7 @@ func (s *Server) requireAuth(allowQuery bool) gin.HandlerFunc {
 func (s *Server) static(c *gin.Context) {
 	p := c.Request.URL.Path
 	if strings.HasPrefix(p, "/api/") || c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead {
-		c.JSON(http.StatusNotFound, gin.H{"error": "接口不存在"})
+		failMsg(c, http.StatusNotFound, "接口不存在")
 		return
 	}
 	if s.Static == nil {
@@ -190,12 +199,22 @@ func (s *Server) static(c *gin.Context) {
 
 // ---------- 通用工具 ----------
 
-func fail(c *gin.Context, code int, err error) {
-	c.JSON(code, gin.H{"error": err.Error()})
+// lang 返回请求的界面语言：优先查询参数 lang（SSE 无法设置请求头），其次 Accept-Language。
+func lang(c *gin.Context) i18n.Lang {
+	if v := c.Query("lang"); v != "" {
+		return i18n.Parse(v)
+	}
+	return i18n.Parse(c.GetHeader("Accept-Language"))
 }
 
-func failMsg(c *gin.Context, code int, msg string) {
-	c.JSON(code, gin.H{"error": msg})
+// fail 按请求语言输出错误；不可翻译的错误（如服务商原始错误）原样输出。
+func fail(c *gin.Context, code int, err error) {
+	c.JSON(code, gin.H{"error": i18n.Localize(lang(c), err)})
+}
+
+// failMsg 输出错误文案，format 为简体中文原文（翻译目录的键）。
+func failMsg(c *gin.Context, code int, format string, args ...any) {
+	c.JSON(code, gin.H{"error": i18n.Sprintf(lang(c), format, args...)})
 }
 
 func okJSON(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"ok": true}) }
@@ -218,9 +237,18 @@ func idParam(c *gin.Context) (uint, bool) {
 	return uint(id), true
 }
 
+// bindOptional 解析可省略的 JSON 请求体，空请求体视为全部默认值。
+func bindOptional(c *gin.Context, v any) bool {
+	if err := json.NewDecoder(c.Request.Body).Decode(v); err != nil && !errors.Is(err, io.EOF) {
+		failMsg(c, http.StatusBadRequest, "请求格式错误: %v", err)
+		return false
+	}
+	return true
+}
+
 func bind(c *gin.Context, v any) bool {
 	if err := c.ShouldBindJSON(v); err != nil {
-		failMsg(c, http.StatusBadRequest, "请求格式错误: "+err.Error())
+		failMsg(c, http.StatusBadRequest, "请求格式错误: %v", err)
 		return false
 	}
 	return true

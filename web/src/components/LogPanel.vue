@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ArrowDownToLine, Copy } from '@lucide/vue'
 import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -18,6 +19,7 @@ const props = withDefaults(
   { progress: '', live: false, title: '', height: '420px' },
 )
 
+const { t } = useI18n()
 const box = ref<HTMLElement>()
 const follow = ref(true)
 
@@ -26,6 +28,21 @@ interface Line {
   body: string
   cls: string
 }
+
+// cfst 进度条（pb/v3）各版本模板不同，均为「计数 [字符画] 尾部」：
+//   v2.2+ 延迟测速「1101 / 5955 [---↘___] 可用: 1100」，下载测速尾部为空
+//   v2.0–v2.1「1101 / 5955 [--->___] 18.49%」；v1.x「… 1.68% 20 p/s ETA 3m」
+// 拆成计数与比例，用自适应宽度的进度条代替字符画；尾部去掉与本组件重复的百分比后原样显示。
+// 无法识别时按原文截断显示
+const PROGRESS_RE = /^\s*(\d+)\s*\/\s*(\d+)\s*\[[^\]]*\]\s*(.*)$/
+const bar = computed(() => {
+  const m = PROGRESS_RE.exec(props.progress)
+  if (!m) return null
+  const done = Number(m[1])
+  const total = Number(m[2])
+  const tail = m[3].replace(/^\d+(\.\d+)?\s*%\s*/, '').trim()
+  return { done, total, pct: total > 0 ? Math.min(100, (done / total) * 100) : 0, tail }
+})
 
 const TIME_RE = /^(\d{1,2}:\d{2}:\d{2}|\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2})\s(.*)$/
 
@@ -96,12 +113,12 @@ watch(
           <span class="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-75" />
           <span class="relative inline-flex size-1.5 rounded-full bg-emerald-400" />
         </span>
-        实时
+        {{ t('runs.log.live') }}
       </span>
       <div class="ml-auto flex items-center gap-3">
         <label class="flex cursor-pointer items-center gap-1.5 text-zinc-400 select-none">
           <Switch :model-value="follow" class="scale-90 data-[state=unchecked]:bg-zinc-700" @update:model-value="setFollow" />
-          自动滚动
+          {{ t('runs.log.autoScroll') }}
         </label>
         <Tooltip>
           <TooltipTrigger as-child>
@@ -113,24 +130,24 @@ watch(
               <ArrowDownToLine class="size-3.5" />
             </button>
           </TooltipTrigger>
-          <TooltipContent>滚动到底部</TooltipContent>
+          <TooltipContent>{{ t('runs.log.toBottom') }}</TooltipContent>
         </Tooltip>
         <Tooltip>
           <TooltipTrigger as-child>
             <button
               type="button"
               class="rounded p-1 text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
-              @click="copyText(text, '日志已复制')"
+              @click="copyText(text, t('runs.log.copied'))"
             >
               <Copy class="size-3.5" />
             </button>
           </TooltipTrigger>
-          <TooltipContent>复制全部</TooltipContent>
+          <TooltipContent>{{ t('runs.log.copyAll') }}</TooltipContent>
         </Tooltip>
       </div>
     </div>
     <div ref="box" class="scrollbar-thin overflow-auto px-4 py-3 font-mono text-log" :style="{ height }" @scroll.passive="onScroll">
-      <div v-if="!lines.length" class="text-zinc-500">{{ live ? '等待日志输出…' : '（无日志）' }}</div>
+      <div v-if="!lines.length" class="text-zinc-500">{{ live ? t('runs.log.waiting') : t('runs.log.empty') }}</div>
       <div v-for="(l, i) in lines" :key="i" class="break-all whitespace-pre-wrap">
         <span v-if="l.time" class="mr-2 text-zinc-500 select-none">{{ l.time }}</span><span :class="cn(l.cls)">{{ l.body }}</span>
       </div>
@@ -140,7 +157,15 @@ watch(
       class="flex items-center gap-2 border-t border-white/10 bg-white/[0.03] px-4 py-1.5 font-mono text-log text-amber-300"
     >
       <span class="size-1.5 shrink-0 animate-pulse rounded-full bg-amber-300" />
-      <span class="truncate">{{ progress }}</span>
+      <template v-if="bar">
+        <span class="shrink-0 tabular-nums">{{ bar.done }} / {{ bar.total }}</span>
+        <span class="h-1.5 min-w-8 flex-1 overflow-hidden rounded-full bg-amber-300/15">
+          <span class="block h-full rounded-full bg-amber-300 transition-[width] duration-300" :style="{ width: `${bar.pct}%` }" />
+        </span>
+        <span class="shrink-0 tabular-nums">{{ Math.floor(bar.pct) }}%</span>
+        <span v-if="bar.tail" class="shrink-0 text-amber-300/80">{{ bar.tail }}</span>
+      </template>
+      <span v-else class="min-w-0 truncate">{{ progress }}</span>
     </div>
   </div>
 </template>
