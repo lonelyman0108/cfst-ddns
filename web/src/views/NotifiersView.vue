@@ -6,7 +6,7 @@ import { notifiersApi } from '@/api'
 import type { Notifier, NotifierInput, TestResult, TypeMeta } from '@/api/types'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
+import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import {
@@ -20,7 +20,6 @@ import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import EmptyState from '@/components/EmptyState.vue'
 import FormItem from '@/components/FormItem.vue'
 import PageHeader from '@/components/PageHeader.vue'
@@ -30,6 +29,7 @@ import ToneBadge from '@/components/ToneBadge.vue'
 import TypePicker from '@/components/TypePicker.vue'
 import { confirm } from '@/composables/useConfirm'
 import { useMetaStore } from '@/stores/meta'
+import { fromNow } from '@/utils/format'
 
 const meta = useMetaStore()
 const list = ref<Notifier[]>([])
@@ -201,60 +201,63 @@ async function remove(n: Notifier) {
       <Button size="sm" @click="openCreate"><Plus />添加通知渠道</Button>
     </PageHeader>
 
-    <Card class="gap-0 overflow-hidden py-0">
-      <div v-if="!loaded" class="grid grid-cols-1 gap-3 p-5"><Skeleton v-for="i in 3" :key="i" class="h-10" /></div>
-      <EmptyState v-else-if="!list.length" :icon="Bell" title="还没有通知渠道" description="支持 Bark、Telegram、企业微信、钉钉、飞书、邮件等">
+    <div v-if="!loaded" class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <Skeleton v-for="i in 3" :key="i" class="h-44 rounded-xl" />
+    </div>
+    <Card v-else-if="!list.length" class="py-0">
+      <EmptyState :icon="Bell" title="还没有通知渠道" description="支持 Bark、Telegram、企业微信、钉钉、飞书、邮件等">
         <Button size="sm" @click="openCreate"><Plus />添加通知渠道</Button>
       </EmptyState>
-      <Table v-else>
-        <TableHeader>
-          <TableRow class="bg-muted/30 hover:bg-muted/30">
-            <TableHead class="pl-5">名称</TableHead>
-            <TableHead>类型</TableHead>
-            <TableHead class="w-16">启用</TableHead>
-            <TableHead>触发条件</TableHead>
-            <TableHead class="w-32 pr-5 text-right">操作</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          <TableRow v-for="n in list" :key="n.id">
-            <TableCell class="min-w-48 pl-5 font-medium whitespace-normal">
-              <div class="flex items-center gap-2.5">
-                <BrandIcon kind="notifier" :type="n.type" :name="meta.notifierName(n.type)" class="size-7 shrink-0" />
-                <span class="line-clamp-2 min-w-0 wrap-anywhere" :title="n.name">{{ n.name }}</span>
-              </div>
-            </TableCell>
-            <TableCell><ToneBadge tone="primary">{{ meta.notifierName(n.type) }}</ToneBadge></TableCell>
-            <TableCell><Switch :model-value="n.enabled" :disabled="toggling[n.id]" @update:model-value="toggleEnabled(n, $event)" /></TableCell>
-            <TableCell>
-              <div class="flex flex-wrap gap-1">
-                <ToneBadge v-if="n.onSuccess" tone="success">成功</ToneBadge>
-                <ToneBadge v-if="n.onFailure" tone="danger">失败</ToneBadge>
-                <ToneBadge v-if="n.onlyOnChange" tone="warning">仅 IP 变化时</ToneBadge>
-                <span v-if="!n.onSuccess && !n.onFailure" class="text-muted-foreground text-xs">不触发</span>
-              </div>
-            </TableCell>
-            <TableCell class="pr-5">
-              <div class="flex items-center justify-end gap-1">
-                <Button variant="ghost" size="sm" :disabled="testing[n.id]" @click="testSaved(n)">
-                  <Loader2 v-if="testing[n.id]" class="animate-spin" /><Send v-else />测试
-                </Button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger as-child>
-                    <Button variant="ghost" size="icon" class="size-8"><EllipsisVertical /></Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" class="w-32">
-                    <DropdownMenuItem @select="openEdit(n)"><Pencil />编辑</DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem variant="destructive" @select="remove(n)"><Trash2 />删除</DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </TableCell>
-          </TableRow>
-        </TableBody>
-      </Table>
     </Card>
+    <div v-else class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <Card v-for="n in list" :key="n.id">
+        <CardHeader>
+          <CardTitle class="flex min-w-0 items-center gap-2.5">
+            <BrandIcon kind="notifier" :type="n.type" :name="meta.notifierName(n.type)" :class="n.enabled ? 'size-7' : 'size-7 opacity-50'" />
+            <span class="truncate" :title="n.name">{{ n.name }}</span>
+          </CardTitle>
+          <CardDescription class="flex items-center gap-2">
+            <ToneBadge tone="primary">{{ meta.notifierName(n.type) }}</ToneBadge>
+            <ToneBadge v-if="!n.enabled">已停用</ToneBadge>
+          </CardDescription>
+          <CardAction class="flex items-center gap-1">
+            <Switch
+              :model-value="n.enabled"
+              :disabled="toggling[n.id]"
+              :aria-label="n.enabled ? '停用' : '启用'"
+              @update:model-value="toggleEnabled(n, $event)"
+            />
+            <DropdownMenu>
+              <DropdownMenuTrigger as-child>
+                <Button variant="ghost" size="icon" class="-mr-2 size-8"><EllipsisVertical /></Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" class="w-36">
+                <DropdownMenuItem @select="openEdit(n)"><Pencil />编辑</DropdownMenuItem>
+                <DropdownMenuItem @select="testSaved(n)"><Send />发送测试</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem variant="destructive" @select="remove(n)"><Trash2 />删除</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </CardAction>
+        </CardHeader>
+        <CardContent class="flex flex-1 flex-wrap content-start items-center gap-1.5">
+          <span class="text-muted-foreground text-xs">触发：</span>
+          <ToneBadge v-if="n.onSuccess" tone="success">成功</ToneBadge>
+          <ToneBadge v-if="n.onFailure" tone="danger">失败</ToneBadge>
+          <ToneBadge v-if="n.onlyOnChange" tone="warning">仅 IP 变化时</ToneBadge>
+          <span v-if="!n.onSuccess && !n.onFailure" class="text-muted-foreground text-xs">不触发</span>
+        </CardContent>
+        <CardFooter class="flex items-center justify-between border-t [.border-t]:pt-3">
+          <span class="text-muted-foreground text-xs">更新于 {{ fromNow(n.updatedAt) }}</span>
+          <div class="flex gap-1">
+            <Button variant="outline" size="sm" :disabled="testing[n.id]" @click="testSaved(n)">
+              <Loader2 v-if="testing[n.id]" class="animate-spin" /><Send v-else />测试
+            </Button>
+            <Button variant="outline" size="sm" @click="openEdit(n)"><Pencil />编辑</Button>
+          </div>
+        </CardFooter>
+      </Card>
+    </div>
 
     <Dialog v-model:open="dlg.open">
       <DialogContent class="flex max-h-[90vh] flex-col gap-0 p-0 sm:max-w-xl">

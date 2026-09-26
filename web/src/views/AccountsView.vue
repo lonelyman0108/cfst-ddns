@@ -223,7 +223,7 @@ async function remove(a: Account) {
             </DropdownMenu>
           </CardAction>
         </CardHeader>
-        <CardContent class="text-muted-foreground line-clamp-2 text-sm break-words">{{ a.remark || '无备注' }}</CardContent>
+        <CardContent class="text-muted-foreground flex-1 text-sm"><p class="line-clamp-2 break-words" :title="a.remark">{{ a.remark || '无备注' }}</p></CardContent>
         <CardFooter class="flex items-center justify-between border-t [.border-t]:pt-3">
           <span class="text-muted-foreground text-xs">更新于 {{ fromNow(a.updatedAt) }}</span>
           <div class="flex gap-1">
