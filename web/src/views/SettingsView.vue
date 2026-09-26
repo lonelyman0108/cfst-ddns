@@ -176,16 +176,16 @@ async function onFile(e: Event) {
         <CardHeader>
           <CardTitle class="flex items-center gap-2"><Settings2 class="text-muted-foreground size-4" />常规</CardTitle>
         </CardHeader>
-        <CardContent class="grid gap-3">
+        <CardContent class="grid grid-cols-1 gap-3">
           <Skeleton v-if="!settings" class="h-40" />
           <template v-else>
-            <FormItem label="GitHub 镜像" for="mirror" tip="用于加速下载 cfst 安装包（Releases 列表仍直连 GitHub API）。">
+            <FormItem label="GitHub 镜像" for="mirror">
               <Input id="mirror" v-model="form.githubMirror" class="font-mono" placeholder="https://ghfast.top/{url}（留空直连 GitHub）" />
               <template #help>
-                支持两种写法：<code>https://ghfast.top/{url}</code>（{url} 替换为完整下载地址），或 <code>https://mirror.example</code>（替换 <code>https://github.com</code> 前缀）。留空表示直连。
+                用于加速下载 cfst 安装包（版本列表仍直连 GitHub API）。支持两种写法：<code>https://ghfast.top/{url}</code>（{url} 替换为完整下载地址），或 <code>https://mirror.example</code>（替换 <code>https://github.com</code> 前缀）。留空表示直连。
               </template>
             </FormItem>
-            <div class="grid gap-x-4 gap-y-3 sm:grid-cols-2">
+            <div class="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">
               <FormItem label="历史保留天数" help="超过的执行记录会被自动清理，0 表示不清理">
                 <NumInput v-model="form.historyRetentionDays" :min="0" :max="3650" class="max-w-40" />
               </FormItem>
@@ -205,7 +205,7 @@ async function onFile(e: Event) {
           <CardTitle class="flex items-center gap-2"><Webhook class="text-muted-foreground size-4" />Webhook 触发</CardTitle>
           <CardDescription>允许外部系统通过 URL 触发任务执行（无需登录）</CardDescription>
         </CardHeader>
-        <CardContent class="grid gap-3">
+        <CardContent class="grid grid-cols-1 gap-3">
           <label class="flex min-h-11 items-center justify-between gap-4 rounded-md border px-3 py-2">
             <div>
               <div class="text-sm font-medium">启用 Webhook 触发</div>
@@ -258,7 +258,7 @@ async function onFile(e: Event) {
           <CardTitle class="flex items-center gap-2"><HardDrive class="text-muted-foreground size-4" />备份与恢复</CardTitle>
           <CardDescription>导出或导入全部配置</CardDescription>
         </CardHeader>
-        <CardContent class="grid gap-3">
+        <CardContent class="grid grid-cols-1 gap-3">
           <Alert class="border-warning/40 bg-warning/5">
             <ShieldAlert class="text-warning!" />
             <AlertDescription>备份文件包含<strong class="text-foreground">明文凭据</strong>，恢复会覆盖现有全部配置。</AlertDescription>
@@ -285,7 +285,7 @@ async function onFile(e: Event) {
         </CardHeader>
         <CardContent>
           <Skeleton v-if="!info" class="h-32" />
-          <dl v-else class="grid gap-x-8 gap-y-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
+          <dl v-else class="grid grid-cols-1 gap-x-8 gap-y-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
             <div><dt class="text-muted-foreground text-xs">版本</dt><dd class="mt-0.5 font-medium">{{ info.version }}</dd></div>
             <div><dt class="text-muted-foreground text-xs">提交</dt><dd class="mt-0.5 font-mono text-code">{{ info.commit || '-' }}</dd></div>
             <div>

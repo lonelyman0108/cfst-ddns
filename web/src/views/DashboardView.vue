@@ -93,10 +93,10 @@ function onMetric(v: unknown) {
     </Alert>
 
     <!-- 统计卡片 -->
-    <div v-if="!data" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+    <div v-if="!data" class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
       <Skeleton v-for="i in 5" :key="i" class="h-[118px] rounded-xl" />
     </div>
-    <div v-else-if="stats" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+    <div v-else-if="stats" class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
       <Card class="hover:border-primary/40 cursor-pointer gap-1 py-4 transition-colors" @click="router.push('/tasks')">
         <CardHeader>
           <CardDescription class="flex items-center gap-2"><ListChecks class="size-4" />任务</CardDescription>
@@ -170,12 +170,12 @@ function onMetric(v: unknown) {
             运行中
           </CardTitle>
         </CardHeader>
-        <CardContent class="grid gap-2 px-5">
+        <CardContent class="grid grid-cols-1 gap-2 px-5">
           <button
             v-for="r in data.active"
             :key="r.id"
             type="button"
-            class="hover:bg-accent/60 group grid gap-2 rounded-lg border p-3 text-left transition-colors"
+            class="hover:bg-accent/60 group grid grid-cols-1 gap-2 rounded-lg border p-3 text-left transition-colors"
             @click="openRun(r)"
           >
             <div class="flex flex-wrap items-center gap-2">
@@ -195,7 +195,7 @@ function onMetric(v: unknown) {
         </CardContent>
       </Card>
 
-      <div class="grid gap-4 xl:grid-cols-3">
+      <div class="grid grid-cols-1 gap-4 xl:grid-cols-3">
         <!-- 当前记录 -->
         <Card class="gap-0 py-0 xl:col-span-2">
           <CardHeader class="border-b py-3 [.border-b]:pb-3">
@@ -220,11 +220,11 @@ function onMetric(v: unknown) {
                 </TableHeader>
                 <TableBody>
                   <TableRow v-for="(r, i) in data.records" :key="i">
-                    <TableCell class="pl-5 font-medium">{{ r.fqdn }}</TableCell>
+                    <TableCell class="min-w-48 pl-5 font-medium whitespace-normal break-all">{{ r.fqdn }}</TableCell>
                     <TableCell><ToneBadge>{{ r.type }}</ToneBadge></TableCell>
-                    <TableCell class="max-w-56"><CopyText :text="r.value" /></TableCell>
+                    <TableCell class="min-w-36 whitespace-normal"><CopyText :text="r.value" /></TableCell>
                     <TableCell class="text-muted-foreground text-xs" :title="fmtTime(r.updatedAt)">{{ fromNow(r.updatedAt) }}</TableCell>
-                    <TableCell class="text-muted-foreground max-w-32 truncate pr-5 text-xs">{{ r.taskName }}</TableCell>
+                    <TableCell class="text-muted-foreground max-w-32 truncate pr-5 text-xs" :title="r.taskName">{{ r.taskName }}</TableCell>
                   </TableRow>
                 </TableBody>
               </Table>
@@ -246,7 +246,7 @@ function onMetric(v: unknown) {
             <ul v-else class="divide-y">
               <li v-for="u in data.upcoming" :key="u.taskId + u.nextRunAt">
                 <router-link :to="`/tasks/${u.taskId}`" class="hover:bg-accent/50 flex items-center gap-3 px-5 py-3 transition-colors">
-                  <span class="min-w-0 flex-1 truncate text-sm font-medium">{{ u.taskName }}</span>
+                  <span class="min-w-0 flex-1 truncate text-sm font-medium" :title="u.taskName">{{ u.taskName }}</span>
                   <span class="text-muted-foreground text-xs tabular-nums" :title="fmtTime(u.nextRunAt)">{{ fromNow(u.nextRunAt) }}</span>
                 </router-link>
               </li>
@@ -304,16 +304,19 @@ function onMetric(v: unknown) {
             <TableBody>
               <TableRow v-for="r in data.lastRuns" :key="r.id" class="cursor-pointer" @click="openRun(r)">
                 <TableCell class="pl-5"><StatusBadge :status="r.status" /></TableCell>
-                <TableCell>
-                  <div class="font-medium">{{ r.taskName }}</div>
+                <TableCell class="min-w-40 whitespace-normal wrap-anywhere">
+                  <div class="line-clamp-2 font-medium" :title="r.taskName">{{ r.taskName }}</div>
                   <div class="text-muted-foreground text-xs">{{ runTriggerLabel[r.trigger] ?? r.trigger }}</div>
                 </TableCell>
-                <TableCell class="font-mono text-code">
+                <TableCell class="text-code min-w-36 font-mono whitespace-normal break-all">
                   <div v-if="r.bestIPv4">{{ r.bestIPv4 }}</div>
-                  <div v-if="r.bestIPv6" class="max-w-52 truncate">{{ r.bestIPv6 }}</div>
+                  <div v-if="r.bestIPv6">{{ r.bestIPv6 }}</div>
                   <span v-if="!r.bestIPv4 && !r.bestIPv6" class="text-muted-foreground">-</span>
                 </TableCell>
-                <TableCell class="text-right text-xs tabular-nums">{{ fmtLatency(r.bestLatency) }} / {{ fmtSpeed(r.bestSpeed) }}</TableCell>
+                <TableCell class="text-right text-xs tabular-nums">
+                  <div>{{ fmtLatency(r.bestLatency) }}</div>
+                  <div class="text-muted-foreground">{{ fmtSpeed(r.bestSpeed) }}</div>
+                </TableCell>
                 <TableCell class="text-muted-foreground text-right text-xs tabular-nums">{{ fmtDuration(r.durationMs) }}</TableCell>
                 <TableCell class="text-muted-foreground pr-5 text-right text-xs" :title="fmtTime(r.startedAt || r.createdAt)">
                   {{ fromNow(r.startedAt || r.createdAt) }}

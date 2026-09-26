@@ -8,7 +8,7 @@ const emit = defineEmits<{ (e: 'pick', t: TypeMeta): void }>()
 </script>
 
 <template>
-  <div class="grid gap-2 sm:grid-cols-2">
+  <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
     <button
       v-for="t in types"
       :key="t.type"

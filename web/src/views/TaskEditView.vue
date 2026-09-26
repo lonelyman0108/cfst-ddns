@@ -234,27 +234,6 @@ const summaryRecords = computed(() => {
   return out
 })
 
-const TIPS = {
-  threads: '-n 延迟测速线程数。越多延迟测速越快，性能弱的设备（如路由器）请勿设置过高。默认 200，最多 1000。',
-  pingTimes: '-t 延迟测速次数。单个 IP 延迟测速的次数。默认 4 次。',
-  downloadCount: '-dn 下载测速数量。延迟测速并排序后，从最低延迟起进行下载测速的数量。默认 10 个。',
-  downloadTime: '-dt 下载测速时间。单个 IP 下载测速的最长时间（秒），不宜太短。默认 10 秒。',
-  port: '-tp 测速端口。延迟测速 / 下载测速时使用的端口。默认 443。',
-  url: '-url 测速地址。延迟测速（HTTPing）/ 下载测速时使用的地址。留空使用 cfst 内置地址，内置地址不保证可用，建议自建。',
-  httping: '-httping 切换测速模式。开启后延迟测速改用 HTTP 协议（使用测速地址），默认 TCPing。',
-  httpingCode: '-httping-code 有效状态码。HTTPing 延迟测速时网页返回的有效 HTTP 状态码，仅限一个。0 表示使用默认（200、301、302）。',
-  cfColo: '-cfcolo 匹配指定地区。地区码为当地机场三字码，英文逗号分隔，如 HKG,KHH,NRT,LAX。仅 HTTPing 模式可用。',
-  maxLatency: '-tl 平均延迟上限（ms）。只输出低于该平均延迟的 IP。默认 9999。',
-  minLatency: '-tll 平均延迟下限（ms）。只输出高于该平均延迟的 IP。默认 0。',
-  maxLossRate: '-tlr 丢包率上限。只输出低于或等于该丢包率的 IP，范围 0.00~1.00，0 表示过滤掉任何丢包的 IP。默认 1。',
-  minSpeed: '-sl 下载速度下限（MB/s）。只输出高于该速度的 IP，凑够下载测速数量才会停止。\n建议搭配延迟上限 -tl 使用，避免因凑不够数量而一直测速。默认 0。',
-  disableDownload: '-dd 禁用下载测速。禁用后测速结果按延迟排序（默认按下载速度排序）。',
-  allIP: '-allip 测速全部 IP。对 IP 段中的每个 IP 进行测速（仅支持 IPv4），耗时显著增加。默认每个 /24 段随机测速一个 IP。',
-  ipSource: '默认：使用 cfst 目录下的 ip.txt / ipv6.txt（可在「cfst 管理」中编辑）。\n自定义：为本任务单独指定 IP 段。',
-  extraArgs: '附加到 cfst 命令行的原始参数，用空格分隔。仅在明确了解参数含义时使用，可能与上方配置冲突。',
-  recordCount: '每种记录类型（A / AAAA）写入测速结果中排名前 N 的 IP。N > 1 时会创建多条同名记录，实现 DNS 轮询负载均衡。',
-  skipUnchanged: '记录值与本次选出的 IP 一致时不调用服务商更新接口，减少 API 调用。',
-}
 
 // ---------- 保存 ----------
 function validate(): string {
@@ -341,7 +320,7 @@ async function save() {
       </label>
     </div>
 
-    <div v-if="loading" class="grid max-w-5xl gap-4">
+    <div v-if="loading" class="grid grid-cols-1 max-w-5xl gap-4">
       <Skeleton v-for="i in 4" :key="i" class="h-40 rounded-xl" />
     </div>
 
@@ -349,18 +328,18 @@ async function save() {
       <Button variant="outline" size="sm" @click="load">重试</Button>
     </EmptyState>
 
-    <div v-else class="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
-      <form class="grid min-w-0 gap-4" @submit.prevent="save">
+    <div v-else class="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
+      <form class="grid grid-cols-1 min-w-0 gap-4" @submit.prevent="save">
         <!-- 基本信息 -->
         <Card>
           <CardHeader>
             <CardTitle class="flex items-center gap-2"><Settings2 class="text-muted-foreground size-4" />基本信息</CardTitle>
           </CardHeader>
-          <CardContent class="grid gap-x-4 gap-y-3 md:grid-cols-3">
+          <CardContent class="grid grid-cols-1 gap-x-4 gap-y-3 md:grid-cols-3">
             <FormItem label="任务名称" required for="name" class="md:col-span-2">
               <Input id="name" v-model="form.name" maxlength="64" placeholder="如：主站优选" />
             </FormItem>
-            <FormItem label="IP 类型" tip="IPv4 写入 A 记录，IPv6 写入 AAAA 记录；双栈会分别测速。">
+            <FormItem label="IP 类型" help="IPv4 写 A 记录，IPv6 写 AAAA 记录；双栈分别测速">
               <Tabs :model-value="form.ipType" @update:model-value="setIpType">
                 <TabsList class="h-9 w-full">
                   <TabsTrigger value="v4">IPv4</TabsTrigger>
@@ -379,36 +358,36 @@ async function save() {
         <Card>
           <CardHeader>
             <CardTitle class="flex items-center gap-2"><Gauge class="text-muted-foreground size-4" />测速参数</CardTitle>
-            <CardDescription>对应 CloudflareSpeedTest 命令行参数，悬停问号查看说明</CardDescription>
+            <CardDescription>标签旁为对应的 CloudflareSpeedTest 命令行参数</CardDescription>
           </CardHeader>
-          <CardContent class="grid gap-4">
+          <CardContent class="grid grid-cols-1 gap-4">
             <!-- 延迟测速 -->
-            <section class="grid gap-2">
+            <section class="grid grid-cols-1 gap-2">
               <h4 class="text-muted-foreground text-xs font-medium">延迟测速</h4>
-              <div class="grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
-                <FormItem label="线程数" :tip="TIPS.threads"><NumInput v-model="form.speedTest.threads" :min="1" :max="1000" /></FormItem>
-                <FormItem label="测速次数" :tip="TIPS.pingTimes"><NumInput v-model="form.speedTest.pingTimes" :min="1" :max="100" suffix="次" /></FormItem>
-                <FormItem label="端口" :tip="TIPS.port"><NumInput v-model="form.speedTest.port" :min="1" :max="65535" /></FormItem>
-                <FormItem label="丢包率上限" :tip="TIPS.maxLossRate">
+              <div class="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
+                <FormItem label="线程数" flag="-n" help="越大越快，路由器等弱设备请调低。默认 200，最多 1000"><NumInput v-model="form.speedTest.threads" :min="1" :max="1000" /></FormItem>
+                <FormItem label="测速次数" flag="-t" help="每个 IP 测几次延迟。默认 4"><NumInput v-model="form.speedTest.pingTimes" :min="1" :max="100" suffix="次" /></FormItem>
+                <FormItem label="端口" flag="-tp" help="延迟与下载测速的端口。默认 443"><NumInput v-model="form.speedTest.port" :min="1" :max="65535" /></FormItem>
+                <FormItem label="丢包率上限" flag="-tlr" help="0–1，0 表示丢包即过滤。默认 1">
                   <NumInput v-model="form.speedTest.maxLossRate" :min="0" :max="1" :step="0.05" :decimals="2" />
                 </FormItem>
-                <FormItem label="延迟上限" :tip="TIPS.maxLatency"><NumInput v-model="form.speedTest.maxLatency" :min="0" :max="9999" suffix="ms" /></FormItem>
-                <FormItem label="延迟下限" :tip="TIPS.minLatency"><NumInput v-model="form.speedTest.minLatency" :min="0" :max="9999" suffix="ms" /></FormItem>
+                <FormItem label="延迟上限" flag="-tl" help="只保留平均延迟低于此值的 IP。默认 9999"><NumInput v-model="form.speedTest.maxLatency" :min="0" :max="9999" suffix="ms" /></FormItem>
+                <FormItem label="延迟下限" flag="-tll" help="只保留平均延迟高于此值的 IP。默认 0"><NumInput v-model="form.speedTest.minLatency" :min="0" :max="9999" suffix="ms" /></FormItem>
               </div>
             </section>
 
             <!-- 下载测速 -->
-            <section class="grid gap-2">
+            <section class="grid grid-cols-1 gap-2">
               <h4 class="text-muted-foreground text-xs font-medium">下载测速</h4>
               <div class="divide-y rounded-md border">
-                <SettingRow label="禁用下载测速" description="禁用后按延迟排序，测速更快" :tip="TIPS.disableDownload">
+                <SettingRow label="禁用下载测速" flag="-dd" description="结果改为按延迟排序（默认按下载速度），测速更快">
                   <Switch v-model="form.speedTest.disableDownload" />
                 </SettingRow>
               </div>
-              <div v-if="!form.speedTest.disableDownload" class="grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
-                <FormItem label="测速数量" :tip="TIPS.downloadCount"><NumInput v-model="form.speedTest.downloadCount" :min="1" :max="100" suffix="个" /></FormItem>
-                <FormItem label="测速时间" :tip="TIPS.downloadTime"><NumInput v-model="form.speedTest.downloadTime" :min="1" :max="120" suffix="秒" /></FormItem>
-                <FormItem label="速度下限" :tip="TIPS.minSpeed">
+              <div v-if="!form.speedTest.disableDownload" class="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
+                <FormItem label="测速数量" flag="-dn" help="从延迟最低的 IP 起下载测速的数量。默认 10"><NumInput v-model="form.speedTest.downloadCount" :min="1" :max="100" suffix="个 IP" /></FormItem>
+                <FormItem label="测速时间" flag="-dt" help="单个 IP 下载测速的最长时间。默认 10 秒"><NumInput v-model="form.speedTest.downloadTime" :min="1" :max="120" suffix="秒" /></FormItem>
+                <FormItem label="速度下限" flag="-sl" help="只保留高于此速度的 IP，凑够数量才停止。默认 0">
                   <NumInput v-model="form.speedTest.minSpeed" :min="0" :step="0.5" :decimals="2" suffix="MB/s" />
                 </FormItem>
                 <p
@@ -421,32 +400,32 @@ async function save() {
             </section>
 
             <!-- 测速地址与 HTTPing -->
-            <section class="grid gap-2">
+            <section class="grid grid-cols-1 gap-2">
               <h4 class="text-muted-foreground text-xs font-medium">测速地址与 HTTPing</h4>
-              <FormItem :tip="TIPS.url" label="测速地址">
+              <FormItem label="测速地址" flag="-url" help="下载测速与 HTTPing 使用的地址；内置地址不保证可用，建议自建">
                 <Input v-model="form.speedTest.url" placeholder="留空使用 cfst 内置地址" class="font-mono" />
               </FormItem>
               <div class="divide-y rounded-md border">
-                <SettingRow label="HTTPing 模式" description="延迟测速改用 HTTP 协议（默认 TCPing）" :tip="TIPS.httping">
+                <SettingRow label="HTTPing 模式" flag="-httping" description="延迟测速改用 HTTP 协议访问测速地址（默认 TCPing）">
                   <Switch v-model="form.speedTest.httping" />
                 </SettingRow>
               </div>
-              <div v-if="form.speedTest.httping" class="grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
-                <FormItem label="有效状态码" :tip="TIPS.httpingCode"><NumInput v-model="form.speedTest.httpingCode" :min="0" :max="599" /></FormItem>
-                <FormItem label="匹配地区" :tip="TIPS.cfColo" class="lg:col-span-3">
+              <div v-if="form.speedTest.httping" class="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
+                <FormItem label="有效状态码" flag="-httping-code" help="仅限一个，0 表示默认（200、301、302）"><NumInput v-model="form.speedTest.httpingCode" :min="0" :max="599" /></FormItem>
+                <FormItem label="匹配地区" flag="-cfcolo" help="机场三字码，英文逗号分隔，仅 HTTPing 模式有效" class="lg:col-span-3">
                   <Input v-model="form.speedTest.cfColo" placeholder="HKG,NRT,LAX（留空为所有地区）" class="font-mono" />
                 </FormItem>
               </div>
             </section>
 
             <!-- IP 来源 -->
-            <section class="grid gap-2">
+            <section class="grid grid-cols-1 gap-2">
               <h4 class="text-muted-foreground text-xs font-medium">IP 来源</h4>
               <div class="divide-y rounded-md border">
-                <SettingRow label="测速全部 IP" description="对每个 IP 测速（仅 IPv4），耗时显著增加" :tip="TIPS.allIP">
+                <SettingRow label="测速全部 IP" flag="-allip" description="对 IP 段内每个 IP 测速（仅 IPv4，默认每个 /24 随机一个），耗时显著增加">
                   <Switch v-model="form.speedTest.allIP" />
                 </SettingRow>
-                <SettingRow label="IP 段" :description="form.speedTest.ipSource === 'custom' ? '为本任务单独指定 IP 段' : '使用 cfst 目录下的 ip.txt / ipv6.txt'" :tip="TIPS.ipSource">
+                <SettingRow label="IP 段" :description="form.speedTest.ipSource === 'custom' ? '为本任务单独指定 IP 段' : '使用 cfst 目录下的 ip.txt / ipv6.txt，可在「cfst 管理」中编辑'">
                   <Tabs v-model="form.speedTest.ipSource">
                     <TabsList class="h-8">
                       <TabsTrigger value="default" class="text-xs">默认文件</TabsTrigger>
@@ -455,7 +434,7 @@ async function save() {
                   </Tabs>
                 </SettingRow>
               </div>
-              <div v-if="form.speedTest.ipSource === 'custom'" :class="['grid gap-x-4 gap-y-3', showV4 && showV6 && 'md:grid-cols-2']">
+              <div v-if="form.speedTest.ipSource === 'custom'" :class="['grid grid-cols-1 gap-x-4 gap-y-3', showV4 && showV6 && 'md:grid-cols-2']">
                 <FormItem v-if="showV4" label="IPv4 段" help="每行一个或以逗号分隔">
                   <Textarea v-model="form.speedTest.ipv4Ranges" class="text-code min-h-24 font-mono" placeholder="173.245.48.0/20&#10;104.16.0.0/13" />
                 </FormItem>
@@ -472,7 +451,7 @@ async function save() {
                 </button>
               </CollapsibleTrigger>
               <CollapsibleContent class="pt-2">
-                <FormItem label="附加参数" :tip="TIPS.extraArgs">
+                <FormItem label="附加参数" help="原样追加到 cfst 命令行，空格分隔；可能与上方配置冲突，了解含义再用">
                   <Input v-model="form.speedTest.extraArgs" class="font-mono" placeholder="如 -tlr 0.2" />
                 </FormItem>
               </CollapsibleContent>
@@ -498,12 +477,12 @@ async function save() {
             <EmptyState v-else-if="!form.targets.length" compact :icon="Globe" title="至少添加一个目标记录">
               <Button type="button" size="sm" variant="outline" @click="addTarget"><Plus />添加目标记录</Button>
             </EmptyState>
-            <div v-else class="grid gap-2">
+            <div v-else class="grid grid-cols-1 gap-2">
               <!-- md 以上的列标题 -->
               <div class="text-muted-foreground text-label hidden gap-2 px-0.5 font-medium md:grid md:grid-cols-[minmax(0,1.5fr)_minmax(0,1.3fr)_minmax(0,0.8fr)_84px_minmax(0,0.8fr)_32px]">
                 <span>DNS 账号</span><span>主域名</span><span>主机记录</span><span>TTL</span><span>线路 / 代理</span><span />
               </div>
-              <div v-for="(t, i) in form.targets" :key="i" class="grid gap-1 border-b pb-2 last:border-b-0 last:pb-0">
+              <div v-for="(t, i) in form.targets" :key="i" class="grid grid-cols-1 gap-1 border-b pb-2 last:border-b-0 last:pb-0">
                 <div class="grid grid-cols-2 items-center gap-2 md:grid-cols-[minmax(0,1.5fr)_minmax(0,1.3fr)_minmax(0,0.8fr)_84px_minmax(0,0.8fr)_32px]">
                   <Select :model-value="t.accountId || undefined" @update:model-value="onAccountChange(t, $event)">
                     <!-- 触发器只显示服务商徽标 + 账号名，避免截断；下拉项仍显示“名称 · 服务商” -->
@@ -516,7 +495,7 @@ async function save() {
                           :title="meta.providerName(accountById(t.accountId)!.provider)"
                           class="size-5 rounded"
                         />
-                        <span class="truncate">{{ accountById(t.accountId)!.name }}</span>
+                        <span class="truncate" :title="accountById(t.accountId)!.name">{{ accountById(t.accountId)!.name }}</span>
                       </span>
                       <SelectValue v-else placeholder="选择账号" />
                     </SelectTrigger>
@@ -568,17 +547,17 @@ async function save() {
         </Card>
 
         <!-- 更新策略 + 通知 -->
-        <div class="grid gap-4 md:grid-cols-2">
+        <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
           <Card>
             <CardHeader>
               <CardTitle class="flex items-center gap-2"><SlidersHorizontal class="text-muted-foreground size-4" />更新策略</CardTitle>
             </CardHeader>
-            <CardContent class="grid gap-3">
-              <FormItem label="写入 IP 数量" :tip="TIPS.recordCount" help="多条同名记录实现负载均衡（1–10）">
+            <CardContent class="grid grid-cols-1 gap-3">
+              <FormItem label="写入 IP 数量" help="每种记录类型写入排名前 N 的 IP；多于 1 条时创建同名记录做负载均衡（1–10）">
                 <NumInput v-model="form.update.recordCount" :min="1" :max="10" suffix="条" class="max-w-40" />
               </FormItem>
               <div class="divide-y rounded-md border">
-                <SettingRow label="IP 未变化时跳过" description="记录值未变时不调用更新接口" :tip="TIPS.skipUnchanged">
+                <SettingRow label="IP 未变化时跳过" description="记录值与本次选出的 IP 一致时不调用更新接口，减少 API 调用">
                   <Switch v-model="form.update.skipUnchanged" />
                 </SettingRow>
               </div>
@@ -598,7 +577,7 @@ async function save() {
                 <label v-for="nt in notifiers" :key="nt.id" class="hover:bg-accent/40 flex cursor-pointer items-center gap-3 px-3 py-2">
                   <Checkbox :model-value="form.notifierIds.includes(nt.id)" @update:model-value="toggleNotifier(nt.id, !!$event)" />
                   <BrandIcon kind="notifier" :type="nt.type" :name="meta.notifierName(nt.type)" class="size-6" />
-                  <span class="min-w-0 flex-1 truncate text-sm">{{ nt.name }}</span>
+                  <span class="min-w-0 flex-1 truncate text-sm" :title="nt.name">{{ nt.name }}</span>
                   <span class="text-muted-foreground text-xs">{{ meta.notifierName(nt.type) }}{{ nt.enabled ? '' : ' · 已停用' }}</span>
                 </label>
               </div>
@@ -619,7 +598,7 @@ async function save() {
           <CardHeader>
             <CardTitle>摘要</CardTitle>
           </CardHeader>
-          <CardContent class="grid gap-3 text-sm">
+          <CardContent class="grid grid-cols-1 gap-3 text-sm">
             <div>
               <div class="text-muted-foreground text-xs">状态</div>
               <div class="mt-0.5 flex items-center gap-2">
@@ -640,10 +619,10 @@ async function save() {
             </div>
             <div>
               <div class="text-muted-foreground text-xs">将写入的记录（{{ summaryRecords.length }}）</div>
-              <ul v-if="summaryRecords.length" class="mt-1 grid gap-1">
-                <li v-for="r in summaryRecords" :key="r.key" class="flex items-center gap-1.5">
-                  <ToneBadge class="px-1">{{ r.type }}</ToneBadge>
-                  <span class="text-code truncate font-mono">{{ r.fqdn }}</span>
+              <ul v-if="summaryRecords.length" class="mt-1 grid grid-cols-1 gap-1">
+                <li v-for="r in summaryRecords" :key="r.key" class="flex min-w-0 items-center gap-1.5">
+                  <ToneBadge class="shrink-0 px-1">{{ r.type }}</ToneBadge>
+                  <span class="text-code min-w-0 truncate font-mono" :title="r.fqdn">{{ r.fqdn }}</span>
                 </li>
               </ul>
               <p v-else class="text-muted-foreground mt-0.5 text-xs">尚未填写目标记录</p>
@@ -664,7 +643,7 @@ async function save() {
           <DialogDescription class="font-mono">{{ rec.title }}</DialogDescription>
         </DialogHeader>
         <div class="max-h-[60vh] overflow-auto rounded-md border">
-          <div v-if="rec.loading" class="grid gap-2 p-4"><Skeleton v-for="i in 3" :key="i" class="h-8" /></div>
+          <div v-if="rec.loading" class="grid grid-cols-1 gap-2 p-4"><Skeleton v-for="i in 3" :key="i" class="h-8" /></div>
           <EmptyState v-else-if="rec.error" :icon="CircleX" compact title="查询失败" />
           <EmptyState v-else-if="!rec.records.length" :icon="Globe" compact title="没有匹配的记录" description="保存并执行任务后会自动创建" />
           <Table v-else>

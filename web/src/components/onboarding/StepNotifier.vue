@@ -96,13 +96,13 @@ async function save() {
 </script>
 
 <template>
-  <div class="grid gap-4">
+  <div class="grid grid-cols-1 gap-4">
     <Skeleton v-if="!list" class="h-40" />
     <template v-else>
-      <div v-if="list.length" class="grid gap-2">
+      <div v-if="list.length" class="grid grid-cols-1 gap-2">
         <div v-for="n in list" :key="n.id" class="flex items-center gap-3 rounded-lg border px-3 py-2.5">
           <BrandIcon kind="notifier" :type="n.type" class="size-7" />
-          <span class="min-w-0 flex-1 truncate text-sm font-medium">{{ n.name }}</span>
+          <span class="min-w-0 flex-1 truncate text-sm font-medium" :title="n.name">{{ n.name }}</span>
           <CircleCheck class="text-success size-4 shrink-0" />
           <ToneBadge tone="primary">{{ meta.notifierName(n.type) }}</ToneBadge>
         </div>
@@ -113,7 +113,7 @@ async function save() {
 
       <template v-if="adding">
         <TypePicker v-if="!form.type" kind="notifier" :types="meta.notifiers" @pick="pick" />
-        <div v-else class="grid gap-3">
+        <div v-else class="grid grid-cols-1 gap-3">
           <div v-if="typeMeta" class="bg-muted/40 flex flex-wrap items-start gap-3 rounded-lg border p-3">
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-2 text-sm font-medium">

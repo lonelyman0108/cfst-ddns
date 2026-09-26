@@ -237,7 +237,7 @@ defineExpose({ reload: start })
 
 <template>
   <div class="flex flex-col gap-4">
-    <div v-if="loading && !summary" class="grid gap-4">
+    <div v-if="loading && !summary" class="grid grid-cols-1 gap-4">
       <Skeleton class="h-36 w-full rounded-xl" />
       <Skeleton class="h-72 w-full rounded-xl" />
     </div>
@@ -248,7 +248,7 @@ defineExpose({ reload: start })
 
     <template v-if="summary">
       <Card>
-        <CardContent class="grid gap-3">
+        <CardContent class="grid grid-cols-1 gap-3">
           <div class="flex flex-wrap items-center gap-2">
             <StatusBadge :status="summary.status" />
             <ToneBadge v-if="summary.dryRun" tone="info" title="只测速，不修改 DNS、不发送通知">试运行</ToneBadge>
@@ -370,7 +370,7 @@ defineExpose({ reload: start })
                   <TableHead>记录</TableHead>
                   <TableHead class="w-16">类型</TableHead>
                   <TableHead>原值 → 新值</TableHead>
-                  <TableHead>账号</TableHead>
+                  <TableHead class="hidden xl:table-cell">账号</TableHead>
                   <TableHead class="pr-5">说明</TableHead>
                 </TableRow>
               </TableHeader>
@@ -379,15 +379,14 @@ defineExpose({ reload: start })
                   <TableCell class="pl-5">
                     <ToneBadge :tone="changeActionMeta[c.action]?.type ?? 'neutral'">{{ changeActionMeta[c.action]?.label ?? c.action }}</ToneBadge>
                   </TableCell>
-                  <TableCell class="font-medium">{{ c.fqdn }}</TableCell>
+                  <TableCell class="min-w-48 font-medium whitespace-normal break-all">{{ c.fqdn }}</TableCell>
                   <TableCell class="font-mono text-code">{{ c.type }}</TableCell>
-                  <TableCell class="font-mono text-code">
-                    <span class="text-muted-foreground">{{ c.oldValue || '∅' }}</span>
-                    <span class="text-muted-foreground mx-1.5">→</span>
-                    <span>{{ c.newValue || '∅' }}</span>
+                  <TableCell class="text-code min-w-40 font-mono whitespace-normal break-all">
+                    <div class="text-muted-foreground">{{ c.oldValue || '∅' }}</div>
+                    <div><span class="text-muted-foreground mr-1">→</span>{{ c.newValue || '∅' }}</div>
                   </TableCell>
-                  <TableCell class="text-muted-foreground">{{ c.accountName }}</TableCell>
-                  <TableCell class="text-muted-foreground max-w-80 pr-5 text-xs whitespace-normal">{{ c.message || '-' }}</TableCell>
+                  <TableCell class="text-muted-foreground hidden xl:table-cell min-w-32 whitespace-normal break-words">{{ c.accountName }}</TableCell>
+                  <TableCell class="text-muted-foreground max-w-80 min-w-40 pr-5 text-xs whitespace-normal break-words">{{ c.message || '-' }}</TableCell>
                 </TableRow>
               </TableBody>
             </Table>

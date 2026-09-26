@@ -80,8 +80,8 @@ const HOOK_CMD = `curl -X POST "${window.location.origin}/api/hooks/tasks/<任�
     <SectionNav :sections="HELP_SECTIONS">
       <Card id="quick-start" class="scroll-mt-20">
         <CardHeader><CardTitle>快速上手</CardTitle></CardHeader>
-        <CardContent class="grid gap-3">
-          <ol class="grid gap-2">
+        <CardContent class="grid grid-cols-1 gap-3">
+          <ol class="grid grid-cols-1 gap-2">
             <li v-for="(s, i) in STEPS" :key="s.title" class="flex gap-3">
               <span class="bg-muted flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-medium tabular-nums">{{ i + 1 }}</span>
               <div class="min-w-0 flex-1">
@@ -114,9 +114,9 @@ const HOOK_CMD = `curl -X POST "${window.location.origin}/api/hooks/tasks/<任�
             <TableBody>
               <TableRow v-for="p in PARAMS" :key="p.flag">
                 <TableCell class="pl-5 font-mono text-code">{{ p.flag }}</TableCell>
-                <TableCell class="whitespace-nowrap">{{ p.name }}</TableCell>
-                <TableCell class="text-muted-foreground whitespace-nowrap">{{ p.def }}</TableCell>
-                <TableCell class="text-muted-foreground min-w-64 pr-5 whitespace-normal">{{ p.desc }}</TableCell>
+                <TableCell class="min-w-20 whitespace-normal">{{ p.name }}</TableCell>
+                <TableCell class="text-muted-foreground min-w-16 whitespace-normal">{{ p.def }}</TableCell>
+                <TableCell class="text-muted-foreground min-w-48 pr-5 whitespace-normal">{{ p.desc }}</TableCell>
               </TableRow>
             </TableBody>
           </Table>
@@ -125,7 +125,7 @@ const HOOK_CMD = `curl -X POST "${window.location.origin}/api/hooks/tasks/<任�
 
       <Card id="faq" class="scroll-mt-20">
         <CardHeader><CardTitle>常见问题</CardTitle></CardHeader>
-        <CardContent class="grid gap-4">
+        <CardContent class="grid grid-cols-1 gap-4">
           <div v-for="f in FAQ" :key="f.q">
             <h3 class="text-sm font-medium">{{ f.q }}</h3>
             <p class="text-muted-foreground mt-1 text-sm leading-relaxed">{{ f.a }}</p>
@@ -142,7 +142,7 @@ const HOOK_CMD = `curl -X POST "${window.location.origin}/api/hooks/tasks/<任�
 
       <Card id="webhook" class="scroll-mt-20">
         <CardHeader><CardTitle>Webhook 用法</CardTitle></CardHeader>
-        <CardContent class="grid gap-3 text-sm">
+        <CardContent class="grid grid-cols-1 gap-3 text-sm">
           <p class="text-muted-foreground">
             在「系统设置 → Webhook 触发」中启用后，外部系统（如路由器拨号脚本、定时器、智能家居）可以不登录直接触发任务。
           </p>
@@ -165,7 +165,7 @@ const HOOK_CMD = `curl -X POST "${window.location.origin}/api/hooks/tasks/<任�
 
       <Card id="backup" class="scroll-mt-20">
         <CardHeader><CardTitle>备份与迁移</CardTitle></CardHeader>
-        <CardContent class="grid gap-3 text-sm">
+        <CardContent class="grid grid-cols-1 gap-3 text-sm">
           <ul class="text-muted-foreground list-disc space-y-1 pl-5">
             <li>「系统设置 → 备份与恢复」可导出全部配置为 JSON，文件包含<strong class="text-foreground">明文凭据</strong>，请妥善保管。</li>
             <li>恢复会覆盖现有的账号、通知渠道、任务与设置。全新部署时，也可以在创建管理员的页面直接选择备份文件恢复。</li>

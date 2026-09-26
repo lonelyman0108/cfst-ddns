@@ -157,13 +157,13 @@ async function create() {
 </script>
 
 <template>
-  <div class="grid gap-4">
+  <div class="grid grid-cols-1 gap-4">
     <Skeleton v-if="!tasks" class="h-48" />
     <template v-else>
-      <div v-if="tasks.length" class="grid gap-2">
+      <div v-if="tasks.length" class="grid grid-cols-1 gap-2">
         <div v-for="t in tasks" :key="t.id" class="flex items-center gap-3 rounded-lg border px-3 py-2.5">
           <CircleCheck class="text-success size-4 shrink-0" />
-          <router-link :to="`/tasks/${t.id}`" class="min-w-0 flex-1 truncate text-sm font-medium hover:underline">{{ t.name }}</router-link>
+          <router-link :to="`/tasks/${t.id}`" class="min-w-0 flex-1 truncate text-sm font-medium hover:underline" :title="t.name">{{ t.name }}</router-link>
           <span class="text-muted-foreground hidden text-xs sm:inline">{{ t.cron ? describeCron(t.cron) : '仅手动' }}</span>
           <ToneBadge>{{ ipTypeLabel[t.ipType] ?? t.ipType }}</ToneBadge>
         </div>
@@ -176,8 +176,8 @@ async function create() {
         需要先在上一步添加 DNS 账号
       </p>
 
-      <div v-else-if="adding" class="grid gap-4">
-        <div class="grid gap-2 sm:grid-cols-3">
+      <div v-else-if="adding" class="grid grid-cols-1 gap-4">
+        <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
           <button
             v-for="t in TEMPLATES"
             :key="t.key"
@@ -195,7 +195,7 @@ async function create() {
           </button>
         </div>
 
-        <div class="grid gap-3 sm:grid-cols-2">
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <FormItem label="DNS 账号" required :error="errors.account" class="sm:col-span-2">
             <Select :model-value="form.accountId || undefined" @update:model-value="onAccount">
               <SelectTrigger class="w-full"><SelectValue placeholder="选择账号" /></SelectTrigger>
@@ -211,7 +211,7 @@ async function create() {
             <Input v-model="form.rr" placeholder="cdn" />
           </FormItem>
           <FormItem label="写入 IP 数量" help="大于 1 时创建多条同名记录做负载均衡">
-            <NumInput v-model="form.recordCount" :min="1" :max="10" suffix="个" class="max-w-32" />
+            <NumInput v-model="form.recordCount" :min="1" :max="10" suffix="条" class="max-w-32" />
           </FormItem>
           <FormItem label="任务名称" required :error="errors.name">
             <Input v-model="form.name" maxlength="64" @input="form.nameTouched = true" />

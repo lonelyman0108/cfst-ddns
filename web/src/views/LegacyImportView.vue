@@ -132,7 +132,7 @@ function configLines(kind: 'provider' | 'notifier', type: string, c: Record<stri
         <CardTitle class="flex items-center gap-2"><CircleCheck class="text-success size-4" />导入完成</CardTitle>
         <CardDescription>凭据已加密保存，建议在任务页检查一次目标记录后再执行</CardDescription>
       </CardHeader>
-      <CardContent class="grid gap-4">
+      <CardContent class="grid grid-cols-1 gap-4">
         <div class="grid grid-cols-3 gap-3">
           <div class="rounded-lg border p-3">
             <div class="text-muted-foreground text-xs">DNS 账号</div>
@@ -179,20 +179,20 @@ function configLines(kind: 'provider' | 'notifier', type: string, c: Record<stri
         <CardContent class="text-muted-foreground py-10 text-center text-sm">没有识别到可导入的配置，请检查粘贴的内容</CardContent>
       </Card>
 
-      <section v-if="preview.accounts.length" class="grid gap-2">
+      <section v-if="preview.accounts.length" class="grid grid-cols-1 gap-2">
         <h2 class="flex items-center gap-2 text-sm font-medium"><UserRoundKey class="text-muted-foreground size-4" />DNS 账号 · {{ preview.accounts.length }}</h2>
-        <div class="grid gap-3 sm:grid-cols-2">
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Card v-for="(a, i) in preview.accounts" :key="i" class="gap-2 py-4">
             <CardHeader class="grid-cols-[auto_1fr] gap-x-3">
               <BrandIcon kind="provider" :type="a.provider" class="row-span-2 size-9" />
-              <CardTitle class="truncate">{{ a.name }}</CardTitle>
+              <CardTitle class="truncate" :title="a.name">{{ a.name }}</CardTitle>
               <CardDescription><ToneBadge tone="primary">{{ meta.providerName(a.provider) }}</ToneBadge></CardDescription>
             </CardHeader>
             <CardContent>
-              <dl class="grid gap-1 text-xs">
+              <dl class="grid grid-cols-1 gap-1 text-xs">
                 <div v-for="[k, v] in configLines('provider', a.provider, a.config)" :key="k" class="flex gap-2">
-                  <dt class="text-muted-foreground w-28 shrink-0 truncate">{{ k }}</dt>
-                  <dd class="min-w-0 truncate font-mono">{{ v }}</dd>
+                  <dt class="text-muted-foreground w-28 shrink-0 truncate" :title="k">{{ k }}</dt>
+                  <dd class="min-w-0 truncate font-mono" :title="v">{{ v }}</dd>
                 </div>
               </dl>
             </CardContent>
@@ -200,13 +200,13 @@ function configLines(kind: 'provider' | 'notifier', type: string, c: Record<stri
         </div>
       </section>
 
-      <section v-if="preview.notifiers.length" class="grid gap-2">
+      <section v-if="preview.notifiers.length" class="grid grid-cols-1 gap-2">
         <h2 class="flex items-center gap-2 text-sm font-medium"><Bell class="text-muted-foreground size-4" />通知渠道 · {{ preview.notifiers.length }}</h2>
-        <div class="grid gap-3 sm:grid-cols-2">
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Card v-for="(n, i) in preview.notifiers" :key="i" class="gap-2 py-4">
             <CardHeader class="grid-cols-[auto_1fr] gap-x-3">
               <BrandIcon kind="notifier" :type="n.type" class="row-span-2 size-9" />
-              <CardTitle class="truncate">{{ n.name }}</CardTitle>
+              <CardTitle class="truncate" :title="n.name">{{ n.name }}</CardTitle>
               <CardDescription class="flex flex-wrap gap-1.5">
                 <ToneBadge tone="primary">{{ meta.notifierName(n.type) }}</ToneBadge>
                 <ToneBadge v-if="n.onSuccess">成功时</ToneBadge>
@@ -215,10 +215,10 @@ function configLines(kind: 'provider' | 'notifier', type: string, c: Record<stri
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <dl class="grid gap-1 text-xs">
+              <dl class="grid grid-cols-1 gap-1 text-xs">
                 <div v-for="[k, v] in configLines('notifier', n.type, n.config)" :key="k" class="flex gap-2">
-                  <dt class="text-muted-foreground w-28 shrink-0 truncate">{{ k }}</dt>
-                  <dd class="min-w-0 truncate font-mono">{{ v }}</dd>
+                  <dt class="text-muted-foreground w-28 shrink-0 truncate" :title="k">{{ k }}</dt>
+                  <dd class="min-w-0 truncate font-mono" :title="v">{{ v }}</dd>
                 </div>
               </dl>
             </CardContent>
@@ -226,11 +226,11 @@ function configLines(kind: 'provider' | 'notifier', type: string, c: Record<stri
         </div>
       </section>
 
-      <section v-if="preview.tasks.length" class="grid gap-2">
+      <section v-if="preview.tasks.length" class="grid grid-cols-1 gap-2">
         <h2 class="flex items-center gap-2 text-sm font-medium"><ListChecks class="text-muted-foreground size-4" />任务 · {{ preview.tasks.length }}</h2>
         <Card v-for="(t, i) in preview.tasks" :key="i" class="gap-2 py-4">
           <CardHeader>
-            <CardTitle class="truncate">{{ t.name }}</CardTitle>
+            <CardTitle class="truncate" :title="t.name">{{ t.name }}</CardTitle>
             <CardDescription class="flex flex-wrap gap-1.5">
               <ToneBadge>{{ t.cron ? describeCron(t.cron) : '仅手动' }}</ToneBadge>
               <ToneBadge>{{ ipTypeLabel[t.ipType as IPType] ?? t.ipType }}</ToneBadge>
@@ -256,7 +256,7 @@ function configLines(kind: 'provider' | 'notifier', type: string, c: Record<stri
         <CardTitle class="flex items-center gap-2"><ScanText class="text-muted-foreground size-4" />粘贴旧配置</CardTitle>
         <CardDescription>支持 KEY=VALUE、export KEY=…、- KEY=VALUE 与 KEY: VALUE 写法；先预览，确认后才会创建</CardDescription>
       </CardHeader>
-      <CardContent class="grid gap-3">
+      <CardContent class="grid grid-cols-1 gap-3">
         <div
           :class="['relative rounded-md transition-shadow', dragging ? 'ring-primary ring-2' : '']"
           @dragover.prevent="dragging = true"

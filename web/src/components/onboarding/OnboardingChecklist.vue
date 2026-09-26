@@ -48,12 +48,12 @@ defineExpose({ reload: async () => (state.value = await onboardingApi.state()) }
         <Button variant="ghost" size="icon" class="-mr-2 size-8" title="不再显示" :disabled="dismissing" @click="dismiss"><X /></Button>
       </CardAction>
     </CardHeader>
-    <CardContent class="grid gap-3">
+    <CardContent class="grid grid-cols-1 gap-3">
       <div class="flex items-center gap-3">
         <Progress :model-value="(doneCount / ONBOARDING_STEPS.length) * 100" class="h-1.5" />
         <span class="text-muted-foreground shrink-0 text-xs tabular-nums">{{ doneCount }}/{{ ONBOARDING_STEPS.length }}</span>
       </div>
-      <ul class="grid gap-1 sm:grid-cols-2 lg:grid-cols-5">
+      <ul class="grid grid-cols-1 gap-1 sm:grid-cols-2 lg:grid-cols-5">
         <li v-for="s in ONBOARDING_STEPS" :key="s.key">
           <router-link
             :to="{ path: '/welcome', query: { step: s.key } }"

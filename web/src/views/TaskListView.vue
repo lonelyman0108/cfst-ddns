@@ -129,7 +129,7 @@ async function remove(t: Task) {
     </PageHeader>
 
     <Card class="gap-0 overflow-hidden py-0">
-      <div v-if="!loaded" class="grid gap-3 p-5">
+      <div v-if="!loaded" class="grid grid-cols-1 gap-3 p-5">
         <Skeleton v-for="i in 4" :key="i" class="h-10" />
       </div>
       <EmptyState v-else-if="!tasks.length" :icon="ListChecks" title="还没有任务" description="创建一个任务：选择测速参数、目标 DNS 记录与执行周期">
@@ -143,7 +143,7 @@ async function remove(t: Task) {
             <TableHead class="w-16">启用</TableHead>
             <TableHead>执行周期</TableHead>
             <TableHead>IP 类型</TableHead>
-            <TableHead class="text-center">目标</TableHead>
+            <TableHead class="hidden xl:table-cell text-center">目标</TableHead>
             <TableHead>下次执行</TableHead>
             <TableHead>上次执行</TableHead>
             <TableHead class="w-28 pr-5 text-right">操作</TableHead>
@@ -151,9 +151,9 @@ async function remove(t: Task) {
         </TableHeader>
         <TableBody>
           <TableRow v-for="t in tasks" :key="t.id">
-            <TableCell class="pl-5">
+            <TableCell class="min-w-40 whitespace-normal wrap-anywhere pl-5">
               <div class="flex items-center gap-2">
-                <router-link :to="`/tasks/${t.id}`" class="font-medium hover:underline">{{ t.name }}</router-link>
+                <router-link :to="`/tasks/${t.id}`" class="line-clamp-2 font-medium hover:underline" :title="t.name">{{ t.name }}</router-link>
                 <StatusBadge v-if="t.running" status="running" />
               </div>
             </TableCell>
@@ -168,7 +168,7 @@ async function remove(t: Task) {
               </Tooltip>
             </TableCell>
             <TableCell><ToneBadge>{{ ipTypeLabel[t.ipType] ?? t.ipType }}</ToneBadge></TableCell>
-            <TableCell class="text-center tabular-nums">{{ t.targets?.length ?? 0 }}</TableCell>
+            <TableCell class="hidden xl:table-cell text-center tabular-nums">{{ t.targets?.length ?? 0 }}</TableCell>
             <TableCell class="text-muted-foreground text-xs">
               <span v-if="t.nextRunAt && t.enabled" :title="fmtTime(t.nextRunAt)">{{ fromNow(t.nextRunAt) }}</span>
               <span v-else>-</span>

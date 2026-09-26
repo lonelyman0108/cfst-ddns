@@ -124,7 +124,7 @@ async function adopt(c: CfstCandidate) {
 </script>
 
 <template>
-  <div class="grid gap-4">
+  <div class="grid grid-cols-1 gap-4">
     <Skeleton v-if="!status" class="h-24" />
 
     <div v-else-if="status.installed" class="border-success/40 bg-success/5 flex items-start gap-3 rounded-lg border p-4">
@@ -159,7 +159,7 @@ async function adopt(c: CfstCandidate) {
           <TabsTrigger value="scan">自动识别</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="online" class="mt-3 grid gap-3">
+        <TabsContent value="online" class="mt-3 grid grid-cols-1 gap-3">
           <p class="text-muted-foreground text-sm">从 GitHub 下载最新版。国内网络建议先选用一个延迟低的镜像。</p>
           <MirrorPicker />
           <div>
@@ -169,7 +169,7 @@ async function adopt(c: CfstCandidate) {
           </div>
         </TabsContent>
 
-        <TabsContent value="upload" class="mt-3 grid gap-3">
+        <TabsContent value="upload" class="mt-3 grid grid-cols-1 gap-3">
           <p class="text-muted-foreground text-sm">
             从
             <InlineLink href="https://github.com/XIU2/CloudflareSpeedTest/releases">cfst Releases</InlineLink>
@@ -195,7 +195,7 @@ async function adopt(c: CfstCandidate) {
           </div>
         </TabsContent>
 
-        <TabsContent value="scan" class="mt-3 grid gap-3">
+        <TabsContent value="scan" class="mt-3 grid grid-cols-1 gap-3">
           <div class="flex items-center justify-between gap-2">
             <p class="text-muted-foreground text-sm">查找数据目录、PATH 和镜像内置目录中已有的 cfst</p>
             <Button variant="outline" size="sm" :disabled="scanning" @click="scan">

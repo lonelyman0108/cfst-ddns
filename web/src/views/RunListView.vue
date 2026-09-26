@@ -171,7 +171,7 @@ async function doPurge() {
     </div>
 
     <Card class="gap-0 overflow-hidden py-0">
-      <div v-if="!loaded" class="grid gap-3 p-5"><Skeleton v-for="i in 6" :key="i" class="h-10" /></div>
+      <div v-if="!loaded" class="grid grid-cols-1 gap-3 p-5"><Skeleton v-for="i in 6" :key="i" class="h-10" /></div>
       <EmptyState
         v-else-if="!items.length && (query.taskId !== ALL || query.status !== ALL)"
         :icon="History"
@@ -191,10 +191,10 @@ async function doPurge() {
             <TableHead>任务</TableHead>
             <TableHead>最优 IP</TableHead>
             <TableHead class="text-right">延迟 / 速度</TableHead>
-            <TableHead class="text-center">变更</TableHead>
+            <TableHead class="hidden xl:table-cell text-center">变更</TableHead>
             <TableHead>开始时间</TableHead>
-            <TableHead class="text-right">耗时</TableHead>
-            <TableHead>说明</TableHead>
+            <TableHead class="hidden xl:table-cell text-right">耗时</TableHead>
+            <TableHead class="hidden xl:table-cell">说明</TableHead>
             <TableHead class="w-28 pr-5 text-right">操作</TableHead>
           </TableRow>
         </TableHeader>
@@ -202,28 +202,38 @@ async function doPurge() {
           <TableRow v-for="r in items" :key="r.id">
             <TableCell class="text-muted-foreground pl-5 font-mono text-code">{{ r.id }}</TableCell>
             <TableCell>
-              <div class="flex items-center gap-1.5">
+              <div class="flex flex-wrap items-center gap-1.5">
                 <StatusBadge :status="r.status" />
                 <ToneBadge v-if="r.dryRun" tone="info" title="只测速，不修改 DNS、不发送通知">试运行</ToneBadge>
               </div>
             </TableCell>
-            <TableCell>
-              <router-link :to="`/tasks/${r.taskId}`" class="font-medium hover:underline">{{ r.taskName }}</router-link>
+            <TableCell class="min-w-40 whitespace-normal wrap-anywhere">
+              <router-link :to="`/tasks/${r.taskId}`" class="line-clamp-2 font-medium hover:underline" :title="r.taskName">{{ r.taskName }}</router-link>
               <div class="text-muted-foreground text-xs">{{ runTriggerLabel[r.trigger] ?? r.trigger }}</div>
+              <!-- 窄屏隐藏「说明」列时显示在任务名下方 -->
+              <div v-if="r.message" class="text-muted-foreground line-clamp-2 text-xs xl:hidden" :title="r.message">{{ r.message }}</div>
             </TableCell>
-            <TableCell class="font-mono text-code">
+            <TableCell class="text-code min-w-32 font-mono whitespace-normal break-all">
               <div v-if="r.bestIPv4">{{ r.bestIPv4 }}</div>
-              <div v-if="r.bestIPv6" class="max-w-52 truncate">{{ r.bestIPv6 }}</div>
+              <div v-if="r.bestIPv6">{{ r.bestIPv6 }}</div>
               <span v-if="!r.bestIPv4 && !r.bestIPv6" class="text-muted-foreground">-</span>
             </TableCell>
-            <TableCell class="text-right text-xs tabular-nums">{{ fmtLatency(r.bestLatency) }} / {{ fmtSpeed(r.bestSpeed) }}</TableCell>
-            <TableCell class="text-center">
+            <TableCell class="text-right text-xs tabular-nums">
+              <div>{{ fmtLatency(r.bestLatency) }}</div>
+              <div class="text-muted-foreground">{{ fmtSpeed(r.bestSpeed) }}</div>
+            </TableCell>
+            <TableCell class="hidden xl:table-cell text-center">
               <ToneBadge v-if="r.changed" tone="success">是</ToneBadge>
               <span v-else class="text-muted-foreground text-xs">否</span>
             </TableCell>
-            <TableCell class="text-xs tabular-nums" :title="fromNow(r.startedAt || r.createdAt)">{{ fmtTime(r.startedAt || r.createdAt) }}</TableCell>
-            <TableCell class="text-muted-foreground text-right text-xs tabular-nums">{{ fmtDuration(r.durationMs) }}</TableCell>
-            <TableCell class="text-muted-foreground max-w-56 truncate text-xs" :title="r.message">{{ r.message || '-' }}</TableCell>
+            <TableCell class="text-xs tabular-nums" :title="fromNow(r.startedAt || r.createdAt)">
+              <div>{{ fmtTime(r.startedAt || r.createdAt, 'YYYY-MM-DD') }}</div>
+              <div class="text-muted-foreground">{{ fmtTime(r.startedAt || r.createdAt, 'HH:mm:ss') }}</div>
+            </TableCell>
+            <TableCell class="text-muted-foreground hidden xl:table-cell text-right text-xs tabular-nums">{{ fmtDuration(r.durationMs) }}</TableCell>
+            <TableCell class="text-muted-foreground hidden xl:table-cell max-w-56 min-w-40 text-xs whitespace-normal" :title="r.message">
+              <span class="line-clamp-2 break-words">{{ r.message || '-' }}</span>
+            </TableCell>
             <TableCell class="pr-5">
               <div class="flex justify-end gap-0.5">
                 <Tooltip>

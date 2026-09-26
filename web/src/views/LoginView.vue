@@ -131,7 +131,7 @@ async function submit() {
       <Card class="shadow-lg shadow-black/5">
         <template v-if="statusLoading">
           <CardHeader><Skeleton class="h-5 w-24" /><Skeleton class="h-4 w-48" /></CardHeader>
-          <CardContent class="grid gap-4"><Skeleton class="h-9" /><Skeleton class="h-9" /><Skeleton class="h-9" /></CardContent>
+          <CardContent class="grid grid-cols-1 gap-4"><Skeleton class="h-9" /><Skeleton class="h-9" /><Skeleton class="h-9" /></CardContent>
         </template>
         <template v-else-if="statusError">
           <CardContent class="flex flex-col items-center gap-3 py-6 text-center">
@@ -147,7 +147,7 @@ async function submit() {
             <CardDescription>{{ isSetup ? '首次使用，请设置管理员账号与密码' : '使用管理员账号登录控制台' }}</CardDescription>
           </CardHeader>
           <CardContent>
-            <form class="grid gap-4" @submit.prevent="submit">
+            <form class="grid grid-cols-1 gap-4" @submit.prevent="submit">
               <FormItem label="用户名" for="username" :error="errors.username">
                 <Input id="username" v-model="form.username" autocomplete="username" autofocus :aria-invalid="!!errors.username" />
               </FormItem>

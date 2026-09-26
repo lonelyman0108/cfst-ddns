@@ -190,7 +190,7 @@ async function remove(a: Account) {
       <Button size="sm" @click="openCreate"><Plus />添加账号</Button>
     </PageHeader>
 
-    <div v-if="!loaded" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+    <div v-if="!loaded" class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
       <Skeleton v-for="i in 3" :key="i" class="h-44 rounded-xl" />
     </div>
     <Card v-else-if="!list.length" class="py-0">
@@ -198,12 +198,12 @@ async function remove(a: Account) {
         <Button size="sm" @click="openCreate"><Plus />添加账号</Button>
       </EmptyState>
     </Card>
-    <div v-else class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+    <div v-else class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
       <Card v-for="a in list" :key="a.id">
         <CardHeader>
           <CardTitle class="flex min-w-0 items-center gap-2.5">
             <BrandIcon kind="provider" :type="a.provider" :name="meta.providerName(a.provider)" class="size-7" />
-            <span class="truncate">{{ a.name }}</span>
+            <span class="truncate" :title="a.name">{{ a.name }}</span>
           </CardTitle>
           <CardDescription class="flex items-center gap-2">
             <ToneBadge tone="primary">{{ meta.providerName(a.provider) }}</ToneBadge>
@@ -223,7 +223,7 @@ async function remove(a: Account) {
             </DropdownMenu>
           </CardAction>
         </CardHeader>
-        <CardContent class="text-muted-foreground truncate text-sm">{{ a.remark || '无备注' }}</CardContent>
+        <CardContent class="text-muted-foreground line-clamp-2 text-sm break-words">{{ a.remark || '无备注' }}</CardContent>
         <CardFooter class="flex items-center justify-between border-t [.border-t]:pt-3">
           <span class="text-muted-foreground text-xs">更新于 {{ fromNow(a.updatedAt) }}</span>
           <div class="flex gap-1">
@@ -245,7 +245,7 @@ async function remove(a: Account) {
 
         <div class="flex-1 overflow-y-auto px-5 py-4">
           <TypePicker v-if="dlg.step === 1" kind="provider" :types="meta.providers" @pick="pickProvider" />
-          <div v-else class="grid gap-3">
+          <div v-else class="grid grid-cols-1 gap-3">
             <div v-if="providerMeta" class="bg-muted/40 flex items-start gap-3 rounded-lg border p-3">
               <BrandIcon kind="provider" :type="providerMeta.type" :name="providerMeta.name" class="size-9" />
               <div class="min-w-0 flex-1">

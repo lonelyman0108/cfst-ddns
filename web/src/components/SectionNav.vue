@@ -83,9 +83,9 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="grid gap-6 lg:grid-cols-[180px_1fr]">
+  <div class="grid grid-cols-1 gap-6 lg:grid-cols-[180px_1fr]">
     <nav class="hidden lg:block" aria-label="页面目录">
-      <ul class="sticky top-20 grid gap-0.5 text-sm">
+      <ul class="sticky top-20 grid grid-cols-1 gap-0.5 text-sm">
         <li v-for="s in sections" :key="s.id">
           <button
             type="button"

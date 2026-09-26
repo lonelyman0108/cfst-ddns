@@ -53,7 +53,7 @@ async function submit() {
         <DialogTitle>修改密码</DialogTitle>
         <DialogDescription>修改后其他设备上的登录将失效。</DialogDescription>
       </DialogHeader>
-      <form class="grid gap-4" @submit.prevent="submit">
+      <form class="grid grid-cols-1 gap-4" @submit.prevent="submit">
         <FormItem label="当前密码" for="pw-old" :error="errors.oldPassword">
           <Input id="pw-old" v-model="form.oldPassword" type="password" autocomplete="current-password" />
         </FormItem>

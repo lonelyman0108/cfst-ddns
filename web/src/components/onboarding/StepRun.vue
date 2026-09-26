@@ -64,7 +64,7 @@ function onDone(s: RunSummary) {
       需要先创建一个任务
     </p>
     <template v-else>
-      <div v-if="!runId" class="grid gap-4">
+      <div v-if="!runId" class="grid grid-cols-1 gap-4">
         <FormItem label="任务">
           <Select :model-value="taskId || undefined" @update:model-value="taskId = Number($event)">
             <SelectTrigger class="w-full"><SelectValue placeholder="选择任务" /></SelectTrigger>
@@ -73,7 +73,7 @@ function onDone(s: RunSummary) {
             </SelectContent>
           </Select>
         </FormItem>
-        <div class="grid gap-2 sm:grid-cols-2">
+        <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <button
             v-for="m in MODES"
             :key="String(m.dry)"

@@ -84,7 +84,7 @@ defineExpose({ test })
 </script>
 
 <template>
-  <div class="grid gap-3">
+  <div class="grid grid-cols-1 gap-3">
     <div class="flex items-center justify-between gap-2">
       <p class="text-muted-foreground text-xs">
         {{ testing ? '正在测速，最长约 8 秒…' : probes ? '已按可用性与延迟排序' : '测试各镜像下载 GitHub 资源的速度' }}
@@ -94,13 +94,13 @@ defineExpose({ test })
       </Button>
     </div>
 
-    <div v-if="loading" class="grid gap-2"><Skeleton v-for="i in 4" :key="i" class="h-12" /></div>
+    <div v-if="loading" class="grid grid-cols-1 gap-2"><Skeleton v-for="i in 4" :key="i" class="h-12" /></div>
     <div v-else-if="!rows.length" class="text-muted-foreground py-6 text-center text-sm">暂无可用镜像</div>
     <div v-else class="divide-y rounded-md border">
       <div v-for="r in rows" :key="r.mirror" class="flex items-center gap-3 px-3 py-2.5">
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-1.5 text-sm font-medium">
-            <span class="truncate">{{ r.label }}</span>
+            <span class="truncate" :title="r.label">{{ r.label }}</span>
             <ToneBadge v-if="best !== undefined && r.mirror === best" tone="success">最快</ToneBadge>
           </div>
           <div class="text-muted-foreground truncate font-mono text-xs" :title="r.mirror || 'https://github.com'">

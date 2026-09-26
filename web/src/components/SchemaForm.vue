@@ -101,7 +101,7 @@ defineExpose({ validate })
 </script>
 
 <template>
-  <div class="grid gap-3">
+  <div class="grid grid-cols-1 gap-3">
     <FormItem
       v-for="f in visibleFields"
       :key="f.key"

@@ -99,7 +99,7 @@ async function logout() {
                 <div class="flex size-8 shrink-0 items-center justify-center">
                   <AppLogo class="size-8" />
                 </div>
-                <div class="grid flex-1 text-left leading-tight">
+                <div class="grid grid-cols-1 flex-1 text-left leading-tight">
                   <span class="truncate font-semibold">cfst-ddns</span>
                   <span class="text-muted-foreground truncate text-xs">优选 IP 自动解析</span>
                 </div>
@@ -138,7 +138,7 @@ async function logout() {
                       {{ (auth.username || 'A').slice(0, 1).toUpperCase() }}
                     </AvatarFallback>
                   </Avatar>
-                  <div class="grid flex-1 text-left text-sm leading-tight">
+                  <div class="grid grid-cols-1 flex-1 text-left text-sm leading-tight">
                     <span class="truncate font-medium">{{ auth.username || '管理员' }}</span>
                     <span class="text-muted-foreground truncate text-xs">管理员</span>
                   </div>
@@ -152,7 +152,7 @@ async function logout() {
                       {{ (auth.username || 'A').slice(0, 1).toUpperCase() }}
                     </AvatarFallback>
                   </Avatar>
-                  <div class="grid min-w-0 flex-1 leading-tight">
+                  <div class="grid grid-cols-1 min-w-0 flex-1 leading-tight">
                     <span class="truncate text-sm font-medium">{{ auth.username || '管理员' }}</span>
                     <span class="text-muted-foreground truncate text-xs">cfst-ddns {{ version || '' }}</span>
                   </div>

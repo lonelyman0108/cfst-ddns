@@ -331,7 +331,7 @@ onMounted(() => {
       </AlertDescription>
     </Alert>
 
-    <div class="grid gap-4 lg:grid-cols-3">
+    <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
       <Card class="min-w-0 lg:col-span-1">
         <CardHeader>
           <CardTitle class="flex items-center gap-2"><PackageCheck class="text-muted-foreground size-4" />当前安装</CardTitle>
@@ -339,14 +339,14 @@ onMounted(() => {
             <ToneBadge v-if="status" :tone="status.installed ? 'success' : 'danger'">{{ status.installed ? '已安装' : '未安装' }}</ToneBadge>
           </CardAction>
         </CardHeader>
-        <CardContent class="grid gap-4">
-          <div v-if="!status" class="grid gap-3"><Skeleton v-for="i in 4" :key="i" class="h-8" /></div>
+        <CardContent class="grid grid-cols-1 gap-4">
+          <div v-if="!status" class="grid grid-cols-1 gap-3"><Skeleton v-for="i in 4" :key="i" class="h-8" /></div>
           <template v-else>
             <div>
               <div class="stat-number">{{ status.version || '—' }}</div>
               <div class="text-muted-foreground mt-1 text-xs">{{ status.os }}/{{ status.arch }}</div>
             </div>
-            <dl class="grid gap-3 text-sm">
+            <dl class="grid grid-cols-1 gap-3 text-sm">
               <div>
                 <dt class="text-muted-foreground text-xs">路径</dt>
                 <dd class="mt-0.5 font-mono text-code break-all">{{ status.path || '-' }}</dd>
@@ -356,7 +356,7 @@ onMounted(() => {
                 <dd class="mt-0.5 font-mono text-code">{{ status.asset || '-' }}</dd>
               </div>
             </dl>
-            <div v-if="!status.installed && !busy" class="grid gap-2">
+            <div v-if="!status.installed && !busy" class="grid grid-cols-1 gap-2">
               <p class="text-muted-foreground text-xs">可在线安装、导入本地文件，或识别本机已有的 cfst。</p>
               <div class="flex flex-wrap gap-2">
                 <Button size="sm" @click="install('latest')"><CloudDownload />安装最新版</Button>
@@ -379,7 +379,7 @@ onMounted(() => {
           <CardDescription>GitHub Releases（Releases 列表直连 GitHub API）</CardDescription>
         </CardHeader>
         <CardContent class="p-0">
-          <div v-if="releasesLoading && !releases.length" class="grid gap-3 p-5"><Skeleton v-for="i in 5" :key="i" class="h-8" /></div>
+          <div v-if="releasesLoading && !releases.length" class="grid grid-cols-1 gap-3 p-5"><Skeleton v-for="i in 5" :key="i" class="h-8" /></div>
           <EmptyState v-else-if="releasesError" :icon="CircleAlert" compact title="获取版本列表失败" description="可能无法访问 GitHub API，请检查网络后重试">
             <Button variant="outline" size="sm" @click="loadReleases"><RefreshCw />重试</Button>
           </EmptyState>
@@ -400,10 +400,11 @@ onMounted(() => {
                       <ToneBadge v-if="isCurrent(r.tag)" tone="success">当前</ToneBadge>
                       <ToneBadge v-if="latest?.tag === r.tag" tone="primary">最新</ToneBadge>
                     </div>
-                    <div v-if="r.name && r.name !== r.tag" class="text-muted-foreground max-w-60 truncate text-xs">{{ r.name }}</div>
+                    <div v-if="r.name && r.name !== r.tag" class="text-muted-foreground max-w-60 truncate text-xs" :title="r.name">{{ r.name }}</div>
                   </TableCell>
                   <TableCell class="text-xs whitespace-nowrap" :title="fmtTime(r.publishedAt)">
-                    {{ fmtTime(r.publishedAt, 'YYYY-MM-DD') }} <span class="text-muted-foreground">· {{ fromNow(r.publishedAt) }}</span>
+                    <div class="tabular-nums">{{ fmtTime(r.publishedAt, 'YYYY-MM-DD') }}</div>
+                    <div class="text-muted-foreground">{{ fromNow(r.publishedAt) }}</div>
                   </TableCell>
                   <TableCell class="w-44 pr-5">
                     <div class="flex items-center justify-end gap-1">
@@ -480,7 +481,7 @@ onMounted(() => {
           <DialogTitle>导入本地文件</DialogTitle>
           <DialogDescription>支持 release 压缩包（.zip / .tar.gz）或解压后的可执行文件，最大 64MB</DialogDescription>
         </DialogHeader>
-        <div class="grid gap-4">
+        <div class="grid grid-cols-1 gap-4">
           <div
             role="button"
             tabindex="0"
@@ -507,7 +508,7 @@ onMounted(() => {
           <div v-if="upload.file" class="flex items-center gap-3 rounded-md border px-3 py-2">
             <FileArchive class="text-muted-foreground size-5 shrink-0" />
             <div class="min-w-0 flex-1">
-              <div class="truncate text-sm font-medium">{{ upload.file.name }}</div>
+              <div class="truncate text-sm font-medium" :title="upload.file.name">{{ upload.file.name }}</div>
               <div class="text-muted-foreground text-xs">{{ fmtSize(upload.file.size) }}</div>
             </div>
             <Button v-if="!upload.uploading" variant="ghost" size="icon" class="size-7" aria-label="移除" @click="upload.file = null"><X /></Button>
@@ -517,7 +518,7 @@ onMounted(() => {
             <Input id="cfst-version" v-model="upload.version" placeholder="如 v2.3.4" class="font-mono" :disabled="upload.uploading" />
           </FormItem>
 
-          <div v-if="upload.uploading" class="grid gap-1.5">
+          <div v-if="upload.uploading" class="grid grid-cols-1 gap-1.5">
             <Progress :model-value="upload.progress" />
             <div class="text-muted-foreground text-xs">{{ upload.progress < 100 ? `上传中 ${upload.progress}%` : '正在校验与安装…' }}</div>
           </div>
@@ -539,7 +540,7 @@ onMounted(() => {
           <DialogDescription>在数据目录、PATH 和镜像内置目录中查找已有的 cfst</DialogDescription>
         </DialogHeader>
         <div class="-mx-6 min-h-0 flex-1 overflow-y-auto px-6">
-          <div v-if="scan.loading" class="grid gap-2"><Skeleton v-for="i in 3" :key="i" class="h-16" /></div>
+          <div v-if="scan.loading" class="grid grid-cols-1 gap-2"><Skeleton v-for="i in 3" :key="i" class="h-16" /></div>
           <EmptyState
             v-else-if="!scan.list.length"
             :icon="ScanSearch"

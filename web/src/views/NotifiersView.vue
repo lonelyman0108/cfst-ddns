@@ -202,7 +202,7 @@ async function remove(n: Notifier) {
     </PageHeader>
 
     <Card class="gap-0 overflow-hidden py-0">
-      <div v-if="!loaded" class="grid gap-3 p-5"><Skeleton v-for="i in 3" :key="i" class="h-10" /></div>
+      <div v-if="!loaded" class="grid grid-cols-1 gap-3 p-5"><Skeleton v-for="i in 3" :key="i" class="h-10" /></div>
       <EmptyState v-else-if="!list.length" :icon="Bell" title="还没有通知渠道" description="支持 Bark、Telegram、企业微信、钉钉、飞书、邮件等">
         <Button size="sm" @click="openCreate"><Plus />添加通知渠道</Button>
       </EmptyState>
@@ -218,10 +218,10 @@ async function remove(n: Notifier) {
         </TableHeader>
         <TableBody>
           <TableRow v-for="n in list" :key="n.id">
-            <TableCell class="pl-5 font-medium">
+            <TableCell class="min-w-48 pl-5 font-medium whitespace-normal">
               <div class="flex items-center gap-2.5">
-                <BrandIcon kind="notifier" :type="n.type" :name="meta.notifierName(n.type)" class="size-7" />
-                <span class="truncate">{{ n.name }}</span>
+                <BrandIcon kind="notifier" :type="n.type" :name="meta.notifierName(n.type)" class="size-7 shrink-0" />
+                <span class="line-clamp-2 min-w-0 wrap-anywhere" :title="n.name">{{ n.name }}</span>
               </div>
             </TableCell>
             <TableCell><ToneBadge tone="primary">{{ meta.notifierName(n.type) }}</ToneBadge></TableCell>
@@ -265,7 +265,7 @@ async function remove(n: Notifier) {
 
         <div class="flex-1 overflow-y-auto px-5 py-4">
           <TypePicker v-if="dlg.step === 1" kind="notifier" :types="meta.notifiers" @pick="pickType" />
-          <div v-else class="grid gap-3">
+          <div v-else class="grid grid-cols-1 gap-3">
             <div v-if="typeMeta" class="bg-muted/40 flex items-start gap-3 rounded-lg border p-3">
               <BrandIcon kind="notifier" :type="typeMeta.type" :name="typeMeta.name" class="size-9" />
               <div class="min-w-0 flex-1">
@@ -281,7 +281,7 @@ async function remove(n: Notifier) {
                 <a :href="typeMeta.docsUrl" target="_blank" rel="noopener"><ExternalLink />文档</a>
               </Button>
             </div>
-            <div class="grid gap-x-4 gap-y-3 sm:grid-cols-[1fr_auto]">
+            <div class="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-[1fr_auto]">
               <FormItem label="名称" required for="nt-name" :error="dlg.nameError">
                 <Input id="nt-name" v-model="dlg.form.name" maxlength="64" />
               </FormItem>
@@ -303,7 +303,7 @@ async function remove(n: Notifier) {
                 </label>
               </div>
             </FormItem>
-            <FormItem label="仅 IP 变化时" tip="开启后，仅当本次执行实际修改了 DNS 记录（IP 发生变化）时才发送通知，避免 IP 未变时的重复提醒。">
+            <FormItem label="仅 IP 变化时" help="只在本次执行实际修改了 DNS 记录时通知，避免重复提醒">
               <div class="flex h-9 items-center"><Switch v-model="dlg.form.onlyOnChange" /></div>
             </FormItem>
 

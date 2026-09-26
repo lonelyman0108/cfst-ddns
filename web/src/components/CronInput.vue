@@ -88,7 +88,7 @@ onBeforeUnmount(() => clearTimeout(timer))
 </script>
 
 <template>
-  <div class="grid gap-1.5">
+  <div class="grid grid-cols-1 gap-1.5">
     <div class="flex flex-wrap gap-2">
       <Select :model-value="mode" @update:model-value="onModeChange">
         <SelectTrigger class="w-36">
@@ -125,7 +125,7 @@ onBeforeUnmount(() => clearTimeout(timer))
         </button>
       </template>
     </div>
-    <div v-if="showMore && next.length && !error && model.trim()" class="bg-muted/40 grid gap-0.5 rounded-md border px-3 py-1.5">
+    <div v-if="showMore && next.length && !error && model.trim()" class="bg-muted/40 grid grid-cols-1 gap-0.5 rounded-md border px-3 py-1.5">
       <div v-for="t in next" :key="t" class="flex items-center justify-between gap-4 text-xs">
         <span class="font-mono">{{ fmtTime(t) }}</span>
         <span class="text-muted-foreground">{{ fromNow(t) }}</span>
