@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 自 2.0.0 起由 [release-please](https://github.com/googleapis/release-please) 根据约定式提交自动生成。
 
+## [2.1.0](https://github.com/lonelyman0108/cfst-ddns/compare/v2.0.1...v2.1.0) (2026-09-26)
+
+
+### 新功能
+
+* 新增首次引导、多语言界面、品牌图标与 cfst 本地导入 ([#11](https://github.com/lonelyman0108/cfst-ddns/issues/11)) ([488abf1](https://github.com/lonelyman0108/cfst-ddns/commit/488abf1f46bb4557b7eded971c2333a64ba1fd06))
+
+
+### 文档
+
+* README 支持中英文并加入 logo ([#9](https://github.com/lonelyman0108/cfst-ddns/issues/9)) ([7727be3](https://github.com/lonelyman0108/cfst-ddns/commit/7727be3c07e8db90e27935f84150f75851025791))
+
 ## [2.0.1](https://github.com/lonelyman0108/cfst-ddns/compare/v2.0.0...v2.0.1) (2026-09-25)
 
 
