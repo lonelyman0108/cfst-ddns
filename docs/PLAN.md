@@ -158,13 +158,13 @@ data/cfst-ddns.db   data/secret.key   data/cfst/{cfst[.exe], ip.txt, ipv6.txt, *
 - [x] 执行详情新增「网络自检」卡片；误判时一键「这是有意的，切换为经代理并重新测速」；帮助页常见问题更新；四种语言
 - 验证：见验证记录 2026-10-30
 
-### P12 Nightly 与版本更新提醒 — 🟡（2026-10-30 用户确认方案）
+### P12 Nightly 与版本更新提醒 — ✅（2026-10-30 用户确认方案，PR #14 / #15）
 CI（分支 `ci/nightly`）：
 - [x] 合并到 `main`（非 Release PR）或在 `main` 上手动触发时构建 nightly：版本号 `v<最近正式版>-nightly.<run_number>`；二进制更新到固定 tag `nightly` 的预发布（编辑而非重建，文件名固定），镜像只推 `nightly` / `nightly-bundled`，显式 `flavor: latest=false`，不动 `latest`
 - [x] 连续合并只发布最新一次：docker 任务按 nightly 分组取消旧运行；发布前检查 `main` 头部，已前进则跳过
 - [x] 其他分支手动触发仍产出 `dev` / `dev-<sha>`，供合并前实测
 - [x] Docker 构建改为注入 7 位短 SHA（之前是完整 40 位）；二进制与镜像都注入 `buildID`（run_number）与 `runID`
-- [ ] 首次 nightly 运行核对推送的镜像 tag 列表不含 `latest`
+- [x] 首次 nightly 运行核对推送的镜像 tag 列表不含 `latest`
 
 功能（分支 `feat/update-check`）：
 - [x] 系统信息显示构建号 `#run_number`（链接到 Actions 运行页）、提交号链接到 commit；后端把 40 位提交号截为 7 位兜底；`cfst-ddns version` 输出构建号
@@ -190,8 +190,9 @@ CI（分支 `ci/nightly`）：
 | 2026-09-26 | P9 | `go vet`、`go test ./...`（新增 importer / legacy / dryrun 测试）；`pnpm build`；浏览器（隔离实例 + 全新数据目录）：初始化 → `/welcome`（cfst 就绪、服务商/渠道图标）→ v1 导入预览与应用（假凭据下任务按设计停用并提示）→ 任务列表试运行（抽屉显示试运行徽标、实时日志、取消后 `dryRun=true`）→ 仪表盘入门清单 4/5 → `/help#faq` 锚点；390px 宽度下 15 个页面无横向滚动；亮色模式图标检查 | 通过；DNS 账号连通性与真实写入未测（无真实凭据） |
 | 2026-10-30 | P11 | `go vet`、`go test ./...`（新增 netcheck 单测，engine 测试覆盖拦截 / 延迟异常 / 经代理 / 出口变化）；`pnpm build`；本机（Surge 增强模式）隔离实例：直连模式 v4、v6 都判定为被拦截，约 3 秒结束，DNS 未修改；执行详情一键切换后任务变为 proxy + httping，新执行命令带 `-httping`、日志记录 JP 出口；四种语言在 1440 / 1024 / 768 / 390 宽度下无溢出 | 通过 |
 | 2026-10-30 | P11 | 群晖（网关 10.0.20.1 直连）临时实例 `dev-bundled`（dev-5dbfe29）：直连模式默认 IP 段 v4+v6 试运行，自检约 3 秒，保留地址未连通，CF 出口与本地出口一致（LAX / SJC），v4 2738 个、v6 37749 个结果，前 100 名延迟中位数约 80 ms，未误判；经代理模式（小 IP 段）保存为 httping、命令带 `-httping`，测出 LAX / SJC；测后删除临时容器、镜像与数据目录 | 通过 |
-| 2026-10-30 | P12 | `ci/nightly`：actionlint 通过（顺带修复 `sha256sum *` 的 SC2035）；实际运行待合并后在 Actions 中核对 | 待 CI |
+| 2026-10-30 | P12 | `ci/nightly`：actionlint 通过（顺带修复 `sha256sum *` 的 SC2035）；实际运行见下一行 | 通过 |
 | 2026-10-30 | P12 | `feat/update-check`：`go vet`、`go test ./...`（新增 update 渠道判断 / 版本比较 / 缓存，engine 推送去重与正文清理）；`pnpm build`；隔离实例注入 `v2.1.0` + 40 位提交号 + 构建号 57：系统信息显示 `0123456`、`#57`，真实 GitHub 返回 v2.2.0 可更新，第二次命中缓存；启动 2 分钟后后台检查只向开启提醒的渠道推送 1 次；设置页 zh-CN 1440 / en 390 / ja 768 与通知渠道页 ja 1024 无溢出 | 通过 |
+| 2026-10-30 | P12 | Actions：#14 合并后 nightly #44 全部任务成功，metadata 只生成 `nightly` / `nightly-bundled`，Docker Hub 上 `latest` / `latest-bundled` 更新时间仍为 v2.2.0 发版时，`releases/latest` 仍为 v2.2.0；#15 合并后 nightly #46 通过固定地址下载 darwin_arm64 包，`version` 输出 `v2.2.0-nightly.46 (commit d1cdf34, build #46)`，运行后更新检测为 nightly 渠道、最新即当前、不提示更新；release-please 正常生成 Release PR #16（2.3.0） | 通过 |
 
 ## 5. 阻塞与风险
 
