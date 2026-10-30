@@ -56,6 +56,8 @@ services:
 docker compose up -d
 ```
 
+> Want the latest changes before a release? Use `:nightly` / `:nightly-bundled`, rebuilt on every merge to `main` (may be unstable). Binaries are on the [nightly pre-release](https://github.com/lonelyman0108/cfst-ddns/releases/tag/nightly).
+
 Open `http://<host-ip>:8080` and create the admin account (you can also restore a backup or import a v1 config here). The setup wizard then walks you through:
 
 1. Checking that cfst is installed
