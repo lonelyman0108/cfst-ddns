@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { SquareArrowOutUpRight } from '@lucide/vue'
@@ -15,6 +15,9 @@ const emit = defineEmits<{ (e: 'done', s: RunSummary): void }>()
 const { t } = useI18n()
 const router = useRouter()
 const current = ref<RunSummary | null>(null)
+// 在详情中重新执行后改为显示新的执行
+const viewId = ref(props.runId)
+watch(() => props.runId, (v) => (viewId.value = v))
 const title = computed(() =>
   current.value ? t('runs.sheet.title', { task: current.value.taskName || t('runs.sheet.task'), id: current.value.id }) : '',
 )
@@ -24,9 +27,9 @@ function onStatus(s: RunSummary) {
 }
 
 function openPage() {
-  if (!props.runId) return
+  if (!viewId.value) return
   open.value = false
-  router.push(`/runs/${props.runId}`)
+  router.push(`/runs/${viewId.value}`)
 }
 </script>
 
@@ -44,11 +47,12 @@ function openPage() {
       </SheetHeader>
       <div class="p-4">
         <RunLogViewer
-          v-if="runId && open"
-          :run-id="runId"
+          v-if="viewId && open"
+          :run-id="viewId"
           log-height="max(320px, calc(100vh - 420px))"
           @status="onStatus"
           @done="emit('done', $event)"
+          @rerun="viewId = $event"
         />
       </div>
     </SheetContent>

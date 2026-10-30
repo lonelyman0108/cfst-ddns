@@ -70,7 +70,19 @@ type SpeedTestConfig struct {
 	IPv4Ranges      string  `json:"ipv4Ranges"`
 	IPv6Ranges      string  `json:"ipv6Ranges"`
 	ExtraArgs       string  `json:"extraArgs"`
+	// NetworkMode 为测速网络：direct（默认，空值同）要求直连，检测到代理时不更新 DNS；
+	// proxy 表示有意经透明代理测速，强制使用 HTTPing（TCP 握手会被本地代理秒回，延迟无意义）
+	NetworkMode string `json:"networkMode"`
 }
+
+// 测速网络模式。
+const (
+	NetworkDirect = "direct"
+	NetworkProxy  = "proxy"
+)
+
+// IsProxy 判断是否为有意经代理测速。
+func (c SpeedTestConfig) IsProxy() bool { return c.NetworkMode == NetworkProxy }
 
 // UpdatePolicy 控制如何把测速结果写入 DNS。
 type UpdatePolicy struct {
@@ -126,6 +138,37 @@ type SpeedResult struct {
 	Colo     string  `json:"colo"`
 }
 
+// NetworkProbe 为测速前对单一 IP 类型的网络自检结果。
+type NetworkProbe struct {
+	IPType string `json:"ipType"`
+	// Intercepted 表示到保留地址（公网不可达）的 TCP 握手成功，说明连接被本地代理或网关拦截
+	Intercepted bool `json:"intercepted"`
+	// ConnectMs 为到 Cloudflare IP 的 TCP 握手耗时（多次取最小值），0 表示未连通
+	ConnectMs float64 `json:"connectMs"`
+	// EgressIP / Loc / Colo 来自 Cloudflare /cdn-cgi/trace，即 Cloudflare 看到的出口
+	EgressIP string `json:"egressIP"`
+	Loc      string `json:"loc"`
+	Colo     string `json:"colo"`
+	// LocalIP 为国内回显服务看到的出口；与 EgressIP 不同说明访问 Cloudflare 走了别的线路
+	LocalIP string `json:"localIP"`
+	Error   string `json:"error,omitempty"`
+}
+
+// EgressMismatch 判断两个出口是否都已获得且不一致。
+func (p NetworkProbe) EgressMismatch() bool {
+	return p.EgressIP != "" && p.LocalIP != "" && p.EgressIP != p.LocalIP
+}
+
+// NetworkCheck 为一次执行的网络自检记录。
+type NetworkCheck struct {
+	Mode   string         `json:"mode"`
+	Probes []NetworkProbe `json:"probes"`
+	// ProxySuspected 表示判定为误走代理（直连模式下据此跳过 DNS 更新）
+	ProxySuspected bool `json:"proxySuspected"`
+	// Reason 为判定依据：intercepted（保留地址握手成功）/ latency（测速延迟异常低且一致）
+	Reason string `json:"reason,omitempty"`
+}
+
 // DNSChange 为一次记录变更（或跳过/失败）。
 type DNSChange struct {
 	AccountID   uint   `json:"accountId"`
@@ -166,6 +209,7 @@ type Run struct {
 	// ResultTotals 为各 IP 类型实际测得的结果数（Results 只保存前 MaxStoredResults 个）
 	ResultTotals map[string]int `gorm:"serializer:json" json:"resultTotals,omitempty"`
 	Changes      []DNSChange    `gorm:"serializer:json" json:"changes,omitempty"`
+	Network      *NetworkCheck  `gorm:"serializer:json" json:"network,omitempty"`
 	CreatedAt    time.Time      `gorm:"index" json:"createdAt"`
 }
 

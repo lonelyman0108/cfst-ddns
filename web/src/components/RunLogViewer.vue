@@ -2,14 +2,14 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { toast } from 'vue-sonner'
 import { useI18n } from 'vue-i18n'
-import { ChevronDown, CircleX, Gauge, ListTree, RefreshCw, ScrollText, Timer, Zap } from '@lucide/vue'
-import { runsApi } from '@/api'
-import type { RunDetail, RunSummary, SpeedResult } from '@/api/types'
+import { ChevronDown, CircleX, Gauge, ListTree, Network, RefreshCw, ScrollText, Timer, TriangleAlert, Zap } from '@lucide/vue'
+import { runsApi, tasksApi } from '@/api'
+import type { NetworkProbe, RunDetail, RunSummary, SpeedResult } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { confirm } from '@/composables/useConfirm'
 import StatusBadge from './StatusBadge.vue'
 import ToneBadge from './ToneBadge.vue'
@@ -31,7 +31,12 @@ import {
 } from '@/utils/format'
 
 const props = withDefaults(defineProps<{ runId: number; logHeight?: string }>(), { logHeight: '440px' })
-const emit = defineEmits<{ (e: 'status', s: RunSummary): void; (e: 'done', s: RunSummary): void }>()
+const emit = defineEmits<{
+  (e: 'status', s: RunSummary): void
+  (e: 'done', s: RunSummary): void
+  /** 切换为经代理模式后重新执行，参数为新的 run id */
+  (e: 'rerun', runId: number): void
+}>()
 
 const { t } = useI18n()
 const summary = ref<RunSummary | null>(null)
@@ -83,6 +88,47 @@ const groups = computed(() => {
   }
   return out
 })
+
+const network = computed(() => detail.value?.network ?? null)
+
+/** 自检状态：拦截 > 未连通 > 出口不一致（仅直连模式提示）> 正常 */
+function probeState(p: NetworkProbe): { tone: 'danger' | 'warning' | 'neutral' | 'success'; label: string } {
+  if (p.intercepted) return { tone: 'danger', label: t('runs.network.intercepted') }
+  if (!p.egressIP && !p.connectMs) return { tone: 'neutral', label: t('runs.network.unreachable') }
+  if (network.value?.mode !== 'proxy' && p.egressIP && p.localIP && p.egressIP !== p.localIP)
+    return { tone: 'warning', label: t('runs.network.mismatch') }
+  return { tone: 'success', label: t('runs.network.ok') }
+}
+
+const switching = ref(false)
+
+/** 用户确认是有意经代理测速：把任务改为经代理模式（强制 HTTPing）并重新执行 */
+async function switchToProxy() {
+  const s = summary.value
+  if (!s) return
+  const ok = await confirm({
+    title: t('runs.network.switchTitle'),
+    description: t('runs.network.switchDesc'),
+    confirmText: t('runs.network.switchConfirm'),
+  })
+  if (!ok) return
+  switching.value = true
+  try {
+    const task = await tasksApi.get(s.taskId)
+    const { name, enabled, cron, ipType, speedTest, update, targets, notifierIds } = task
+    await tasksApi.update(task.id, {
+      name, enabled, cron, ipType, update, targets, notifierIds,
+      speedTest: { ...speedTest, networkMode: 'proxy', httping: true },
+    })
+    const { runId } = await tasksApi.run(task.id, { dryRun: s.dryRun })
+    toast.success(t('runs.network.switched'))
+    emit('rerun', runId)
+  } catch {
+    /* 已提示 */
+  } finally {
+    switching.value = false
+  }
+}
 
 function setSummary(s: RunSummary) {
   summary.value = s
@@ -315,6 +361,52 @@ defineExpose({ reload: start })
       </Card>
 
       <template v-if="!active && detail">
+        <Card v-if="network" class="gap-0 py-0">
+          <CardHeader class="border-b py-3 [.border-b]:pb-3">
+            <CardTitle class="flex items-center gap-2">
+              <Network class="text-muted-foreground size-4" />{{ t('runs.network.title') }}
+              <ToneBadge :tone="network.mode === 'proxy' ? 'info' : 'neutral'">{{ network.mode === 'proxy' ? t('runs.network.modeProxy') : t('runs.network.modeDirect') }}</ToneBadge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent class="p-0">
+            <Alert v-if="network.proxySuspected" variant="destructive" class="m-4 w-auto">
+              <TriangleAlert />
+              <AlertTitle class="line-clamp-none">{{ t('runs.network.suspectedTitle') }}</AlertTitle>
+              <AlertDescription class="grid grid-cols-1 gap-3">
+                <p>{{ network.reason === 'latency' ? t('runs.network.reasonLatency') : t('runs.network.reasonIntercepted') }} {{ t('runs.network.suspectedHint') }}</p>
+                <div class="flex flex-wrap gap-2">
+                  <Button size="sm" variant="outline" class="h-auto min-h-8 max-w-full shrink py-1.5 text-left whitespace-normal" :disabled="switching" @click="switchToProxy">{{ t('runs.network.intentional') }}</Button>
+                  <Button size="sm" variant="ghost" as-child>
+                    <router-link to="/help#faq">{{ t('runs.network.howToFix') }}</router-link>
+                  </Button>
+                </div>
+              </AlertDescription>
+            </Alert>
+            <Table v-if="network.probes?.length">
+              <TableHeader>
+                <TableRow>
+                  <TableHead class="w-16 pl-5">{{ t('common.type') }}</TableHead>
+                  <TableHead>{{ t('runs.network.colState') }}</TableHead>
+                  <TableHead class="hidden text-right sm:table-cell">{{ t('runs.network.colConnect') }}</TableHead>
+                  <TableHead>{{ t('runs.network.colEgress') }}</TableHead>
+                  <TableHead class="hidden md:table-cell">{{ t('runs.network.colLoc') }}</TableHead>
+                  <TableHead class="hidden pr-5 sm:table-cell">{{ t('runs.network.colLocal') }}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow v-for="p in network.probes" :key="p.ipType">
+                  <TableCell class="pl-5 font-mono text-code">{{ p.ipType === 'v6' ? 'IPv6' : 'IPv4' }}</TableCell>
+                  <TableCell><ToneBadge :tone="probeState(p).tone" :title="p.error">{{ probeState(p).label }}</ToneBadge></TableCell>
+                  <TableCell class="hidden text-right tabular-nums sm:table-cell">{{ p.connectMs ? fmtLatency(p.connectMs) : '-' }}</TableCell>
+                  <TableCell class="min-w-28 pr-5 whitespace-normal break-all sm:pr-2"><CopyText v-if="p.egressIP" :text="p.egressIP" /><span v-else>-</span></TableCell>
+                  <TableCell class="hidden font-mono text-code md:table-cell">{{ [p.loc, p.colo].filter(Boolean).join(' · ') || '-' }}</TableCell>
+                  <TableCell class="hidden min-w-36 pr-5 whitespace-normal break-all sm:table-cell"><CopyText v-if="p.localIP" :text="p.localIP" /><span v-else>-</span></TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+
         <Card class="gap-0 py-0">
           <CardHeader class="border-b py-3 [.border-b]:pb-3">
             <CardTitle class="flex items-center gap-2"><Gauge class="text-muted-foreground size-4" />{{ t('runs.viewer.results') }}</CardTitle>

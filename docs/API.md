@@ -101,6 +101,7 @@ interface SpeedTestConfig {
   ipv4Ranges: string     // custom 时的 IPv4 段，换行或逗号分隔
   ipv6Ranges: string
   extraArgs: string      // 附加原始参数
+  networkMode: 'direct' | 'proxy'  // 测速网络，默认 direct；proxy 时保存为 httping=true 并强制 -httping
 }
 interface UpdatePolicy {
   recordCount: number    // 每种类型写入前 N 个 IP（多条同名记录），默认 1
@@ -154,9 +155,20 @@ interface SpeedResult { ipType: 'v4'|'v6'; rank: number; ip: string; sent: numbe
   lossRate: number; latency: number /* ms */; speed: number /* MB/s */; colo: string }
 interface DNSChange { accountId: number; accountName: string; fqdn: string; type: 'A'|'AAAA'
   action: 'create'|'update'|'delete'|'skip'|'error'; oldValue: string; newValue: string; message: string }
-interface RunDetail extends RunSummary { results: SpeedResult[]; resultTotals?: { v4?: number; v6?: number }; changes: DNSChange[]; log: string }
+interface NetworkProbe { ipType: 'v4'|'v6'
+  intercepted: boolean  // 到保留地址 192.0.2.1 / 2001:db8::1 的握手成功 = 被本地代理拦截（经代理模式不探测）
+  connectMs: number     // 到 Cloudflare IP 的 TCP 握手（3 次取最小），0 = 未连通
+  egressIP: string; loc: string; colo: string  // Cloudflare /cdn-cgi/trace 看到的出口
+  localIP: string       // 国内回显服务看到的出口，与 egressIP 不同仅作提示
+  error?: string }
+interface NetworkCheck { mode: 'direct'|'proxy'; probes: NetworkProbe[]
+  proxySuspected: boolean; reason?: 'intercepted'|'latency' }
+interface RunDetail extends RunSummary { results: SpeedResult[]; resultTotals?: { v4?: number; v6?: number }; changes: DNSChange[]; log: string
+  network?: NetworkCheck }  // 旧记录无此字段
 // results 每种 IP 类型只保存排名前 100 个；resultTotals 为实际测得的总数（旧记录无此字段）
 ```
+
+测速网络检查：每次执行先做网络自检。直连模式（`networkMode: 'direct'`）下，保留地址握手成功（`reason: 'intercepted'`，不再测速），或 TCPing 结果的延迟中位数 < 5 ms 且 P10–P90 跨度 < 2 ms（`reason: 'latency'`，保留测速结果），都会判定为误走代理：执行失败，`messageKey: 'proxyDetected'`，不修改 DNS，照常发送失败通知。经代理模式只记录出口，出口与上一次经代理执行不同时在日志中提示。
 
 | 方法 | 路径 | 响应 |
 |---|---|---|
