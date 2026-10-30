@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 自 2.0.0 起由 [release-please](https://github.com/googleapis/release-please) 根据约定式提交自动生成。
 
+## [2.3.0](https://github.com/lonelyman0108/cfst-ddns/compare/v2.2.0...v2.3.0) (2026-10-30)
+
+
+### 新功能
+
+* 系统信息显示构建号并支持新版本检测与提醒 ([#15](https://github.com/lonelyman0108/cfst-ddns/issues/15)) ([d1cdf34](https://github.com/lonelyman0108/cfst-ddns/commit/d1cdf3499849e590f5919b535e87893879836d78))
+
 ## [2.2.0](https://github.com/lonelyman0108/cfst-ddns/compare/v2.1.0...v2.2.0) (2026-10-30)
 
 
