@@ -29,7 +29,8 @@ func DefaultTask() store.Task {
 		Cron:    "0 */6 * * *",
 		IPType:  "v4",
 		SpeedTest: store.SpeedTestConfig{Threads: 200, PingTimes: 4, DownloadCount: 10, DownloadTime: 10,
-			Port: 443, MaxLatency: 9999, MaxLossRate: 1, IPSource: "default"},
+			Port: 443, MaxLatency: 9999, MaxLossRate: 1, IPSource: "default",
+			NetworkMode: store.NetworkDirect},
 		Update:      store.UpdatePolicy{RecordCount: 1, SkipUnchanged: true},
 		Targets:     []store.Target{},
 		NotifierIDs: []uint{},
@@ -115,6 +116,11 @@ func normalizeTaskIn(st *store.Store, t *store.Task) error {
 	}
 	if sp.MaxLossRate < 0 || sp.MaxLossRate > 1 {
 		return i18n.New("丢包率上限需在 0-1 之间")
+	}
+	if sp.NetworkMode != store.NetworkProxy {
+		sp.NetworkMode = store.NetworkDirect
+	} else {
+		sp.Httping = true
 	}
 	if sp.IPSource != "custom" {
 		sp.IPSource = "default"

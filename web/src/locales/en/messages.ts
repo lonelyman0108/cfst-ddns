@@ -9,6 +9,7 @@ export default {
     allFailed: "All DNS record updates failed",
     noIP: "No usable IP found, DNS records left unchanged",
     noTargets: "The task has no target records",
+    proxyDetected: "Speed test traffic appears to go through a proxy; DNS records were not changed",
     interrupted: "Interrupted by a service restart",
   },
   change: {

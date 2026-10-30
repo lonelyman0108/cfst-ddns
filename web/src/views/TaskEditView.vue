@@ -83,6 +83,7 @@ const DEFAULT_SPEED: SpeedTestConfig = {
   ipv4Ranges: '',
   ipv6Ranges: '',
   extraArgs: '',
+  networkMode: 'direct',
 }
 
 const form = reactive<TaskInput>({
@@ -225,6 +226,9 @@ function toggleNotifier(id: number, on: boolean) {
   form.notifierIds = [...s]
 }
 
+/** 经代理测速时后端强制 HTTPing */
+const isProxy = computed(() => form.speedTest.networkMode === 'proxy')
+
 /** 摘要：将写入的记录（按 IP 类型展开为 A / AAAA） */
 const summaryRecords = computed(() => {
   const types = form.ipType === 'both' ? ['A', 'AAAA'] : form.ipType === 'v6' ? ['AAAA'] : ['A']
@@ -276,6 +280,7 @@ async function save() {
       downloadCount: n(st.downloadCount, DEFAULT_SPEED.downloadCount),
       downloadTime: n(st.downloadTime, DEFAULT_SPEED.downloadTime),
       port: n(st.port, DEFAULT_SPEED.port),
+      httping: st.httping || st.networkMode === 'proxy',
       httpingCode: n(st.httpingCode, 0),
       maxLatency: n(st.maxLatency, DEFAULT_SPEED.maxLatency),
       minLatency: n(st.minLatency, 0),
@@ -363,6 +368,24 @@ async function save() {
             <CardDescription>{{ $t('tasks.edit.speedTestDesc') }}</CardDescription>
           </CardHeader>
           <CardContent class="grid grid-cols-1 gap-4">
+            <!-- 测速网络 -->
+            <section class="grid grid-cols-1 gap-2">
+              <h4 class="text-muted-foreground text-xs font-medium">{{ $t('tasks.edit.networkSection') }}</h4>
+              <div class="divide-y rounded-md border">
+                <SettingRow
+                  :label="$t('tasks.edit.networkMode')"
+                  :description="form.speedTest.networkMode === 'proxy' ? $t('tasks.edit.networkProxyDesc') : $t('tasks.edit.networkDirectDesc')"
+                >
+                  <Tabs v-model="form.speedTest.networkMode">
+                    <TabsList class="h-8">
+                      <TabsTrigger value="direct" class="text-xs">{{ $t('tasks.edit.networkDirect') }}</TabsTrigger>
+                      <TabsTrigger value="proxy" class="text-xs">{{ $t('tasks.edit.networkProxy') }}</TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+                </SettingRow>
+              </div>
+            </section>
+
             <!-- 延迟测速 -->
             <section class="grid grid-cols-1 gap-2">
               <h4 class="text-muted-foreground text-xs font-medium">{{ $t('tasks.edit.latencyTest') }}</h4>
@@ -408,11 +431,16 @@ async function save() {
                 <Input v-model="form.speedTest.url" :placeholder="$t('tasks.edit.urlPlaceholder')" class="font-mono" />
               </FormItem>
               <div class="divide-y rounded-md border">
-                <SettingRow :label="$t('tasks.edit.httping')" flag="-httping" :description="$t('tasks.edit.httpingDesc')">
-                  <Switch v-model="form.speedTest.httping" />
+                <SettingRow
+                  :label="$t('tasks.edit.httping')"
+                  flag="-httping"
+                  :description="isProxy ? $t('tasks.edit.httpingForced') : $t('tasks.edit.httpingDesc')"
+                >
+                  <Switch v-if="isProxy" :model-value="true" disabled />
+                  <Switch v-else v-model="form.speedTest.httping" />
                 </SettingRow>
               </div>
-              <div v-if="form.speedTest.httping" class="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div v-if="form.speedTest.httping || isProxy" class="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-4">
                 <FormItem :label="$t('tasks.edit.httpingCode')" flag="-httping-code" :help="$t('tasks.edit.httpingCodeHelp')"><NumInput v-model="form.speedTest.httpingCode" :min="0" :max="599" /></FormItem>
                 <FormItem :label="$t('tasks.edit.cfColo')" flag="-cfcolo" :help="$t('tasks.edit.cfColoHelp')" class="lg:col-span-3">
                   <Input v-model="form.speedTest.cfColo" :placeholder="$t('tasks.edit.cfColoPlaceholder')" class="font-mono" />

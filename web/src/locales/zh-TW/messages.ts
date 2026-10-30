@@ -9,6 +9,7 @@ export default {
     allFailed: "所有 DNS 紀錄更新失敗",
     noIP: "沒有取得任何可用 IP，DNS 紀錄未修改",
     noTargets: "任務未設定目標紀錄",
+    proxyDetected: "偵測到測速流量經過代理，DNS 記錄未修改",
     interrupted: "服務重新啟動，執行被中斷",
   },
   change: {

@@ -149,6 +149,15 @@ data/cfst-ddns.db   data/secret.key   data/cfst/{cfst[.exe], ip.txt, ipv6.txt, *
 - [x] README 默认改为英文，新增 `README.zh-CN.md`、`README.zh-TW.md`、`README.ja.md`；发布包附带全部语言 README
 - 验证：`go vet`、`go test ./...`；`pnpm build`；脚本核对四种语言键一致、代码引用的键均存在；英文界面 18 个页面无残留中文（测试数据除外）；en / ja 在 1440 / 1024 / 390 宽度下无溢出（日文「デュアルスタック」过长已改为「両方」）；实测切换语言即时生效（含后端返回的类型名与页面标题）
 
+### P11 测速代理检测 — ✅（分支 `feat/proxy-detect`，2026-10-30 用户确认方案）
+- [x] 任务新增「测速网络」：直连（默认）/ 经代理；经代理时后端保存为 `httping=true` 并强制 `-httping`（用户选定强制而非仅提示）
+- [x] `internal/netcheck` 测速前自检（约 3–5 秒）：到保留地址 `192.0.2.1` / `2001:db8::1` 的握手成功即为被本地代理 / TUN / 网关拦截；到 CF IP 的握手耗时；`/cdn-cgi/trace` 出口与国内回显服务（ddnspod / 3322 / zxinc）出口对比
+- [x] 直连模式：保留地址被拦截 → 不测速；TCPing 结果中位数 < 5 ms 且 P10–P90 < 2 ms → 保留结果；两者都判定为失败（`proxyDetected`），不改 DNS，照常发失败通知；出口不一致只提示不阻断（多线路负载均衡会误判）
+- [x] 经代理模式：不做判定，记录出口，出口与上一次经代理执行不同时在日志中提示
+- [x] cfst 子进程去掉 `HTTP(S)_PROXY` / `ALL_PROXY` / `NO_PROXY`
+- [x] 执行详情新增「网络自检」卡片；误判时一键「这是有意的，切换为经代理并重新测速」；帮助页常见问题更新；四种语言
+- 验证：见验证记录 2026-10-30
+
 ## 4. 验证记录
 
 | 日期 | 阶段 | 内容 | 结果 |
@@ -164,6 +173,7 @@ data/cfst-ddns.db   data/secret.key   data/cfst/{cfst[.exe], ip.txt, ipv6.txt, *
 | 2026-09-24 | P3–P5 | 本机冒烟：自动下载 cfst v2.3.5（Windows）→ 初始化/登录 → 建账号/任务 → 真实测速（自定义 3 个 /24、`-dd`）→ SSE 实时日志 → DNS 失败被正确记录为 failed → 重复触发 409 → Webhook 触发 + 取消 → 备份导出 | 通过；本机有 TUN 代理，延迟约 1 ms 不可信（已写入 README 注意事项） |
 | 2026-09-25 | P7 | CI 失败原因：`pnpm/action-setup` 未指定版本 → `packageManager: pnpm@10.34.5`（本地 `--frozen-lockfile` 通过）；触发收紧为 main/PR/tag/手动；接入 release-please；`actionlint` 通过 | 通过（待 CI 实测） |
 | 2026-09-26 | P9 | `go vet`、`go test ./...`（新增 importer / legacy / dryrun 测试）；`pnpm build`；浏览器（隔离实例 + 全新数据目录）：初始化 → `/welcome`（cfst 就绪、服务商/渠道图标）→ v1 导入预览与应用（假凭据下任务按设计停用并提示）→ 任务列表试运行（抽屉显示试运行徽标、实时日志、取消后 `dryRun=true`）→ 仪表盘入门清单 4/5 → `/help#faq` 锚点；390px 宽度下 15 个页面无横向滚动；亮色模式图标检查 | 通过；DNS 账号连通性与真实写入未测（无真实凭据） |
+| 2026-10-30 | P11 | `go vet`、`go test ./...`（新增 netcheck 单测，engine 测试覆盖拦截 / 延迟异常 / 经代理 / 出口变化）；`pnpm build`；本机（Surge 增强模式）隔离实例：直连模式 v4、v6 都判定为被拦截，约 3 秒结束，DNS 未修改；执行详情一键切换后任务变为 proxy + httping，新执行命令带 `-httping`、日志记录 JP 出口；四种语言在 1440 / 1024 / 768 / 390 宽度下无溢出 | 通过；直连环境下的「不误判」未在真实直连机器上验证（单测覆盖） |
 
 ## 5. 阻塞与风险
 
@@ -174,4 +184,6 @@ data/cfst-ddns.db   data/secret.key   data/cfst/{cfst[.exe], ip.txt, ipv6.txt, *
 - ⚠ 本机无 Docker：镜像构建只能依赖 CI。
 - ⚠ P9 品牌图标：DNSPod、Bark、Server 酱、PushPlus 为官网 favicon 位图（非矢量）；Gotify 图标为 CC BY 4.0（selfh.st），已在文件内注明。
 - ⚠ `network_mode: host` 在 Docker Desktop（Windows/macOS）上无效，测速结果会失真，文档需注明。
+- ⚠ P11 经代理模式依赖 HTTPing 能在 cfst 超时内完成：本机 Surge 的 JP 代理单次请求约 3–4 秒，HTTPing 全部超时，结果为「没有可用 IP」；代理链路慢时经代理模式实际不可用。
+- ⚠ P11 保留地址探测：若网关的透明代理放行了保留地址段，只能靠 TCPing 延迟分布兜底；直连模式下开启 HTTPing 时没有这层兜底。
 - ⚠ 各云厂商 API 未用真实凭据验证时，仅保证签名与请求格式正确（单测），需用户用真实账号冒烟。

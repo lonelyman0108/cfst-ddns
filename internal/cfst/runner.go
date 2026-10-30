@@ -55,7 +55,8 @@ func BuildArgs(c store.SpeedTestConfig, ipFile, outFile string) ([]string, error
 	if u := strings.TrimSpace(c.URL); u != "" {
 		args = append(args, "-url", u)
 	}
-	if c.Httping {
+	// 经代理测速时 TCP 握手由本地代理完成，只有 HTTPing 能测到真实链路延迟
+	if c.Httping || c.IsProxy() {
 		args = append(args, "-httping")
 		if c.HttpingCode > 0 {
 			args = append(args, "-httping-code", strconv.Itoa(c.HttpingCode))
@@ -161,6 +162,7 @@ func (m *Manager) Run(ctx context.Context, opt RunOptions, out Output) ([]store.
 
 	cmd := exec.CommandContext(ctx, m.BinPath(), args...)
 	cmd.Dir = m.Dir
+	cmd.Env = withoutProxyEnv(os.Environ())
 	cmd.WaitDelay = 5 * time.Second
 	pr, pw := io.Pipe()
 	cmd.Stdout = pw
@@ -188,6 +190,20 @@ func (m *Manager) Run(ctx context.Context, opt RunOptions, out Output) ([]store.
 		return nil, nil
 	}
 	return ParseCSV(f, opt.IPType)
+}
+
+// withoutProxyEnv 去掉代理环境变量，测速必须直接连到被测 IP。
+func withoutProxyEnv(env []string) []string {
+	out := env[:0:0]
+	for _, kv := range env {
+		k, _, _ := strings.Cut(kv, "=")
+		switch strings.ToUpper(k) {
+		case "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY":
+			continue
+		}
+		out = append(out, kv)
+	}
+	return out
 }
 
 var (

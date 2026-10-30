@@ -28,6 +28,6 @@ function back() {
         <p class="text-muted-foreground text-sm">{{ t('runs.detail.desc') }}</p>
       </div>
     </div>
-    <RunLogViewer :run-id="runId" log-height="520px" />
+    <RunLogViewer :run-id="runId" log-height="520px" @rerun="router.push(`/runs/${$event}`)" />
   </div>
 </template>

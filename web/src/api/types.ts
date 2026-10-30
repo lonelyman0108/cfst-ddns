@@ -170,7 +170,12 @@ export interface SpeedTestConfig {
   ipv4Ranges: string
   ipv6Ranges: string
   extraArgs: string
+  /** 测速网络：direct 要求直连，检测到代理时不更新 DNS；proxy 为有意经透明代理测速，强制 HTTPing */
+  networkMode: NetworkMode
 }
+
+export type NetworkMode = 'direct' | 'proxy'
+
 
 export interface UpdatePolicy {
   recordCount: number
@@ -275,12 +280,37 @@ export interface DNSChange {
   messageArgs?: Record<string, unknown>
 }
 
+/** 测速前对单一 IP 类型的网络自检 */
+export interface NetworkProbe {
+  ipType: 'v4' | 'v6'
+  /** 公网不可达的保留地址也能握手成功：连接被本地代理 / TUN / 网关拦截 */
+  intercepted: boolean
+  /** 到 Cloudflare IP 的 TCP 握手耗时，0 表示未连通 */
+  connectMs: number
+  /** Cloudflare 看到的出口 */
+  egressIP: string
+  loc: string
+  colo: string
+  /** 国内回显服务看到的出口 */
+  localIP: string
+  error?: string
+}
+
+export interface NetworkCheck {
+  mode: NetworkMode
+  probes: NetworkProbe[]
+  proxySuspected: boolean
+  reason?: 'intercepted' | 'latency'
+}
+
 export interface RunDetail extends RunSummary {
   results: SpeedResult[]
   /** 各 IP 类型实际测得的结果数；results 只保存前 100 个（旧记录无此字段） */
   resultTotals?: Partial<Record<'v4' | 'v6', number>>
   changes: DNSChange[]
   log: string
+  /** 网络自检（旧记录无此字段） */
+  network?: NetworkCheck
 }
 
 export interface RunListQuery {

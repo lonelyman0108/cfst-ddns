@@ -73,6 +73,18 @@ func TestBuildArgs(t *testing.T) {
 	if strings.Join(got, " ") != "-f a -o b -p 0" {
 		t.Fatalf("got %v", got)
 	}
+	// 经代理测速强制 HTTPing
+	got, _ = BuildArgs(store.SpeedTestConfig{MaxLossRate: 1, MaxLatency: 9999, NetworkMode: store.NetworkProxy}, "a", "b")
+	if strings.Join(got, " ") != "-httping -f a -o b -p 0" {
+		t.Fatalf("proxy mode got %v", got)
+	}
+}
+
+func TestWithoutProxyEnv(t *testing.T) {
+	got := withoutProxyEnv([]string{"PATH=/bin", "http_proxy=x", "HTTPS_PROXY=y", "all_proxy=z", "NO_PROXY=a", "HOME=/h"})
+	if strings.Join(got, " ") != "PATH=/bin HOME=/h" {
+		t.Fatalf("got %v", got)
+	}
 }
 
 func TestParseCSV(t *testing.T) {

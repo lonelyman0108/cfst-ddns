@@ -48,7 +48,7 @@ export default {
     },
     lowLatency: {
       q: 'Latency is only about 1 ms. Can I trust that?',
-      a: 'No. If the machine runs a TUN or transparent proxy such as Clash or Surge, measured latency will be abnormally low. Exclude the device running the speed test from the proxy.',
+      a: 'No. TUN or transparent proxies such as Clash and Surge complete TCP handshakes locally, so latency looks abnormally low. The app checks the network before each test and, in direct mode, leaves DNS unchanged when interception is detected. Route Cloudflare IP ranges (e.g. 104.16.0.0/13, 172.64.0.0/13, 162.159.0.0/16) directly in your proxy, or exclude the device running the test from the proxy. If testing through the proxy is intended, set the task\'s "Test network" to via proxy (HTTPing is then forced).',
     },
     zeroSpeed: {
       q: 'Download speed is always 0?',

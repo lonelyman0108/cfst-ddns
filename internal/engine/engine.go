@@ -14,6 +14,7 @@ import (
 	"github.com/lonelyman0108/cfst-ddns/internal/cfst"
 	"github.com/lonelyman0108/cfst-ddns/internal/i18n"
 	"github.com/lonelyman0108/cfst-ddns/internal/logbus"
+	"github.com/lonelyman0108/cfst-ddns/internal/netcheck"
 	"github.com/lonelyman0108/cfst-ddns/internal/provider"
 	"github.com/lonelyman0108/cfst-ddns/internal/store"
 )
@@ -28,6 +29,8 @@ type Engine struct {
 	Hub     *logbus.Hub
 	Log     *slog.Logger
 	TempDir string
+	// Probe 为测速前的网络自检，测试中可替换
+	Probe func(ctx context.Context, ipTypes []string, canary bool) []store.NetworkProbe
 
 	queue chan uint // run id
 
@@ -39,7 +42,7 @@ type Engine struct {
 
 // New 创建执行引擎。
 func New(st *store.Store, m *cfst.Manager, hub *logbus.Hub, log *slog.Logger, tempDir string) *Engine {
-	return &Engine{Store: st, CFST: m, Hub: hub, Log: log, TempDir: tempDir,
+	return &Engine{Store: st, CFST: m, Hub: hub, Log: log, TempDir: tempDir, Probe: netcheck.Probe,
 		queue: make(chan uint, 256), pending: map[uint]uint{}, cancels: map[uint]context.CancelFunc{}, cancelQ: map[uint]bool{}}
 }
 
@@ -218,6 +221,8 @@ var (
 	errNoTargets = errors.New("任务未配置目标记录")
 	errNoIP      = errors.New("没有获得任何可用 IP，DNS 记录未修改")
 	errAllFailed = errors.New("全部 DNS 记录更新失败")
+	// 中文原文同时用于通知，附带处理建议
+	errProxyDetected = errors.New("检测到测速流量经过代理，DNS 记录未修改；如为有意经代理测速，请把任务的测速网络改为「经代理」")
 )
 
 func messageKeyOf(err error) string {
@@ -228,6 +233,8 @@ func messageKeyOf(err error) string {
 		return "noIP"
 	case errors.Is(err, errAllFailed):
 		return "allFailed"
+	case errors.Is(err, errProxyDetected):
+		return "proxyDetected"
 	}
 	return ""
 }
@@ -249,6 +256,13 @@ func (e *Engine) runTask(ctx context.Context, task *store.Task, run *store.Run, 
 	if count <= 0 {
 		count = 1
 	}
+
+	// 0. 网络自检
+	if err := e.checkNetwork(ctx, task, run, rl); err != nil {
+		return err
+	}
+	// 直连模式下的 TCPing 结果可以再按延迟分布判断一次，兜住放行了保留地址的透明代理
+	checkLatency := !task.SpeedTest.IsProxy() && !task.SpeedTest.Httping
 
 	// 1. 测速
 	best := map[string][]string{} // ipType → 选中的 IP
@@ -273,6 +287,11 @@ func (e *Engine) runTask(ctx context.Context, task *store.Task, run *store.Run, 
 			rl.Printf("! IPv%s 没有满足条件的 IP，将保留现有记录", strings.TrimPrefix(t, "v"))
 			continue
 		}
+		if checkLatency && netcheck.LatencyAnomalous(res) {
+			rl.Printf("✗ IPv%s 延迟异常：几乎全部低于 5 ms 且彼此接近，符合本地代理直接完成 TCP 握手的特征", strings.TrimPrefix(t, "v"))
+			run.Network.ProxySuspected, run.Network.Reason = true, "latency"
+			break
+		}
 		for i := 0; i < len(res) && i < count; i++ {
 			best[t] = append(best[t], res[i].IP)
 		}
@@ -290,6 +309,9 @@ func (e *Engine) runTask(ctx context.Context, task *store.Task, run *store.Run, 
 	e.Store.DB.Model(run).Updates(map[string]any{"best_ipv4": run.BestIPv4, "best_ipv6": run.BestIPv6,
 		"best_latency": run.BestLatency, "best_speed": run.BestSpeed})
 	rl.Emit("status", *run)
+	if run.Network.ProxySuspected {
+		return errProxyDetected
+	}
 	if len(best) == 0 {
 		return errNoIP
 	}
@@ -382,6 +404,67 @@ func (e *Engine) runTask(ctx context.Context, task *store.Task, run *store.Run, 
 		}
 	}
 	return nil
+}
+
+// checkNetwork 在测速前做网络自检并写入 run.Network。
+// 直连模式下保留地址握手成功即判定为误走代理；经代理模式只记录出口，并在出口变化时提示。
+func (e *Engine) checkNetwork(ctx context.Context, task *store.Task, run *store.Run, rl *logbus.RunLog) error {
+	proxy := task.SpeedTest.IsProxy()
+	nc := &store.NetworkCheck{Mode: store.NetworkDirect}
+	run.Network = nc
+	if proxy {
+		nc.Mode = store.NetworkProxy
+		rl.Printf("━━ 网络自检（经代理模式，强制 HTTPing） ━━")
+	} else {
+		rl.Printf("━━ 网络自检（直连模式） ━━")
+	}
+	nc.Probes = e.Probe(ctx, ipTypes(task.IPType), !proxy)
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	var prev map[string]string
+	if proxy {
+		prev = e.lastEgress(task.ID, run.ID)
+	}
+	for _, p := range nc.Probes {
+		v := "IPv" + strings.TrimPrefix(p.IPType, "v")
+		if p.Intercepted {
+			rl.Printf("✗ %s: 连上了公网不可达的保留地址，连接被本地代理 / TUN / 网关拦截", v)
+			nc.ProxySuspected, nc.Reason = true, "intercepted"
+		}
+		if p.EgressIP == "" && p.ConnectMs == 0 {
+			rl.Printf("! %s: 无法连通 Cloudflare（%s）", v, orNA(p.Error))
+			continue
+		}
+		rl.Printf("%s: 握手 %.1f ms，Cloudflare 看到的出口 %s（%s / %s），本地出口 %s",
+			v, p.ConnectMs, orNA(p.EgressIP), orNA(p.Loc), orNA(p.Colo), orNA(p.LocalIP))
+		switch {
+		case p.Intercepted:
+		case !proxy && p.EgressMismatch():
+			rl.Printf("! %s: 访问 Cloudflare 的出口与本地出口不一致，可能经过了代理或其他线路", v)
+		case proxy && prev[p.IPType] != "" && p.EgressIP != "" && prev[p.IPType] != p.EgressIP:
+			rl.Printf("! %s: 代理出口与上次不同（%s → %s），本次结果可能与之前不可比", v, prev[p.IPType], p.EgressIP)
+		}
+	}
+	if nc.ProxySuspected {
+		return errProxyDetected
+	}
+	return nil
+}
+
+// lastEgress 返回该任务上一次经代理执行时各 IP 类型的出口。
+func (e *Engine) lastEgress(taskID, runID uint) map[string]string {
+	var runs []store.Run
+	e.Store.DB.Select("id", "network").Where("task_id = ? AND id < ? AND network IS NOT NULL", taskID, runID).
+		Order("id DESC").Limit(1).Find(&runs)
+	out := map[string]string{}
+	if len(runs) == 0 || runs[0].Network == nil || runs[0].Network.Mode != store.NetworkProxy {
+		return out
+	}
+	for _, p := range runs[0].Network.Probes {
+		out[p.IPType] = p.EgressIP
+	}
+	return out
 }
 
 // syncTarget 同步一条目标记录的一种类型；返回变更明细，error 表示该目标失败。
