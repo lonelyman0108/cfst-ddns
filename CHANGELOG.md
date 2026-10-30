@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 自 2.0.0 起由 [release-please](https://github.com/googleapis/release-please) 根据约定式提交自动生成。
 
+## [2.2.0](https://github.com/lonelyman0108/cfst-ddns/compare/v2.1.0...v2.2.0) (2026-10-30)
+
+
+### 新功能
+
+* 测速前检测代理并支持经代理测速 ([#12](https://github.com/lonelyman0108/cfst-ddns/issues/12)) ([cb0e2fd](https://github.com/lonelyman0108/cfst-ddns/commit/cb0e2fd9bdf35fecfc8686e3443149691351a542))
+
 ## [2.1.0](https://github.com/lonelyman0108/cfst-ddns/compare/v2.0.1...v2.1.0) (2026-09-26)
 
 
