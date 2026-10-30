@@ -173,7 +173,8 @@ data/cfst-ddns.db   data/secret.key   data/cfst/{cfst[.exe], ip.txt, ipv6.txt, *
 | 2026-09-24 | P3–P5 | 本机冒烟：自动下载 cfst v2.3.5（Windows）→ 初始化/登录 → 建账号/任务 → 真实测速（自定义 3 个 /24、`-dd`）→ SSE 实时日志 → DNS 失败被正确记录为 failed → 重复触发 409 → Webhook 触发 + 取消 → 备份导出 | 通过；本机有 TUN 代理，延迟约 1 ms 不可信（已写入 README 注意事项） |
 | 2026-09-25 | P7 | CI 失败原因：`pnpm/action-setup` 未指定版本 → `packageManager: pnpm@10.34.5`（本地 `--frozen-lockfile` 通过）；触发收紧为 main/PR/tag/手动；接入 release-please；`actionlint` 通过 | 通过（待 CI 实测） |
 | 2026-09-26 | P9 | `go vet`、`go test ./...`（新增 importer / legacy / dryrun 测试）；`pnpm build`；浏览器（隔离实例 + 全新数据目录）：初始化 → `/welcome`（cfst 就绪、服务商/渠道图标）→ v1 导入预览与应用（假凭据下任务按设计停用并提示）→ 任务列表试运行（抽屉显示试运行徽标、实时日志、取消后 `dryRun=true`）→ 仪表盘入门清单 4/5 → `/help#faq` 锚点；390px 宽度下 15 个页面无横向滚动；亮色模式图标检查 | 通过；DNS 账号连通性与真实写入未测（无真实凭据） |
-| 2026-10-30 | P11 | `go vet`、`go test ./...`（新增 netcheck 单测，engine 测试覆盖拦截 / 延迟异常 / 经代理 / 出口变化）；`pnpm build`；本机（Surge 增强模式）隔离实例：直连模式 v4、v6 都判定为被拦截，约 3 秒结束，DNS 未修改；执行详情一键切换后任务变为 proxy + httping，新执行命令带 `-httping`、日志记录 JP 出口；四种语言在 1440 / 1024 / 768 / 390 宽度下无溢出 | 通过；直连环境下的「不误判」未在真实直连机器上验证（单测覆盖） |
+| 2026-10-30 | P11 | `go vet`、`go test ./...`（新增 netcheck 单测，engine 测试覆盖拦截 / 延迟异常 / 经代理 / 出口变化）；`pnpm build`；本机（Surge 增强模式）隔离实例：直连模式 v4、v6 都判定为被拦截，约 3 秒结束，DNS 未修改；执行详情一键切换后任务变为 proxy + httping，新执行命令带 `-httping`、日志记录 JP 出口；四种语言在 1440 / 1024 / 768 / 390 宽度下无溢出 | 通过 |
+| 2026-10-30 | P11 | 群晖（网关 10.0.20.1 直连）临时实例 `dev-bundled`（dev-5dbfe29）：直连模式默认 IP 段 v4+v6 试运行，自检约 3 秒，保留地址未连通，CF 出口与本地出口一致（LAX / SJC），v4 2738 个、v6 37749 个结果，前 100 名延迟中位数约 80 ms，未误判；经代理模式（小 IP 段）保存为 httping、命令带 `-httping`，测出 LAX / SJC；测后删除临时容器、镜像与数据目录 | 通过 |
 
 ## 5. 阻塞与风险
 
