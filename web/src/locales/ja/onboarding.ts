@@ -71,6 +71,8 @@ export default {
     onFailure: '失敗時に通知',
     onlyOnChange: 'IP 変更時のみ通知',
     onlyOnChangeDesc: 'IP が変わらないときは通知しません',
+    onUpdate: '新バージョン通知',
+    onUpdateDesc: 'cfst-ddns の新バージョンが出たら一度だけ通知',
     sent: 'テストメッセージを送信しました',
     sendFailed: '送信に失敗しました',
     sendTest: 'テスト送信',

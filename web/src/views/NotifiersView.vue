@@ -64,6 +64,7 @@ function toInput(n: Notifier): NotifierInput {
     onSuccess: n.onSuccess,
     onFailure: n.onFailure,
     onlyOnChange: n.onlyOnChange,
+    onUpdate: n.onUpdate,
   }
 }
 
@@ -88,6 +89,7 @@ const emptyForm = (): NotifierInput => ({
   onSuccess: true,
   onFailure: true,
   onlyOnChange: false,
+  onUpdate: true,
 })
 
 const dlg = reactive({
@@ -248,7 +250,8 @@ async function remove(n: Notifier) {
           <ToneBadge v-if="n.onSuccess" tone="success">{{ t('notifiers.onSuccessShort') }}</ToneBadge>
           <ToneBadge v-if="n.onFailure" tone="danger">{{ t('notifiers.onFailureShort') }}</ToneBadge>
           <ToneBadge v-if="n.onlyOnChange" tone="warning">{{ t('notifiers.onlyOnChange') }}</ToneBadge>
-          <span v-if="!n.onSuccess && !n.onFailure" class="text-muted-foreground text-xs">{{ t('notifiers.never') }}</span>
+          <ToneBadge v-if="n.onUpdate" tone="info">{{ t('notifiers.onUpdateShort') }}</ToneBadge>
+          <span v-if="!n.onSuccess && !n.onFailure && !n.onUpdate" class="text-muted-foreground text-xs">{{ t('notifiers.never') }}</span>
         </CardContent>
         <CardFooter class="flex items-center justify-between border-t [.border-t]:pt-3">
           <span class="text-muted-foreground text-xs">{{ t('common.updatedAt', { time: fromNow(n.updatedAt) }) }}</span>
@@ -311,6 +314,9 @@ async function remove(n: Notifier) {
             </FormItem>
             <FormItem :label="t('notifiers.onlyOnChange')" :help="t('notifiers.onlyOnChangeHelp')">
               <div class="flex h-9 items-center"><Switch v-model="dlg.form.onlyOnChange" /></div>
+            </FormItem>
+            <FormItem :label="t('notifiers.onUpdate')" :help="t('notifiers.onUpdateHelp')">
+              <div class="flex h-9 items-center"><Switch v-model="dlg.form.onUpdate" /></div>
             </FormItem>
 
             <Alert v-if="dlg.result" :class="dlg.result.ok ? 'border-success/40 bg-success/5' : 'border-destructive/40 bg-destructive/5'">

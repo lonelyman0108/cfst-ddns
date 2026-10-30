@@ -34,6 +34,7 @@ const form = reactive({
   onSuccess: true,
   onFailure: true,
   onlyOnChange: false,
+  onUpdate: true,
   testing: false,
   saving: false,
   result: null as TestResult | null,
@@ -84,6 +85,7 @@ async function save() {
       onSuccess: form.onSuccess,
       onFailure: form.onFailure,
       onlyOnChange: form.onlyOnChange,
+      onUpdate: form.onUpdate,
     })
     toast.success(t('onboarding.notifier.added'))
     form.type = ''
@@ -137,6 +139,9 @@ async function save() {
             <SettingRow :label="t('onboarding.notifier.onFailure')" for="ob-on-failure"><Switch id="ob-on-failure" v-model="form.onFailure" /></SettingRow>
             <SettingRow :label="t('onboarding.notifier.onlyOnChange')" :description="t('onboarding.notifier.onlyOnChangeDesc')" for="ob-on-change">
               <Switch id="ob-on-change" v-model="form.onlyOnChange" />
+            </SettingRow>
+            <SettingRow :label="t('onboarding.notifier.onUpdate')" :description="t('onboarding.notifier.onUpdateDesc')" for="ob-on-update">
+              <Switch id="ob-on-update" v-model="form.onUpdate" />
             </SettingRow>
           </div>
           <Alert v-if="form.result" :class="form.result.ok ? 'border-success/40 bg-success/5' : 'border-destructive/40 bg-destructive/5'">

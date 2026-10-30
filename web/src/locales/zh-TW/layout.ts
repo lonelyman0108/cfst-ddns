@@ -33,4 +33,5 @@ export default {
     darkTheme: '深色主題',
     systemTheme: '跟隨系統主題',
   },
+  updateAvailable: '新版本 {version} 可用',
 }

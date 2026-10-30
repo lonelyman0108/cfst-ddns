@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import AppLogo from '@/components/AppLogo.vue'
 import LanguageSwitcher from '@/components/LanguageSwitcher.vue'
-import { ChevronsUpDown, CircleHelp, KeyRound, LogOut, Monitor, Moon, Rocket, Search, Sun } from '@lucide/vue'
+import { ChevronsUpDown, CircleArrowUp, CircleHelp, KeyRound, LogOut, Monitor, Moon, Rocket, Search, Sun } from '@lucide/vue'
 import { systemApi } from '@/api'
 import {
   Sidebar,
@@ -50,6 +50,7 @@ import ChangePasswordDialog from '@/components/ChangePasswordDialog.vue'
 import { confirm } from '@/composables/useConfirm'
 import { useAuthStore } from '@/stores/auth'
 import { useThemeStore, type ThemeMode } from '@/stores/theme'
+import { useUpdateStore } from '@/stores/update'
 import CommandPalette from './CommandPalette.vue'
 import SidebarAutoClose from './SidebarAutoClose.vue'
 import { NAV, NAV_GROUPS } from './nav'
@@ -74,6 +75,7 @@ const themeMode = computed({
 })
 
 const version = ref('')
+const update = useUpdateStore()
 
 onMounted(() => {
   auth.fetchMe().catch(() => {})
@@ -81,6 +83,7 @@ onMounted(() => {
     .info()
     .then((i) => (version.value = i.version))
     .catch(() => {})
+  update.load().catch(() => {})
 })
 
 async function logout() {
@@ -136,11 +139,18 @@ async function logout() {
             <DropdownMenu>
               <DropdownMenuTrigger as-child>
                 <SidebarMenuButton size="lg" class="data-[state=open]:bg-sidebar-accent">
-                  <Avatar class="size-8 rounded-lg">
-                    <AvatarFallback class="bg-primary/15 text-primary rounded-lg font-semibold">
-                      {{ (auth.username || 'A').slice(0, 1).toUpperCase() }}
-                    </AvatarFallback>
-                  </Avatar>
+                  <div class="relative shrink-0">
+                    <Avatar class="size-8 rounded-lg">
+                      <AvatarFallback class="bg-primary/15 text-primary rounded-lg font-semibold">
+                        {{ (auth.username || 'A').slice(0, 1).toUpperCase() }}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span
+                      v-if="update.available"
+                      class="bg-primary ring-sidebar absolute -top-0.5 -right-0.5 size-2.5 rounded-full ring-2"
+                      :title="t('layout.updateAvailable', { version: update.info?.latest })"
+                    />
+                  </div>
                   <div class="grid grid-cols-1 flex-1 text-left text-sm leading-tight">
                     <span class="truncate font-medium">{{ auth.username || t('layout.admin') }}</span>
                     <span class="text-muted-foreground truncate text-xs">{{ t('layout.admin') }}</span>
@@ -161,6 +171,12 @@ async function logout() {
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
+                <template v-if="update.available">
+                  <DropdownMenuItem class="text-primary focus:text-primary" @select="router.push({ path: '/settings', hash: '#system' })">
+                    <CircleArrowUp class="text-primary" /><span class="truncate">{{ t('layout.updateAvailable', { version: update.info?.latest }) }}</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                </template>
                 <DropdownMenuItem @select="pwdOpen = true"><KeyRound />{{ t('layout.changePassword') }}</DropdownMenuItem>
                 <DropdownMenuItem @select="router.push('/welcome')"><Rocket />{{ t('layout.quickStartWizard') }}</DropdownMenuItem>
                 <DropdownMenuSub>

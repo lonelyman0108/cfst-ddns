@@ -45,6 +45,7 @@ type Notifier struct {
 	OnSuccess    bool          `json:"onSuccess"`
 	OnFailure    bool          `json:"onFailure"`
 	OnlyOnChange bool          `json:"onlyOnChange"`
+	OnUpdate     bool          `json:"onUpdate"` // 接收新版本提醒，与任务绑定无关
 	CreatedAt    time.Time     `json:"createdAt"`
 	UpdatedAt    time.Time     `json:"updatedAt"`
 }

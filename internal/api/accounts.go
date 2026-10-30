@@ -295,6 +295,7 @@ type notifierReq struct {
 	OnSuccess    bool          `json:"onSuccess"`
 	OnFailure    bool          `json:"onFailure"`
 	OnlyOnChange bool          `json:"onlyOnChange"`
+	OnUpdate     bool          `json:"onUpdate"`
 }
 
 func (s *Server) createNotifier(c *gin.Context) {
@@ -308,7 +309,8 @@ func (s *Server) createNotifier(c *gin.Context) {
 		return
 	}
 	n := store.Notifier{Name: strings.TrimSpace(req.Name), Type: req.Type, Enabled: req.Enabled,
-		Config: meta.ApplyDefaults(meta.Clean(req.Config)), OnSuccess: req.OnSuccess, OnFailure: req.OnFailure, OnlyOnChange: req.OnlyOnChange}
+		Config: meta.ApplyDefaults(meta.Clean(req.Config)), OnSuccess: req.OnSuccess, OnFailure: req.OnFailure, OnlyOnChange: req.OnlyOnChange,
+		OnUpdate: req.OnUpdate}
 	if n.Name == "" {
 		n.Name = i18n.T(lang(c), meta.Name)
 	}
@@ -346,7 +348,7 @@ func (s *Server) updateNotifier(c *gin.Context) {
 	if name := strings.TrimSpace(req.Name); name != "" {
 		n.Name = name
 	}
-	n.Enabled, n.OnSuccess, n.OnFailure, n.OnlyOnChange = req.Enabled, req.OnSuccess, req.OnFailure, req.OnlyOnChange
+	n.Enabled, n.OnSuccess, n.OnFailure, n.OnlyOnChange, n.OnUpdate = req.Enabled, req.OnSuccess, req.OnFailure, req.OnlyOnChange, req.OnUpdate
 	if err := s.Store.SaveNotifier(n); err != nil {
 		dbFail(c, err)
 		return

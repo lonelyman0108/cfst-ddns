@@ -71,6 +71,8 @@ export default {
     onFailure: 'Notify on failure',
     onlyOnChange: 'Only when the IP changes',
     onlyOnChangeDesc: "Stay quiet when the IP hasn't changed",
+    onUpdate: 'New version alerts',
+    onUpdateDesc: 'Notify once when a new cfst-ddns version is out',
     sent: 'Test message sent',
     sendFailed: 'Failed to send',
     sendTest: 'Send test',

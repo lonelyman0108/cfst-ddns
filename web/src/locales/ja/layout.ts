@@ -33,4 +33,5 @@ export default {
     darkTheme: 'ダークテーマ',
     systemTheme: 'システムのテーマに合わせる',
   },
+  updateAvailable: '新バージョン {version} があります',
 }

@@ -186,6 +186,7 @@ type Settings struct {
 	HookToken            string `json:"hookToken"`
 	NotifyTitlePrefix    string `json:"notifyTitlePrefix"`
 	OnboardingDismissed  bool   `json:"onboardingDismissed"` // 仪表盘入门清单是否已关闭
+	UpdateCheck          bool   `json:"updateCheck"`         // 自动检查新版本
 }
 
 const (
@@ -195,6 +196,7 @@ const (
 	keyHookToken = "hook_token"
 	keyPrefix    = "notify_title_prefix"
 	keyOnboard   = "onboarding_dismissed"
+	keyUpdate    = "update_check"
 	keyJWTSecret = "jwt_secret"
 )
 
@@ -210,9 +212,14 @@ func (s *Store) set(tx *gorm.DB, key, value string) error {
 	return tx.Save(&KV{Key: key, Value: value}).Error
 }
 
-// GetSettings 读取设置，缺省值在此定义。
+// DefaultSettings 返回设置的缺省值。
+func DefaultSettings() Settings {
+	return Settings{HistoryRetentionDays: 30, NotifyTitlePrefix: "CFST DDNS", UpdateCheck: true}
+}
+
+// GetSettings 读取设置，未保存过的项使用缺省值。
 func (s *Store) GetSettings() Settings {
-	st := Settings{HistoryRetentionDays: 30, NotifyTitlePrefix: "CFST DDNS"}
+	st := DefaultSettings()
 	if v, ok := s.get(keyMirror); ok {
 		st.GithubMirror = v
 	}
@@ -233,6 +240,9 @@ func (s *Store) GetSettings() Settings {
 	if v, ok := s.get(keyOnboard); ok {
 		st.OnboardingDismissed = v == "true"
 	}
+	if v, ok := s.get(keyUpdate); ok {
+		st.UpdateCheck = v == "true"
+	}
 	return st
 }
 
@@ -246,6 +256,7 @@ func (s *Store) SaveSettings(st Settings) error {
 			keyHookToken: st.HookToken,
 			keyPrefix:    st.NotifyTitlePrefix,
 			keyOnboard:   strconv.FormatBool(st.OnboardingDismissed),
+			keyUpdate:    strconv.FormatBool(st.UpdateCheck),
 		} {
 			if err := s.set(tx, k, v); err != nil {
 				return err
@@ -254,6 +265,15 @@ func (s *Store) SaveSettings(st Settings) error {
 		return nil
 	})
 }
+
+// Value 读取一个内部状态值，不存在时返回空串。
+func (s *Store) Value(key string) string {
+	v, _ := s.get(key)
+	return v
+}
+
+// SetValue 保存一个内部状态值。
+func (s *Store) SetValue(key, value string) error { return s.set(s.DB, key, value) }
 
 // JWTSecret 返回签名密钥，不存在时生成。
 func (s *Store) JWTSecret() ([]byte, error) {
