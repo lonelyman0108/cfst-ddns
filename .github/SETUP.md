@@ -38,19 +38,28 @@
 | 触发 | 运行内容 |
 |---|---|
 | Pull Request（目标 `main`） | 前端构建 + `go vet` + `go test`（不推送镜像） |
-| 推送 / 合并到 `main` | 测试 + release-please 更新 Release PR |
+| 推送 / 合并到 `main` | 测试 + release-please 更新 Release PR → 构建 nightly：多平台二进制更新到 `nightly` 预发布，推送 `nightly` / `nightly-bundled` 镜像 |
 | 合并 Release PR | 打 `v*` tag 并创建 Release → 多平台二进制 → 推送 standard/bundled 镜像 → 上传二进制到 Release |
 | 手动推送 `v*` 标签（兜底） | 同上，Release 说明由 GitHub 自动生成 |
-| 手动触发（Actions 页面 Run workflow） | 测试 → 多平台二进制（Artifact）→ 推送 `dev` / `dev-bundled` 镜像 |
+| 手动触发 `main`（Actions 页面 Run workflow） | 同"合并到 `main`"，重新构建一次 nightly |
+| 手动触发其他分支 | 测试 → 多平台二进制（Artifact）→ 推送 `dev` / `dev-bundled` 镜像 |
 
 功能分支的推送不会触发构建；需要验证时开 PR 到 `main` 或手动触发。同一 PR 的新提交会取消旧的运行。
+
+nightly 说明：
+- `nightly` 是一个固定 tag 的**预发布**，每次构建把 tag 移到最新提交并替换二进制，文件名固定为 `cfst-ddns_nightly_<os>_<arch>`，下载地址不变。预发布不会成为 Latest，也不影响 release-please。
+- 版本号形如 `v2.2.0-nightly.57`（最近的正式版本 + 构建号），Release 标题为 `Nightly #57 (abc1234)`，程序内的更新检测依赖这个标题格式。
+- 连续合并时较旧的 nightly 构建会被取消或跳过，只发布最新提交。
 
 ### 4. 镜像标签说明
 
 | 触发条件 | standard 标签 | bundled 标签（预置 cfst） |
 |---|---|---|
 | 发布 `v2.0.0` | `2.0.0`, `2.0`, `2`, `latest` | `2.0.0-bundled`, `2.0-bundled`, `2-bundled`, `latest-bundled` |
-| 手动触发 | `dev`, `dev-<sha>` | `dev-bundled`, `dev-bundled-<sha>` |
+| 合并到 `main` | `nightly` | `nightly-bundled` |
+| 手动触发其他分支 | `dev`, `dev-<sha>` | `dev-bundled`, `dev-bundled-<sha>` |
+
+`latest` 只在正式发版时更新，nightly 与 dev 构建都不会改动它。
 
 ### 5. 支持的架构
 

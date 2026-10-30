@@ -56,6 +56,8 @@ git config core.hooksPath .githooks
 1. PR 合并到 `main` 后，release-please 自动创建或更新 `chore(main): release x.y.z` PR。
 2. 想发版时合并该 Release PR，自动打 tag、创建 Release、构建多平台二进制和 Docker 镜像。
 
+每次合并到 `main` 还会自动构建 nightly：更新 `nightly` 预发布与 `nightly` / `nightly-bundled` 镜像，不影响 `latest`。
+
 需要指定版本号时，在合并提交信息的**最后一行**加 `Release-As: x.y.z`，只影响下一次发版。
 
 CI、镜像标签与仓库设置详见 [.github/SETUP.md](.github/SETUP.md)。

@@ -2,6 +2,10 @@ name: Build and Release
 
 # 发布流程：合并到 main → release-please 维护 Release PR（CHANGELOG + 版本号）
 #          → 合并 Release PR → 打 tag 并创建 Release → 本工作流构建二进制与镜像并上传
+# 构建渠道：
+#   release：合并 Release PR 或推送 v* tag，产出 vX.Y.Z / latest
+#   nightly：其他合并到 main（或在 main 上手动触发），更新 nightly 预发布与 :nightly 镜像
+#   dev    ：在其他分支上手动触发，产出 dev-<sha> 供实测
 on:
   push:
     branches: [main]
@@ -75,15 +79,56 @@ jobs:
           path: web/dist
           retention-days: 1
 
-  # 多平台二进制：发版或手动触发
-  binaries:
+  # 确定构建渠道与版本信息，供后续构建共用；PR 只做测试不构建
+  meta:
     needs: [test, release-please]
     if: >-
-      !cancelled() && needs.test.result == 'success' &&
-      (needs.release-please.outputs.release_created == 'true' ||
-       startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch')
+      !cancelled() && needs.test.result == 'success' && github.event_name != 'pull_request'
     env:
       TAG: ${{ needs.release-please.outputs.tag_name || (startsWith(github.ref, 'refs/tags/v') && github.ref_name) || '' }}
+    runs-on: ubuntu-latest
+    outputs:
+      channel: ${{ steps.meta.outputs.channel }}
+      tag: ${{ steps.meta.outputs.tag }}
+      version: ${{ steps.meta.outputs.version }}
+      label: ${{ steps.meta.outputs.label }}
+      commit: ${{ steps.meta.outputs.commit }}
+      time: ${{ steps.meta.outputs.time }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # git describe 需要完整历史与 tag
+
+      - id: meta
+        run: |
+          commit="${GITHUB_SHA::7}"
+          if [[ -n "$TAG" ]]; then
+            channel=release; version="$TAG"; label="$TAG"
+          elif [[ "$GITHUB_REF" == refs/heads/main ]]; then
+            # 基于最近的正式版本号，nightly 这类非版本 tag 不参与匹配
+            base="$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || echo v0.0.0)"
+            channel=nightly; version="${base}-nightly.${GITHUB_RUN_NUMBER}"; label=nightly
+          else
+            channel=dev; version="dev-${commit}"; label="$version"
+          fi
+          {
+            echo "channel=$channel"
+            echo "tag=$TAG"
+            echo "version=$version"
+            echo "label=$label"
+            echo "commit=$commit"
+            echo "time=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } | tee -a "$GITHUB_OUTPUT"
+
+  # 多平台二进制
+  binaries:
+    needs: [meta]
+    if: ${{ !cancelled() && needs.meta.result == 'success' }}
+    env:
+      VERSION: ${{ needs.meta.outputs.version }}
+      LABEL: ${{ needs.meta.outputs.label }}
+      COMMIT: ${{ needs.meta.outputs.commit }}
+      BUILD_TIME: ${{ needs.meta.outputs.time }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -97,15 +142,16 @@ jobs:
 
       - name: Cross compile
         run: |
-          VERSION="${TAG:-dev-${GITHUB_SHA::7}}"
-          LDFLAGS="-s -w -X main.version=${VERSION} -X main.commit=${GITHUB_SHA::7} -X main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          LDFLAGS="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.buildTime=${BUILD_TIME}"
+          LDFLAGS+=" -X main.buildID=${GITHUB_RUN_NUMBER} -X main.runID=${GITHUB_RUN_ID}"
           mkdir -p dist
           # 纯 Go SQLite（modernc.org/libc）不支持 MIPS，故不提供 MIPS 构建
           for target in linux/amd64 linux/arm64 linux/armv7 linux/armv6 linux/386 \
                         windows/amd64 windows/arm64 darwin/amd64 darwin/arm64; do
             os="${target%/*}"; arch="${target#*/}"; goarm=""
             if [[ "$arch" == armv* ]]; then goarm="${arch#armv}"; goarch=arm; else goarch="$arch"; fi
-            name="cfst-ddns_${VERSION}_${os}_${arch}"
+            # nightly 的文件名固定，便于用不变的下载地址获取最新构建
+            name="cfst-ddns_${LABEL}_${os}_${arch}"
             bin="cfst-ddns"; [[ "$os" == windows ]] && bin="cfst-ddns.exe"
             mkdir -p "build/$name"
             CGO_ENABLED=0 GOOS=$os GOARCH=$goarch GOARM=$goarm \
@@ -117,7 +163,7 @@ jobs:
               tar -C build -czf "dist/$name.tar.gz" "$name"
             fi
           done
-          (cd dist && sha256sum * > checksums.txt)
+          (cd dist && sha256sum -- * > checksums.txt)
           ls -lh dist
 
       - uses: actions/upload-artifact@v4
@@ -125,15 +171,17 @@ jobs:
           name: binaries
           path: dist/*
 
-  # Docker 镜像（standard + bundled）：发版或手动触发
+  # Docker 镜像（standard + bundled）
   docker:
-    needs: [test, release-please]
-    if: >-
-      !cancelled() && needs.test.result == 'success' &&
-      (needs.release-please.outputs.release_created == 'true' ||
-       startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch')
+    needs: [meta]
+    if: ${{ !cancelled() && needs.meta.result == 'success' }}
+    # 连续合并时只保留最新一次 nightly，避免旧构建后完成而覆盖 :nightly
+    concurrency:
+      group: docker-${{ needs.meta.outputs.channel == 'nightly' && 'nightly' || github.run_id }}
+      cancel-in-progress: ${{ needs.meta.outputs.channel == 'nightly' }}
     env:
-      TAG: ${{ needs.release-please.outputs.tag_name || (startsWith(github.ref, 'refs/tags/v') && github.ref_name) || '' }}
+      TAG: ${{ needs.meta.outputs.tag }}
+      CHANNEL: ${{ needs.meta.outputs.channel }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -146,40 +194,39 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Build args
-        id: args
-        run: |
-          VERSION="${TAG:-dev-${GITHUB_SHA::7}}"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "time=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
-
       - name: Metadata (standard)
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.DOCKER_IMAGE }}
+          # 关闭自动 latest，只由下方显式规则在发版时生成，nightly / dev 不会动 latest
+          flavor: |
+            latest=false
           tags: |
             type=semver,pattern={{version}},value=${{ env.TAG }}
             type=semver,pattern={{major}}.{{minor}},value=${{ env.TAG }}
             type=semver,pattern={{major}},value=${{ env.TAG }}
-            # 仅发版时生成 latest
-            type=raw,value=latest,enable=${{ env.TAG != '' }}
-            # 手动触发时使用 dev 标签与 commit SHA 短标签
-            type=raw,value=dev,enable=${{ github.event_name == 'workflow_dispatch' }}
-            type=sha,prefix=dev-,enable=${{ github.event_name == 'workflow_dispatch' }}
+            type=raw,value=latest,enable=${{ env.CHANNEL == 'release' }}
+            type=raw,value=nightly,enable=${{ env.CHANNEL == 'nightly' }}
+            # 其他分支手动触发时使用 dev 标签与 commit SHA 短标签
+            type=raw,value=dev,enable=${{ env.CHANNEL == 'dev' }}
+            type=sha,prefix=dev-,enable=${{ env.CHANNEL == 'dev' }}
 
       - name: Metadata (bundled)
         id: meta-bundled
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.DOCKER_IMAGE }}
+          flavor: |
+            latest=false
           tags: |
             type=semver,pattern={{version}},value=${{ env.TAG }},suffix=-bundled
             type=semver,pattern={{major}}.{{minor}},value=${{ env.TAG }},suffix=-bundled
             type=semver,pattern={{major}},value=${{ env.TAG }},suffix=-bundled
-            type=raw,value=latest-bundled,enable=${{ env.TAG != '' }}
-            type=raw,value=dev-bundled,enable=${{ github.event_name == 'workflow_dispatch' }}
-            type=sha,prefix=dev-bundled-,enable=${{ github.event_name == 'workflow_dispatch' }}
+            type=raw,value=latest-bundled,enable=${{ env.CHANNEL == 'release' }}
+            type=raw,value=nightly-bundled,enable=${{ env.CHANNEL == 'nightly' }}
+            type=raw,value=dev-bundled,enable=${{ env.CHANNEL == 'dev' }}
+            type=sha,prefix=dev-bundled-,enable=${{ env.CHANNEL == 'dev' }}
 
       - name: Build and push (standard)
         uses: docker/build-push-action@v6
@@ -191,9 +238,11 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            VERSION=${{ steps.args.outputs.version }}
-            COMMIT=${{ github.sha }}
-            BUILD_TIME=${{ steps.args.outputs.time }}
+            VERSION=${{ needs.meta.outputs.version }}
+            COMMIT=${{ needs.meta.outputs.commit }}
+            BUILD_TIME=${{ needs.meta.outputs.time }}
+            BUILD_ID=${{ github.run_number }}
+            RUN_ID=${{ github.run_id }}
           cache-from: type=gha,scope=standard
           cache-to: type=gha,mode=max,scope=standard
 
@@ -207,23 +256,25 @@ jobs:
           tags: ${{ steps.meta-bundled.outputs.tags }}
           labels: ${{ steps.meta-bundled.outputs.labels }}
           build-args: |
-            VERSION=${{ steps.args.outputs.version }}
-            COMMIT=${{ github.sha }}
-            BUILD_TIME=${{ steps.args.outputs.time }}
+            VERSION=${{ needs.meta.outputs.version }}
+            COMMIT=${{ needs.meta.outputs.commit }}
+            BUILD_TIME=${{ needs.meta.outputs.time }}
+            BUILD_ID=${{ github.run_number }}
+            RUN_ID=${{ github.run_id }}
           cache-from: type=gha,scope=bundled
           cache-to: type=gha,mode=max,scope=bundled
 
   # 把二进制上传到 release-please 创建的 Release（手动推 tag 时先创建 Release）
   release:
-    needs: [release-please, binaries, docker]
+    needs: [meta, binaries, docker]
     if: >-
       !cancelled() && needs.binaries.result == 'success' && needs.docker.result == 'success' &&
-      (needs.release-please.outputs.release_created == 'true' || startsWith(github.ref, 'refs/tags/v'))
+      needs.meta.outputs.channel == 'release'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     env:
-      TAG: ${{ needs.release-please.outputs.tag_name || github.ref_name }}
+      TAG: ${{ needs.meta.outputs.tag }}
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
     steps:
@@ -251,3 +302,76 @@ jobs:
             echo '```'
           } > notes.md
           grep -q '^## Docker' <(gh release view "$TAG" --json body -q .body) || gh release edit "$TAG" --notes-file notes.md
+
+  # 更新 nightly 预发布：移动 nightly tag 到本次提交并替换二进制
+  # 预发布不会被 releases/latest 返回，release-please 也不识别非版本 tag，两者都不受影响
+  nightly:
+    needs: [meta, binaries, docker]
+    if: >-
+      !cancelled() && needs.binaries.result == 'success' && needs.docker.result == 'success' &&
+      needs.meta.outputs.channel == 'nightly'
+    concurrency:
+      group: nightly-publish
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      VERSION: ${{ needs.meta.outputs.version }}
+      COMMIT: ${{ needs.meta.outputs.commit }}
+      BUILD_TIME: ${{ needs.meta.outputs.time }}
+    steps:
+      # main 已有更新的提交时跳过，交给那次运行发布，避免旧构建覆盖新构建
+      - name: Check main head
+        id: head
+        run: |
+          head="$(gh api "repos/$GH_REPO/commits/main" -q .sha)"
+          if [[ "$head" != "$GITHUB_SHA" ]]; then
+            echo "main 已前进到 ${head::7}，跳过本次 nightly 发布"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/download-artifact@v4
+        if: steps.head.outputs.skip != 'true'
+        with:
+          name: binaries
+          path: dist
+
+      - name: Publish nightly
+        if: steps.head.outputs.skip != 'true'
+        run: |
+          if gh api "repos/$GH_REPO/git/refs/tags/nightly" >/dev/null 2>&1; then
+            gh api -X PATCH "repos/$GH_REPO/git/refs/tags/nightly" -f sha="$GITHUB_SHA" -F force=true >/dev/null
+          else
+            gh api -X POST "repos/$GH_REPO/git/refs" -f ref=refs/tags/nightly -f sha="$GITHUB_SHA" >/dev/null
+          fi
+
+          run_url="$GITHUB_SERVER_URL/$GH_REPO/actions/runs/$GITHUB_RUN_ID"
+          {
+            echo "> 跟随 main 最新提交自动构建，未经正式发版验证，可能不稳定。"
+            echo
+            echo "- 版本：\`$VERSION\`"
+            echo "- 提交：[\`$COMMIT\`]($GITHUB_SERVER_URL/$GH_REPO/commit/$GITHUB_SHA)"
+            echo "- 构建：[#$GITHUB_RUN_NUMBER]($run_url)"
+            echo "- 时间：$BUILD_TIME"
+            echo
+            echo "## Docker"
+            echo
+            echo '```bash'
+            echo "docker pull ${DOCKER_IMAGE}:nightly"
+            echo "docker pull ${DOCKER_IMAGE}:nightly-bundled   # 预置 cfst"
+            echo '```'
+          } > notes.md
+
+          # 标题中的构建号供程序内的更新检测解析，格式不要随意改动
+          title="Nightly #$GITHUB_RUN_NUMBER ($COMMIT)"
+          # 编辑已有 Release 而不是删除重建，避免每次都给关注者发新 Release 通知
+          if gh release view nightly >/dev/null 2>&1; then
+            gh release edit nightly --title "$title" --notes-file notes.md --prerelease
+          else
+            gh release create nightly --verify-tag --title "$title" --notes-file notes.md --prerelease
+          fi
+          # 文件名固定，--clobber 会覆盖全部旧资产
+          gh release upload nightly dist/* --clobber

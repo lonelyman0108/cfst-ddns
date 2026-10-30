@@ -56,6 +56,8 @@ services:
 docker compose up -d
 ```
 
+> リリース前の変更を試したい場合は `:nightly` / `:nightly-bundled` を使用してください。`main` へのマージごとに再ビルドされます（不安定な場合があります）。バイナリは [nightly プレリリース](https://github.com/lonelyman0108/cfst-ddns/releases/tag/nightly) にあります。
+
 `http://<ホストIP>:8080` を開き、管理者アカウントを作成します（ここでバックアップからの復元や v1 設定のインポートも可能です）。その後、セットアップウィザードが次の手順を案内します。
 
 1. cfst がインストールされていることを確認

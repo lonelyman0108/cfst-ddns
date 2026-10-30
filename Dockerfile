@@ -22,6 +22,8 @@ ARG TARGETOS TARGETARCH TARGETVARIANT
 ARG VERSION=dev
 ARG COMMIT=none
 ARG BUILD_TIME=unknown
+ARG BUILD_ID=
+ARG RUN_ID=
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
@@ -32,7 +34,7 @@ COPY --from=web /src/web/dist ./web/dist
 RUN export CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH; \
     if [ "$TARGETARCH" = "arm" ]; then export GOARM="${TARGETVARIANT#v}"; fi; \
     go build -trimpath \
-      -ldflags "-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.buildTime=${BUILD_TIME}" \
+      -ldflags "-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.buildTime=${BUILD_TIME} -X main.buildID=${BUILD_ID} -X main.runID=${RUN_ID}" \
       -o /out/cfst-ddns ./cmd/cfst-ddns
 
 # ---------- 预置 cfst（仅 bundled 使用） ----------

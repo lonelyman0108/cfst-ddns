@@ -56,6 +56,8 @@ services:
 docker compose up -d
 ```
 
+> 想提前体验未发版的改动？使用 `:nightly` / `:nightly-bundled`，每次合并到 `main` 都会重新构建（可能不稳定）。二进制见 [nightly 预发布](https://github.com/lonelyman0108/cfst-ddns/releases/tag/nightly)。
+
 启动后打开 `http://<主机IP>:8080`，创建管理员账号（也可以在这里从备份恢复，或导入 v1 配置）。随后引导向导会带你完成：
 
 1. 确认 cfst 已安装
