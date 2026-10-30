@@ -318,7 +318,8 @@ func (s *Server) backup(c *gin.Context) {
 }
 
 func (s *Server) restore(c *gin.Context) {
-	var b backupFile
+	// 旧备份缺少的设置项保留缺省值
+	b := backupFile{Settings: store.DefaultSettings()}
 	if !bind(c, &b) {
 		return
 	}

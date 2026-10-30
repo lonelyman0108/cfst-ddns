@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -16,6 +17,7 @@ import (
 	"github.com/lonelyman0108/cfst-ddns/internal/notify"
 	"github.com/lonelyman0108/cfst-ddns/internal/provider"
 	"github.com/lonelyman0108/cfst-ddns/internal/schema"
+	"github.com/lonelyman0108/cfst-ddns/internal/update"
 )
 
 type credentials struct {
@@ -123,9 +125,28 @@ func (s *Server) systemInfo(c *gin.Context) {
 	tz := timezoneName()
 	c.JSON(http.StatusOK, gin.H{
 		"version": s.Build.Version, "commit": s.Build.Commit, "buildTime": s.Build.BuildTime,
+		"buildId": s.Build.BuildID, "runId": s.Build.RunID, "repoUrl": update.RepoURL,
 		"goVersion": runtime.Version(), "os": runtime.GOOS, "arch": runtime.GOARCH,
 		"dataDir": s.DataDir, "startedAt": s.StartedAt, "timezone": tz,
 	})
+}
+
+// systemUpdate 返回新版本信息。force=1 时立即检查；关闭自动检查后只返回已有结果。
+func (s *Server) systemUpdate(c *gin.Context) {
+	force := c.Query("force") == "1"
+	var info update.Info
+	if !force && !s.Store.GetSettings().UpdateCheck {
+		info = s.Update.Cached()
+	} else {
+		// 不跟随请求取消，避免把"客户端断开"缓存成检查失败
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		info = s.Update.Check(ctx, force)
+	}
+	if info.Err != nil {
+		info.Error = i18n.Localize(lang(c), info.Err)
+	}
+	c.JSON(http.StatusOK, info)
 }
 
 func (s *Server) systemLogs(c *gin.Context) {

@@ -39,9 +39,24 @@ type Config = Record<string, string>
 |---|---|---|
 | GET | /api/meta/providers | `TypeMeta[]` |
 | GET | /api/meta/notifiers | `TypeMeta[]` |
-| GET | /api/system/info | `{version, commit, buildTime, goVersion, os, arch, dataDir, startedAt, timezone}` |
+| GET | /api/system/info | `{version, commit, buildTime, buildId, runId, repoUrl, goVersion, os, arch, dataDir, startedAt, timezone}`；`commit` 为 7 位短提交号，`buildId` / `runId` 为 CI 的 run_number / run_id（本地构建为空） |
+| GET | /api/system/update?force=1 | `UpdateInfo`，见下 |
 | GET | /api/system/logs?limit=500 | `{lines: {time, level, message}[]}` 应用日志（环形缓冲） |
 | GET | /healthz | `ok`（无需登录） |
+
+```ts
+interface UpdateInfo {
+  channel: 'release' | 'nightly' | 'dev'  // 由当前版本号判断
+  current: string; latest?: string; available: boolean
+  url?: string           // Release 页面
+  publishedAt?: string; checkedAt?: string  // 未检查过时 checkedAt 为空
+  error?: string         // 检查失败原因（按 Accept-Language 翻译）
+}
+```
+
+- release（`vX.Y.Z`）比较 `releases/latest` 的版本号；nightly（`vX.Y.Z-nightly.N`）比较 `nightly` 预发布标题 `Nightly #N (sha)` 中的构建号；dev 不检查。
+- 结果在内存缓存 6 小时（失败 30 分钟）；`force=1` 立即检查。`settings.updateCheck` 为 false 且未带 `force` 时只返回已有结果，不访问 GitHub。
+- 开启自动检查时，启动 2 分钟后及之后每 12 小时在后台检查一次；发现新版本时推送给 `onUpdate` 为 true 的已启用渠道，同一版本只推送一次（KV `update_notified_version`），无可用渠道或全部失败时不记录、下次重试。
 
 ## DNS 账号
 
@@ -65,7 +80,9 @@ interface DNSRecord { id: string; name: string /* 主机记录 rr，如 www、@ 
 
 ```ts
 interface Notifier { id: number; name: string; type: string; enabled: boolean; config: Config
-  onSuccess: boolean; onFailure: boolean; onlyOnChange: boolean; createdAt: string; updatedAt: string }
+  onSuccess: boolean; onFailure: boolean; onlyOnChange: boolean
+  onUpdate: boolean  // 接收新版本提醒，与任务绑定无关，默认 false（界面新建时默认开启）
+  createdAt: string; updatedAt: string }
 ```
 
 | 方法 | 路径 | 请求 | 响应 |
@@ -243,6 +260,7 @@ interface MirrorProbe { mirror: string; label: string; ok: boolean; latencyMs: n
 ```ts
 interface Settings { githubMirror: string; historyRetentionDays: number; hookEnabled: boolean; hookToken: string; notifyTitlePrefix: string
   onboardingDismissed: boolean  // 仪表盘入门清单已关闭，默认 false；随备份导出与恢复
+  updateCheck: boolean          // 自动检查新版本，默认 true；恢复旧备份时缺失项取默认值
 }
 ```
 

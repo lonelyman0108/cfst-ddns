@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { toast } from 'vue-sonner'
-import { Copy, Download, FileInput, HardDrive, KeyRound, Loader2, RefreshCw, Save, Server, Settings2, ShieldAlert, Upload, Webhook } from '@lucide/vue'
+import { CircleArrowUp, CircleCheck, CircleX, Copy, Download, ExternalLink, FileInput, HardDrive, KeyRound, Loader2, RefreshCw, Save, Server, Settings2, ShieldAlert, Upload, Webhook } from '@lucide/vue'
 import { backupApi, settingsApi, systemApi } from '@/api'
 import type { Settings, SystemInfo } from '@/api/types'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -17,7 +17,9 @@ import InlineLink from '@/components/InlineLink.vue'
 import NumInput from '@/components/NumInput.vue'
 import PageHeader from '@/components/PageHeader.vue'
 import SectionNav, { type NavSection } from '@/components/SectionNav.vue'
+import ToneBadge from '@/components/ToneBadge.vue'
 import { confirm } from '@/composables/useConfirm'
+import { useUpdateStore } from '@/stores/update'
 import { copyText, dayjs, fmtTime, fromNow, saveBlob } from '@/utils/format'
 
 const { t } = useI18n()
@@ -59,7 +61,34 @@ onMounted(() => {
     .info()
     .then((r) => (info.value = r))
     .catch(() => {})
+  update.load().catch(() => {})
 })
+
+// ---------- 版本与更新 ----------
+const update = useUpdateStore()
+const updateSaving = ref(false)
+
+const commitUrl = computed(() => {
+  const i = info.value
+  return i && /^[0-9a-f]{7,40}$/.test(i.commit) ? `${i.repoUrl}/commit/${i.commit}` : ''
+})
+const runUrl = computed(() => (info.value?.runId ? `${info.value.repoUrl}/actions/runs/${info.value.runId}` : ''))
+
+async function toggleUpdateCheck(v: boolean) {
+  updateSaving.value = true
+  try {
+    applySettings(await settingsApi.update({ updateCheck: v }))
+    if (v) update.load().catch(() => {})
+  } catch {
+    /* 已提示 */
+  } finally {
+    updateSaving.value = false
+  }
+}
+
+function checkNow() {
+  update.load(true).catch(() => {})
+}
 
 async function saveGeneral() {
   saving.value = true
@@ -303,13 +332,52 @@ async function onFile(e: Event) {
         <CardHeader>
           <CardTitle class="flex items-center gap-2"><Server class="text-muted-foreground size-4" />{{ t('settings.system.title') }}</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent class="grid grid-cols-1 gap-4">
+          <div class="divide-y rounded-md border">
+            <label class="flex min-h-11 items-center justify-between gap-4 px-3 py-2">
+              <div class="min-w-0">
+                <div class="text-sm font-medium">{{ t('settings.system.updateCheck') }}</div>
+                <div class="text-muted-foreground text-xs">{{ t('settings.system.updateCheckHelp') }}</div>
+              </div>
+              <Switch :model-value="settings?.updateCheck ?? true" :disabled="!settings || updateSaving" @update:model-value="toggleUpdateCheck" />
+            </label>
+            <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-3 py-2 text-sm">
+              <div v-if="update.info?.channel === 'dev'" class="text-muted-foreground">{{ t('settings.system.updateDev') }}</div>
+              <div v-else-if="update.info?.available" class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                <CircleArrowUp class="text-primary size-4 shrink-0" />
+                <span class="font-medium">{{ t('settings.system.updateAvailable', { version: update.info.latest }) }}</span>
+                <span v-if="update.info.publishedAt" class="text-muted-foreground text-xs">{{ t('settings.system.publishedAt', { time: fromNow(update.info.publishedAt) }) }}</span>
+                <InlineLink v-if="update.info.url" :href="update.info.url" :icon="ExternalLink">{{ t('settings.system.releaseNotes') }}</InlineLink>
+              </div>
+              <div v-else-if="update.info?.error" class="flex min-w-0 items-start gap-2">
+                <CircleX class="text-destructive mt-0.5 size-4 shrink-0" />
+                <span class="min-w-0 wrap-anywhere"><span class="text-destructive">{{ t('settings.system.updateFailed') }}</span> <span class="text-muted-foreground text-xs">{{ update.info.error }}</span></span>
+              </div>
+              <div v-else-if="update.info?.checkedAt" class="flex items-center gap-2">
+                <CircleCheck class="text-success size-4 shrink-0" />{{ t('settings.system.upToDate') }}
+                <span class="text-muted-foreground text-xs">{{ t('settings.system.checkedAt', { time: fromNow(update.info.checkedAt) }) }}</span>
+              </div>
+              <div v-else class="text-muted-foreground">{{ t('settings.system.notChecked') }}</div>
+              <Button v-if="update.info?.channel !== 'dev'" variant="outline" size="sm" :disabled="update.checking" @click="checkNow">
+                <RefreshCw :class="update.checking && 'animate-spin'" />{{ t('settings.system.checkNow') }}
+              </Button>
+            </div>
+          </div>
+
           <Skeleton v-if="!info" class="h-32" />
           <dl v-else class="grid grid-cols-1 gap-x-8 gap-y-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
-            <div><dt class="text-muted-foreground text-xs">{{ t('settings.system.version') }}</dt><dd class="mt-0.5 font-medium">
-                {{ info.version === 'dev' ? t('settings.system.devBuild') : info.version }}
+            <div><dt class="text-muted-foreground text-xs">{{ t('settings.system.version') }}</dt><dd class="mt-0.5 flex flex-wrap items-center gap-1.5 font-medium">
+                <span class="wrap-anywhere">{{ info.version === 'dev' ? t('settings.system.devBuild') : info.version }}</span>
+                <ToneBadge v-if="update.info?.channel === 'nightly'" tone="warning">Nightly</ToneBadge>
               </dd></div>
-            <div><dt class="text-muted-foreground text-xs">{{ t('settings.system.commit') }}</dt><dd class="mt-0.5 font-mono text-code">{{ info.commit && info.commit !== 'none' ? info.commit : '-' }}</dd></div>
+            <div><dt class="text-muted-foreground text-xs">{{ t('settings.system.commit') }}</dt><dd class="mt-0.5 font-mono text-code">
+                <InlineLink v-if="commitUrl" :href="commitUrl">{{ info.commit }}</InlineLink>
+                <template v-else>{{ info.commit && info.commit !== 'none' ? info.commit : '-' }}</template>
+              </dd></div>
+            <div><dt class="text-muted-foreground text-xs">{{ t('settings.system.build') }}</dt><dd class="mt-0.5 font-mono text-code">
+                <InlineLink v-if="runUrl" :href="runUrl">#{{ info.buildId || info.runId }}</InlineLink>
+                <template v-else>{{ info.buildId ? `#${info.buildId}` : '-' }}</template>
+              </dd></div>
             <div>
               <dt class="text-muted-foreground text-xs">{{ t('settings.system.buildTime') }}</dt>
               <dd class="mt-0.5">{{ fmtTime(info.buildTime) }}</dd>

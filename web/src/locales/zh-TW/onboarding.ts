@@ -71,6 +71,8 @@ export default {
     onFailure: '失敗時通知',
     onlyOnChange: '僅 IP 變化時通知',
     onlyOnChangeDesc: 'IP 沒變時不打擾',
+    onUpdate: '新版本提醒',
+    onUpdateDesc: '有 cfst-ddns 新版本時通知一次',
     sent: '已發送測試訊息',
     sendFailed: '發送失敗',
     sendTest: '發送測試',

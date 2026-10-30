@@ -76,12 +76,31 @@ export interface SystemInfo {
   version: string
   commit: string
   buildTime: string
+  /** CI 构建号（run_number），本地构建为空 */
+  buildId: string
+  /** CI 运行 ID，用于拼接 Actions 运行页链接 */
+  runId: string
+  repoUrl: string
   goVersion: string
   os: string
   arch: string
   dataDir: string
   startedAt: string
   timezone: string
+}
+
+export type UpdateChannel = 'release' | 'nightly' | 'dev'
+
+export interface UpdateInfo {
+  channel: UpdateChannel
+  current: string
+  latest?: string
+  available: boolean
+  url?: string
+  publishedAt?: string
+  /** 未检查过时为空 */
+  checkedAt?: string
+  error?: string
 }
 
 export interface LogLine {
@@ -141,6 +160,8 @@ export interface Notifier {
   onSuccess: boolean
   onFailure: boolean
   onlyOnChange: boolean
+  /** 接收新版本提醒，与任务绑定无关 */
+  onUpdate: boolean
   createdAt: string
   updatedAt: string
 }
@@ -410,4 +431,6 @@ export interface Settings {
   notifyTitlePrefix: string
   /** 仪表盘入门清单已被关闭 */
   onboardingDismissed: boolean
+  /** 自动检查新版本 */
+  updateCheck: boolean
 }

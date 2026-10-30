@@ -25,6 +25,7 @@ import (
 	"github.com/lonelyman0108/cfst-ddns/internal/scheduler"
 	"github.com/lonelyman0108/cfst-ddns/internal/secret"
 	"github.com/lonelyman0108/cfst-ddns/internal/store"
+	"github.com/lonelyman0108/cfst-ddns/internal/update"
 
 	_ "github.com/lonelyman0108/cfst-ddns/internal/notify"
 	_ "github.com/lonelyman0108/cfst-ddns/internal/provider"
@@ -140,8 +141,11 @@ func Serve(c Config, build api.BuildInfo, static fs.FS) error {
 	}
 	defer sch.Stop()
 
+	upd := &update.Checker{Version: build.Version, Log: log}
+	go upd.Run(ctx, 2*time.Minute, 12*time.Hour, func() bool { return st.GetSettings().UpdateCheck }, eng.NotifyUpdate)
+
 	srv := &api.Server{Store: st, Auth: authSvc, Engine: eng, Scheduler: sch, CFST: mgr, Hub: hub, AppLog: ring,
-		Log: log, Static: static, DataDir: c.DataDir, Build: build, StartedAt: time.Now()}
+		Log: log, Static: static, DataDir: c.DataDir, Build: build, Update: upd, StartedAt: time.Now()}
 	hs := &http.Server{Addr: c.Listen, Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second}
 
 	errCh := make(chan error, 1)

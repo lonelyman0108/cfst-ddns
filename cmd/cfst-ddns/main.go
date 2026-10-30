@@ -9,6 +9,7 @@ import (
 	"os"
 	"runtime"
 	"runtime/debug"
+	"strings"
 	"time"
 
 	"github.com/lonelyman0108/cfst-ddns/internal/api"
@@ -17,12 +18,22 @@ import (
 	"github.com/lonelyman0108/cfst-ddns/web"
 )
 
-// 由 -ldflags "-X main.version=..." 注入。
+// 由 -ldflags "-X main.version=..." 注入。buildID / runID 为 CI 的 run_number / run_id，本地构建为空。
 var (
 	version   = "dev"
 	commit    = "none"
 	buildTime = "unknown"
+	buildID   = ""
+	runID     = ""
 )
+
+// shortCommit 把完整的 40 位提交号缩短为 7 位，其他形式（如 abc1234-dirty）原样保留。
+func shortCommit(c string) string {
+	if len(c) == 40 && strings.Trim(c, "0123456789abcdef") == "" {
+		return c[:7]
+	}
+	return c
+}
 
 // fillFromVCS 在未通过 -ldflags 注入时，用 go build 自动嵌入的 Git 信息补充提交号与时间。
 // go run 不嵌入 VCS 信息，此时保持默认值。
@@ -79,7 +90,8 @@ func main() {
 		cmd, args = args[0], args[1:]
 	}
 	fillFromVCS()
-	build := api.BuildInfo{Version: version, Commit: commit, BuildTime: buildTime}
+	commit = shortCommit(commit)
+	build := api.BuildInfo{Version: version, Commit: commit, BuildTime: buildTime, BuildID: buildID, RunID: runID}
 
 	var err error
 	switch cmd {
@@ -93,7 +105,11 @@ func main() {
 	case "healthcheck":
 		err = healthcheck()
 	case "version":
-		fmt.Printf("cfst-ddns %s (commit %s, built %s, %s %s/%s)\n", version, commit, buildTime, runtime.Version(), runtime.GOOS, runtime.GOARCH)
+		b := ""
+		if buildID != "" {
+			b = ", build #" + buildID
+		}
+		fmt.Printf("cfst-ddns %s (commit %s%s, built %s, %s %s/%s)\n", version, commit, b, buildTime, runtime.Version(), runtime.GOOS, runtime.GOARCH)
 	case "help", "-h", "--help":
 		fmt.Printf(usage, version)
 	default:

@@ -23,6 +23,7 @@ import (
 	"github.com/lonelyman0108/cfst-ddns/internal/logbus"
 	"github.com/lonelyman0108/cfst-ddns/internal/scheduler"
 	"github.com/lonelyman0108/cfst-ddns/internal/store"
+	"github.com/lonelyman0108/cfst-ddns/internal/update"
 )
 
 // BuildInfo 为版本信息。
@@ -30,6 +31,8 @@ type BuildInfo struct {
 	Version   string
 	Commit    string
 	BuildTime string
+	BuildID   string // CI 构建号（run_number），本地构建为空
+	RunID     string // CI 运行 ID，用于拼接运行页链接
 }
 
 // Server 聚合 API 依赖。
@@ -45,6 +48,7 @@ type Server struct {
 	Static    fs.FS // 前端构建产物，可为 nil
 	DataDir   string
 	Build     BuildInfo
+	Update    *update.Checker
 	StartedAt time.Time
 }
 
@@ -70,6 +74,7 @@ func (s *Server) Handler() http.Handler {
 	a.GET("/meta/providers", s.metaProviders)
 	a.GET("/meta/notifiers", s.metaNotifiers)
 	a.GET("/system/info", s.systemInfo)
+	a.GET("/system/update", s.systemUpdate)
 	a.GET("/system/logs", s.systemLogs)
 
 	a.GET("/accounts", s.listAccounts)
