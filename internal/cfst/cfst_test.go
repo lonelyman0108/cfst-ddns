@@ -80,6 +80,33 @@ func TestBuildArgs(t *testing.T) {
 	}
 }
 
+func TestBuildArgsForIPs(t *testing.T) {
+	c := store.SpeedTestConfig{Threads: 200, PingTimes: 4, Port: 443, MaxLatency: 9999, MaxLossRate: 1}
+	got, err := BuildArgsForIPs(c, []string{" 1.1.1.1 ", "2606:4700::1", "1.1.1.1"}, "out.csv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "-ip 1.1.1.1,2606:4700::1 -o out.csv -p 0"
+	if strings.Join(got, " ") != want {
+		t.Fatalf("got %q, want %q", strings.Join(got, " "), want)
+	}
+	if strings.Contains(strings.Join(got, " "), "-f ") {
+		t.Fatal("精确 IP 模式不应传入 -f")
+	}
+
+	c = store.SpeedTestConfig{Httping: true, HttpingCode: 200, URL: "https://example.com/url", MaxLatency: 9999, MaxLossRate: 1}
+	got, err = BuildArgsForIPs(c, []string{"203.0.113.10"}, "out.csv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	args := strings.Join(got, " ")
+	for _, want := range []string{"-httping", "-httping-code 200", "-url https://example.com/url", "-ip 203.0.113.10", "-o out.csv", "-p 0"} {
+		if !strings.Contains(args, want) {
+			t.Fatalf("args %q missing %q", args, want)
+		}
+	}
+}
+
 func TestWithoutProxyEnv(t *testing.T) {
 	got := withoutProxyEnv([]string{"PATH=/bin", "http_proxy=x", "HTTPS_PROXY=y", "all_proxy=z", "NO_PROXY=a", "HOME=/h"})
 	if strings.Join(got, " ") != "PATH=/bin HOME=/h" {
