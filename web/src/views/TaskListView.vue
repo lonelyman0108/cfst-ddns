@@ -74,6 +74,23 @@ function openRun(runId: number) {
   sheetOpen.value = true
 }
 
+function healthState(task: Task): 'healthy' | 'unhealthy' | 'unknown' | 'skipped' {
+  const s = task.healthStatus?.lastStatus || task.healthStatus?.status
+  if (s) return s
+  if (task.healthStatus?.lastHealthy === true) return 'healthy'
+  if (task.healthStatus?.lastHealthy === false) return 'unhealthy'
+  return 'unknown'
+}
+
+function healthTone(task: Task) {
+  const s = healthState(task)
+  return s === 'healthy' ? 'success' : s === 'unhealthy' ? 'danger' : s === 'unknown' ? 'warning' : 'neutral'
+}
+
+function healthLabel(task: Task) {
+  return t(`health.history.status${healthState(task)[0].toUpperCase()}${healthState(task).slice(1)}`)
+}
+
 async function runNow(task: Task, dryRun = false) {
   running.value[task.id] = true
   try {
@@ -157,6 +174,11 @@ async function remove(task: Task) {
               <div class="flex items-center gap-2">
                 <router-link :to="`/tasks/${t.id}`" class="line-clamp-2 font-medium hover:underline" :title="t.name">{{ t.name }}</router-link>
                 <StatusBadge v-if="t.running" status="running" />
+              </div>
+              <div v-if="t.healthCheck?.enabled" class="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
+                <ToneBadge :tone="healthTone(t)">{{ healthLabel(t) }}</ToneBadge>
+                <span v-if="t.healthStatus?.consecutiveFailures" class="text-muted-foreground tabular-nums">{{ t.healthStatus.consecutiveFailures }}×</span>
+                <span v-if="t.healthStatus?.cooldownUntil" class="text-muted-foreground truncate" :title="fmtTime(t.healthStatus.cooldownUntil)">{{ $t('health.history.cooldown') }} {{ fromNow(t.healthStatus.cooldownUntil) }}</span>
               </div>
             </TableCell>
             <TableCell>

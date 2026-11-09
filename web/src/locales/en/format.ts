@@ -11,6 +11,7 @@ export default {
   trigger: {
     manual: 'Manual',
     cron: 'Scheduled',
+    health: 'Health check',
   },
   action: {
     create: 'Create',

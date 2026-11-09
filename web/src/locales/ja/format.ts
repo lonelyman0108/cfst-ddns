@@ -11,6 +11,7 @@ export default {
   trigger: {
     manual: '手動',
     cron: '定期',
+    health: 'ヘルスチェック',
   },
   action: {
     create: '作成',
