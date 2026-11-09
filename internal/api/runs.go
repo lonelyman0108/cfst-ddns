@@ -104,6 +104,10 @@ func (s *Server) deleteRun(c *gin.Context) {
 		failMsg(c, http.StatusConflict, "记录不存在或正在执行")
 		return
 	}
+	if err := s.Store.ClearStaleHealthRunLinks(); err != nil {
+		dbFail(c, err)
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 

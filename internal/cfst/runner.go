@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"os"
 	"os/exec"
@@ -61,9 +62,11 @@ func normalizeIPs(ips []string) ([]string, error) {
 		if ip == "" {
 			continue
 		}
-		if net.ParseIP(ip) == nil {
+		parsed := net.ParseIP(ip)
+		if parsed == nil {
 			return nil, fmt.Errorf("无效的 IP 地址: %s", ip)
 		}
+		ip = parsed.String()
 		if _, ok := seen[ip]; ok {
 			continue
 		}
@@ -78,6 +81,11 @@ func buildArgs(c store.SpeedTestConfig, ips []string, ipFile, outFile string) ([
 	extra, err := SplitArgs(c.ExtraArgs)
 	if err != nil {
 		return nil, err
+	}
+	if ips != nil {
+		if err := validateExactExtraArgs(extra); err != nil {
+			return nil, err
+		}
 	}
 	args = append(args, extra...)
 	intArg := func(flag string, v, def int) {
@@ -128,6 +136,33 @@ func buildArgs(c store.SpeedTestConfig, ips []string, ipFile, outFile string) ([
 	return args, nil
 }
 
+// Exact probes reject controlled flags and positional arguments: Go's flag parser stops
+// at a positional, so appending our own flags is insufficient protection.
+func validateExactExtraArgs(args []string) error {
+	values := map[string]bool{"n": true, "t": true, "dn": true, "dt": true, "tp": true, "url": true, "httping-code": true, "cfcolo": true, "tl": true, "tll": true, "tlr": true, "sl": true}
+	bools := map[string]bool{"debug": true, "dd": true, "allip": true, "httping": true}
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if !strings.HasPrefix(arg, "-") {
+			return fmt.Errorf("精确 IP 模式不允许附加位置参数: %s", arg)
+		}
+		name, _, assigned := strings.Cut(strings.TrimLeft(arg, "-"), "=")
+		if bools[name] {
+			continue
+		}
+		if !values[name] {
+			return fmt.Errorf("精确 IP 模式不允许附加参数: %s", arg)
+		}
+		if !assigned {
+			i++
+			if i >= len(args) {
+				return fmt.Errorf("附加参数缺少值: %s", arg)
+			}
+		}
+	}
+	return nil
+}
+
 // SplitArgs 按空白拆分参数，支持单/双引号。
 func SplitArgs(s string) ([]string, error) {
 	var out []string
@@ -176,7 +211,7 @@ func (m *Manager) Run(ctx context.Context, opt RunOptions, out Output) ([]store.
 		return nil, err
 	}
 	var ipFile string
-	if len(opt.IPs) == 0 {
+	if opt.IPs == nil {
 		ipFile = m.IPFile(opt.IPType)
 		if opt.Config.IPSource == "custom" {
 			ranges := opt.Config.IPv4Ranges
@@ -202,7 +237,7 @@ func (m *Manager) Run(ctx context.Context, opt RunOptions, out Output) ([]store.
 
 	var args []string
 	var err error
-	if len(opt.IPs) > 0 {
+	if opt.IPs != nil {
 		args, err = BuildArgsForIPs(opt.Config, opt.IPs, outFile)
 	} else {
 		args, err = BuildArgs(opt.Config, ipFile, outFile)
@@ -239,7 +274,10 @@ func (m *Manager) Run(ctx context.Context, opt RunOptions, out Output) ([]store.
 	f, err := os.ReadFile(outFile)
 	if err != nil {
 		// 没有任何 IP 满足条件时 cfst 不会生成文件
-		return nil, nil
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("读取测速结果失败: %w", err)
 	}
 	return ParseCSV(f, opt.IPType)
 }
@@ -352,17 +390,31 @@ func ParseCSV(data []byte, ipType string) ([]store.SpeedResult, error) {
 	if err != nil {
 		return nil, fmt.Errorf("解析测速结果失败: %w", err)
 	}
+	if len(rows) == 0 || len(rows[0]) < 6 {
+		return nil, errors.New("测速结果 CSV 缺少表头")
+	}
 	var out []store.SpeedResult
 	for i, row := range rows {
-		if i == 0 || len(row) < 6 {
+		if i == 0 {
 			continue
 		}
-		f := func(s string) float64 {
-			v, _ := strconv.ParseFloat(strings.TrimSpace(s), 64)
-			return v
+		if len(row) < 6 {
+			return nil, fmt.Errorf("测速结果第 %d 行不完整", i+1)
 		}
-		res := store.SpeedResult{IPType: ipType, Rank: len(out) + 1, IP: strings.TrimSpace(row[0]),
-			Sent: int(f(row[1])), Received: int(f(row[2])), LossRate: f(row[3]), Latency: f(row[4]), Speed: f(row[5])}
+		metrics := make([]float64, 5)
+		for j := range metrics {
+			value, err := strconv.ParseFloat(strings.TrimSpace(row[j+1]), 64)
+			if err != nil || math.IsNaN(value) || math.IsInf(value, 0) || value < 0 {
+				return nil, fmt.Errorf("测速结果第 %d 行包含无效指标", i+1)
+			}
+			metrics[j] = value
+		}
+		ip := net.ParseIP(strings.TrimSpace(row[0]))
+		if ip == nil {
+			return nil, fmt.Errorf("测速结果第 %d 行包含无效 IP", i+1)
+		}
+		res := store.SpeedResult{IPType: ipType, Rank: len(out) + 1, IP: ip.String(),
+			Sent: int(metrics[0]), Received: int(metrics[1]), LossRate: metrics[2], Latency: metrics[3], Speed: metrics[4]}
 		if len(row) > 6 {
 			res.Colo = strings.TrimSpace(row[6])
 		}

@@ -126,11 +126,44 @@ func TestTaskJSONColumns(t *testing.T) {
 	st := open(t)
 	task := &Task{Name: "t", IPType: "both", Targets: []Target{{AccountID: 1, Domain: "example.com", RR: "@"}}, NotifierIDs: []uint{3}}
 	task.SpeedTest.Threads = 123
+	task.Update = UpdatePolicy{RecordCount: 3, SkipUnchanged: true}
 	if err := st.DB.Create(task).Error; err != nil {
 		t.Fatal(err)
 	}
 	got, err := st.GetTask(task.ID)
-	if err != nil || got.SpeedTest.Threads != 123 || len(got.Targets) != 1 || got.NotifierIDs[0] != 3 {
+	if err != nil || got.SpeedTest.Threads != 123 || got.Update != task.Update || len(got.Targets) != 1 || got.NotifierIDs[0] != 3 {
 		t.Fatalf("got %+v %v", got, err)
+	}
+}
+
+func TestHealthRetentionAndStaleRunLinks(t *testing.T) {
+	st := open(t)
+	old := time.Now().Add(-72 * time.Hour)
+	run := Run{TaskID: 1, Status: StatusSuccess, CreatedAt: old}
+	if err := st.DB.Create(&run).Error; err != nil {
+		t.Fatal(err)
+	}
+	active := Run{TaskID: 2, Status: StatusRunning, CreatedAt: old}
+	st.DB.Create(&active)
+	until := time.Now().Add(time.Hour)
+	st.SaveHealthState(HealthState{TaskID: 1, CooldownUntil: &until, LastTriggeredRunID: &run.ID})
+	st.CreateHealthCheck(&HealthCheck{TaskID: 1, CheckedAt: old, CreatedAt: old, Status: HealthStatusUnhealthy, TriggeredRunID: &run.ID})
+	st.CreateHealthCheck(&HealthCheck{TaskID: 1, CheckedAt: time.Now(), Status: HealthStatusUnknown, TriggeredRunID: &run.ID})
+	deleted, err := st.PurgeRuns(1)
+	if err != nil || deleted != 1 {
+		t.Fatalf("purge=%d %v", deleted, err)
+	}
+	checks, err := st.ListHealthChecks(1, 50)
+	if err != nil || len(checks) != 1 || checks[0].TriggeredRunID != nil {
+		t.Fatalf("checks=%+v %v", checks, err)
+	}
+	state, _ := st.GetHealthState(1)
+	if state.CooldownUntil == nil || state.LastTriggeredRunID != nil {
+		t.Fatalf("state=%+v", state)
+	}
+	var count int64
+	st.DB.Model(&Run{}).Where("id = ?", active.ID).Count(&count)
+	if count != 1 {
+		t.Fatal("active run purged")
 	}
 }

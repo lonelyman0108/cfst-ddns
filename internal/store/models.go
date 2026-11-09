@@ -101,6 +101,26 @@ type HealthCheckConfig struct {
 	CooldownMinutes     int     `json:"cooldownMinutes"`
 }
 
+func DefaultHealthCheckConfig() HealthCheckConfig {
+	return HealthCheckConfig{IntervalMinutes: 10, ConsecutiveFailures: 3, CooldownMinutes: 30}
+}
+
+// WithDefaults fills legacy disabled configurations; enabled invalid values remain visible to validation.
+func (c HealthCheckConfig) WithDefaults() HealthCheckConfig {
+	if c == (HealthCheckConfig{}) {
+		return DefaultHealthCheckConfig()
+	}
+	if !c.Enabled {
+		if c.IntervalMinutes == 0 {
+			c.IntervalMinutes = 10
+		}
+		if c.ConsecutiveFailures == 0 {
+			c.ConsecutiveFailures = 3
+		}
+	}
+	return c
+}
+
 type Target struct {
 	AccountID uint   `json:"accountId"`
 	Domain    string `json:"domain"`
@@ -118,6 +138,7 @@ type Task struct {
 	Cron        string            `gorm:"size:128" json:"cron"`
 	IPType      string            `gorm:"column:ip_type;size:8" json:"ipType"`
 	SpeedTest   SpeedTestConfig   `gorm:"serializer:json" json:"speedTest"`
+	Update      UpdatePolicy      `gorm:"serializer:json" json:"update"`
 	HealthCheck HealthCheckConfig `gorm:"serializer:json" json:"healthCheck"`
 	Targets     []Target          `gorm:"serializer:json" json:"targets"`
 	NotifierIDs []uint            `gorm:"column:notifier_ids;serializer:json" json:"notifierIds"`
@@ -135,6 +156,8 @@ const (
 // HealthState 保存每个任务的连续异常和冷却状态。
 type HealthState struct {
 	TaskID              uint       `gorm:"primaryKey" json:"taskId"`
+	Status              string     `json:"status"`
+	SnapshotFingerprint string     `json:"snapshotFingerprint,omitempty"`
 	ConsecutiveFailures int        `json:"consecutiveFailures"`
 	LastCheckedAt       *time.Time `json:"lastCheckedAt"`
 	LastHealthy         *bool      `json:"lastHealthy"`
@@ -152,19 +175,23 @@ type HealthResult struct {
 	Speed     float64 `json:"speed"`
 	LossRate  float64 `json:"lossRate"`
 	Healthy   bool    `json:"healthy"`
+	Status    string  `json:"status"` // healthy/unhealthy/unknown/skipped
+	Detail    string  `json:"detail,omitempty"`
 	Reason    string  `json:"reason,omitempty"`
 }
 
 // HealthCheck 是一次健康检查批次，不计入普通 Run 统计。
 type HealthCheck struct {
-	ID             uint           `gorm:"primaryKey" json:"id"`
-	TaskID         uint           `gorm:"index" json:"taskId"`
-	CheckedAt      time.Time      `gorm:"index" json:"checkedAt"`
-	Status         string         `gorm:"size:16" json:"status"`
-	FailureReason  string         `json:"failureReason,omitempty"`
-	Results        []HealthResult `gorm:"serializer:json" json:"results"`
-	TriggeredRunID *uint          `json:"triggeredRunId,omitempty"`
-	CreatedAt      time.Time      `json:"createdAt"`
+	TargetSnapshots   map[string]string `gorm:"serializer:json" json:"targetSnapshots,omitempty"`
+	ConfigFingerprint string            `json:"configFingerprint,omitempty"`
+	ID                uint              `gorm:"primaryKey" json:"id"`
+	TaskID            uint              `gorm:"index" json:"taskId"`
+	CheckedAt         time.Time         `gorm:"index" json:"checkedAt"`
+	Status            string            `gorm:"size:16" json:"status"`
+	FailureReason     string            `json:"failureReason,omitempty"`
+	Results           []HealthResult    `gorm:"serializer:json" json:"results"`
+	TriggeredRunID    *uint             `json:"triggeredRunId,omitempty"`
+	CreatedAt         time.Time         `json:"createdAt"`
 }
 
 const (
@@ -237,21 +264,23 @@ type DNSChange struct {
 
 // Run 为一次任务执行记录。
 type Run struct {
-	ID          uint       `gorm:"primaryKey" json:"id"`
-	TaskID      uint       `gorm:"index" json:"taskId"`
-	TaskName    string     `json:"taskName"`
-	Trigger     string     `gorm:"size:16" json:"trigger"`
-	DryRun      bool       `gorm:"not null;default:false" json:"dryRun"` // 试运行：只测速，不写 DNS、不通知
-	Status      string     `gorm:"size:16;index" json:"status"`
-	StartedAt   *time.Time `json:"startedAt"`
-	FinishedAt  *time.Time `json:"finishedAt"`
-	DurationMs  int64      `json:"durationMs"`
-	BestIPv4    string     `gorm:"column:best_ipv4" json:"bestIPv4"`
-	BestIPv6    string     `gorm:"column:best_ipv6" json:"bestIPv6"`
-	BestLatency float64    `json:"bestLatency"`
-	BestSpeed   float64    `json:"bestSpeed"`
-	Changed     bool       `json:"changed"`
-	Message     string     `json:"message"`
+	ID            uint       `gorm:"primaryKey" json:"id"`
+	TaskID        uint       `gorm:"index" json:"taskId"`
+	TaskName      string     `json:"taskName"`
+	Trigger       string     `gorm:"size:16" json:"trigger"`
+	HealthCheckID *uint      `json:"healthCheckId,omitempty"`
+	HealthReason  string     `json:"healthReason,omitempty"`
+	DryRun        bool       `gorm:"not null;default:false" json:"dryRun"` // 试运行：只测速，不写 DNS、不通知
+	Status        string     `gorm:"size:16;index" json:"status"`
+	StartedAt     *time.Time `json:"startedAt"`
+	FinishedAt    *time.Time `json:"finishedAt"`
+	DurationMs    int64      `json:"durationMs"`
+	BestIPv4      string     `gorm:"column:best_ipv4" json:"bestIPv4"`
+	BestIPv6      string     `gorm:"column:best_ipv6" json:"bestIPv6"`
+	BestLatency   float64    `json:"bestLatency"`
+	BestSpeed     float64    `json:"bestSpeed"`
+	Changed       bool       `json:"changed"`
+	Message       string     `json:"message"`
 	// MessageKey / MessageArgs 供前端按语言显示 Message（中文原文仍用于通知与日志）；无固定文案的错误为空
 	MessageKey  string         `json:"messageKey,omitempty"`
 	MessageArgs map[string]any `gorm:"serializer:json" json:"messageArgs,omitempty"`
@@ -267,7 +296,7 @@ type Run struct {
 // SummaryColumns 为列表查询时需要的列（不含大字段）。
 var SummaryColumns = []string{"id", "task_id", "task_name", "trigger", "dry_run", "status", "started_at", "finished_at",
 	"duration_ms", "best_ipv4", "best_ipv6", "best_latency", "best_speed", "changed", "message", "message_key", "message_args",
-	"created_at"}
+	"created_at", "health_check_id", "health_reason"}
 
 // RecordState 记录每个目标最近一次写入的值，用于仪表盘。
 type RecordState struct {

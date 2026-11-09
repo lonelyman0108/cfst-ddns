@@ -17,6 +17,7 @@ import (
 	"github.com/lonelyman0108/cfst-ddns/internal/netcheck"
 	"github.com/lonelyman0108/cfst-ddns/internal/provider"
 	"github.com/lonelyman0108/cfst-ddns/internal/store"
+	"gorm.io/gorm"
 )
 
 // ErrBusy 表示任务已在队列或运行中。
@@ -30,9 +31,15 @@ type Engine struct {
 	Log     *slog.Logger
 	TempDir string
 	// Probe 为测速前的网络自检，测试中可替换
-	Probe func(ctx context.Context, ipTypes []string, canary bool) []store.NetworkProbe
+	Probe           func(ctx context.Context, ipTypes []string, canary bool) []store.NetworkProbe
+	ProviderFactory ProviderFactory
+	HealthProbe     HealthProbe
 
-	queue chan uint // run id
+	queue         chan job
+	workMu        sync.Mutex
+	healthPending map[uint]bool
+	healthActive  map[uint]bool
+	maintenance   bool
 
 	mu      sync.Mutex
 	pending map[uint]uint // task id → run id（排队或运行中）
@@ -40,10 +47,71 @@ type Engine struct {
 	cancelQ map[uint]bool // 排队中被取消的 run
 }
 
+type job struct {
+	kind          string
+	taskID, runID uint
+}
+
+// Busy includes queued and active health work, which has no Run row.
+func (e *Engine) Busy() bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.maintenance || len(e.pending) > 0 || len(e.healthPending) > 0 || len(e.healthActive) > 0
+}
+
+// BeginMaintenance prevents new jobs while destructive configuration changes are applied.
+func (e *Engine) BeginMaintenance() (func(), error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.maintenance || len(e.pending) > 0 || len(e.healthPending) > 0 || len(e.healthActive) > 0 {
+		return nil, ErrBusy
+	}
+	e.maintenance = true
+	return func() { e.mu.Lock(); e.maintenance = false; e.mu.Unlock() }, nil
+}
+
+func (e *Engine) EnqueueHealth(taskID uint) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.maintenance || e.healthPending[taskID] || e.healthActive[taskID] {
+		return ErrBusy
+	}
+	task, err := e.Store.GetTask(taskID)
+	if err != nil {
+		return err
+	}
+	if !task.Enabled || !task.HealthCheck.Enabled {
+		return nil
+	}
+	e.healthPending[taskID] = true
+	select {
+	case e.queue <- job{kind: "health", taskID: taskID}:
+		return nil
+	default:
+		delete(e.healthPending, taskID)
+		return ErrBusy
+	}
+}
+
+func (e *Engine) executeJob(ctx context.Context, j job) {
+	if j.kind != "health" {
+		e.execute(ctx, j.runID)
+		return
+	}
+	defer func() { e.mu.Lock(); delete(e.healthPending, j.taskID); e.mu.Unlock() }()
+	result, err := e.HealthJob(ctx, j.taskID)
+	if err == nil && result.TriggerFullRun && ctx.Err() == nil {
+		_, err = e.enqueue(j.taskID, "health", false, result.CheckID)
+	}
+	if err != nil {
+		e.Log.Warn("健康检查失败", "task", j.taskID, "err", err)
+	}
+}
+
 // New 创建执行引擎。
 func New(st *store.Store, m *cfst.Manager, hub *logbus.Hub, log *slog.Logger, tempDir string) *Engine {
 	return &Engine{Store: st, CFST: m, Hub: hub, Log: log, TempDir: tempDir, Probe: netcheck.Probe,
-		queue: make(chan uint, 256), pending: map[uint]uint{}, cancels: map[uint]context.CancelFunc{}, cancelQ: map[uint]bool{}}
+		queue: make(chan job, 256), healthPending: map[uint]bool{}, healthActive: map[uint]bool{}, pending: map[uint]uint{}, cancels: map[uint]context.CancelFunc{}, cancelQ: map[uint]bool{}}
 }
 
 // Start 启动工作协程，并把上次异常退出遗留的执行标记为失败。
@@ -56,8 +124,8 @@ func (e *Engine) Start(ctx context.Context) {
 			select {
 			case <-ctx.Done():
 				return
-			case id := <-e.queue:
-				e.execute(ctx, id)
+			case j := <-e.queue:
+				e.executeJob(ctx, j)
 			}
 		}
 	}()
@@ -65,17 +133,46 @@ func (e *Engine) Start(ctx context.Context) {
 
 // Enqueue 为任务创建一次执行并排队；dryRun 为试运行（只测速，不写 DNS、不通知）。
 func (e *Engine) Enqueue(taskID uint, trigger string, dryRun bool) (uint, error) {
+	return e.enqueue(taskID, trigger, dryRun, 0)
+}
+
+func (e *Engine) enqueue(taskID uint, trigger string, dryRun bool, checkID uint) (uint, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	task, err := e.Store.GetTask(taskID)
 	if err != nil {
 		return 0, err
 	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	if _, busy := e.pending[taskID]; busy {
+	if _, busy := e.pending[taskID]; busy || e.maintenance {
 		return 0, ErrBusy
 	}
+	if len(e.queue) == cap(e.queue) {
+		return 0, i18n.New("执行队列已满")
+	}
 	run := &store.Run{TaskID: task.ID, TaskName: task.Name, Trigger: trigger, DryRun: dryRun, Status: store.StatusQueued}
-	if err := e.Store.DB.Create(run).Error; err != nil {
+	if err := e.Store.DB.Transaction(func(tx *gorm.DB) error {
+		var check store.HealthCheck
+		if checkID != 0 {
+			if err := tx.First(&check, checkID).Error; err != nil {
+				return err
+			}
+			if !task.Enabled || !task.HealthCheck.Enabled || check.ConfigFingerprint != healthConfigFingerprint(task) {
+				return ErrBusy
+			}
+			run.HealthCheckID, run.HealthReason = &check.ID, check.FailureReason
+		}
+		if err := tx.Create(run).Error; err != nil {
+			return err
+		}
+		if checkID == 0 {
+			return nil
+		}
+		until := time.Now().Add(time.Duration(task.HealthCheck.CooldownMinutes) * time.Minute)
+		if err := tx.Model(&store.HealthState{}).Where("task_id = ?", taskID).Updates(map[string]any{"cooldown_until": until, "last_triggered_run_id": run.ID}).Error; err != nil {
+			return err
+		}
+		return tx.Model(&check).Update("triggered_run_id", run.ID).Error
+	}); err != nil {
 		return 0, err
 	}
 	e.pending[taskID] = run.ID
@@ -84,13 +181,9 @@ func (e *Engine) Enqueue(taskID uint, trigger string, dryRun bool) (uint, error)
 		mode = "，试运行"
 	}
 	e.Hub.Open(run.ID).Printf("任务「%s」已加入队列（触发方式: %s%s）", task.Name, trigger, mode)
-	select {
-	case e.queue <- run.ID:
-	default:
-		delete(e.pending, taskID)
-		e.Store.DB.Model(run).Updates(map[string]any{"status": store.StatusFailed, "message": "执行队列已满"})
-		return 0, i18n.New("执行队列已满")
-	}
+	// All producers hold mu; capacity was reserved by the check above. The
+	// worker only removes jobs, so this send cannot block or fail after commit.
+	e.queue <- job{kind: "full", taskID: taskID, runID: run.ID}
 	return run.ID, nil
 }
 
@@ -99,7 +192,7 @@ func (e *Engine) Running(taskID uint) (uint, bool) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	id, ok := e.pending[taskID]
-	return id, ok
+	return id, ok || e.healthPending[taskID] || e.healthActive[taskID]
 }
 
 // Cancel 取消排队或运行中的执行。
@@ -129,6 +222,8 @@ func (e *Engine) finishPending(run *store.Run) {
 
 // execute 执行一次任务，所有错误都记录在 run 中。
 func (e *Engine) execute(parent context.Context, runID uint) {
+	e.workMu.Lock()
+	defer e.workMu.Unlock()
 	var run store.Run
 	if err := e.Store.DB.First(&run, runID).Error; err != nil {
 		e.Log.Error("读取执行记录失败", "run", runID, "err", err)
@@ -182,6 +277,11 @@ func (e *Engine) execute(parent context.Context, runID uint) {
 	}
 	rl.Printf("结束，耗时 %s", time.Duration(run.DurationMs)*time.Millisecond)
 
+	if err == nil && !run.DryRun && run.Status == store.StatusSuccess && run.Changed {
+		if resetErr := e.Store.DB.Model(&store.HealthState{}).Where("task_id = ?", run.TaskID).Update("consecutive_failures", 0).Error; resetErr != nil {
+			e.Log.Warn("重置健康异常次数失败", "err", resetErr)
+		}
+	}
 	if task != nil && run.Status != store.StatusCanceled && !run.DryRun {
 		e.notify(task, &run, rl)
 	}
@@ -256,6 +356,31 @@ func (e *Engine) runTask(ctx context.Context, task *store.Task, run *store.Run, 
 	if count <= 0 {
 		count = 1
 	}
+	var healthCheck store.HealthCheck
+	selectionConfig := task.SpeedTest
+	if run.Trigger == "health" {
+		if run.HealthCheckID == nil {
+			return errHealthSnapshot
+		}
+		if err := e.Store.DB.First(&healthCheck, *run.HealthCheckID).Error; err != nil {
+			return err
+		}
+		if !task.Enabled || !task.HealthCheck.Enabled || healthCheck.ConfigFingerprint != healthConfigFingerprint(task) {
+			return errHealthSnapshot
+		}
+		counts := map[string]int{}
+		for _, r := range healthCheck.Results {
+			if r.IP != "" && r.Status != store.HealthStatusSkipped && r.Status != store.HealthStatusUnknown {
+				counts[r.TargetKey]++
+				count = max(count, counts[r.TargetKey])
+			}
+		}
+		selectionConfig.ExtraArgs = ""
+		if task.HealthCheck.MinSpeed > 0 || selectionConfig.MinSpeed > 0 {
+			selectionConfig.DisableDownload = false
+			selectionConfig.DownloadCount = max(count, selectionConfig.DownloadCount)
+		}
+	}
 
 	// 0. 网络自检
 	if err := e.checkNetwork(ctx, task, run, rl); err != nil {
@@ -268,7 +393,7 @@ func (e *Engine) runTask(ctx context.Context, task *store.Task, run *store.Run, 
 	best := map[string][]string{} // ipType → 选中的 IP
 	for _, t := range ipTypes(task.IPType) {
 		rl.Printf("━━ 开始 IPv%s 测速 ━━", strings.TrimPrefix(t, "v"))
-		res, err := e.CFST.Run(ctx, cfst.RunOptions{IPType: t, Config: task.SpeedTest,
+		res, err := e.CFST.Run(ctx, cfst.RunOptions{IPType: t, Config: selectionConfig,
 			WorkDir: e.TempDir, Tag: fmt.Sprintf("run%d", run.ID)}, rl)
 		if err != nil {
 			if ctx.Err() != nil {
@@ -291,6 +416,20 @@ func (e *Engine) runTask(ctx context.Context, task *store.Task, run *store.Run, 
 			rl.Printf("✗ IPv%s 延迟异常：几乎全部低于 5 ms 且彼此接近，符合本地代理直接完成 TCP 握手的特征", strings.TrimPrefix(t, "v"))
 			run.Network.ProxySuspected, run.Network.Reason = true, "latency"
 			break
+		}
+		if run.Trigger == "health" {
+			qualified := []store.SpeedResult{}
+			seen := map[string]bool{}
+			for _, r := range res {
+				if qualifiedReplacement(r, task) && !seen[r.IP] {
+					qualified = append(qualified, r)
+					seen[r.IP] = true
+				}
+			}
+			res = qualified
+			if len(res) < count {
+				continue
+			}
 		}
 		for i := 0; i < len(res) && i < count; i++ {
 			best[t] = append(best[t], res[i].IP)
@@ -323,6 +462,48 @@ func (e *Engine) runTask(ctx context.Context, task *store.Task, run *store.Run, 
 	}
 
 	// 2. 同步 DNS
+	allowedHealthTargets := map[string]bool{}
+	if run.Trigger == "health" {
+		latest, err := e.Store.GetTask(task.ID)
+		if err != nil {
+			return err
+		}
+		if !latest.Enabled || !latest.HealthCheck.Enabled || healthConfigFingerprint(latest) != healthCheck.ConfigFingerprint {
+			return errHealthSnapshot
+		}
+		_, results, snapshots, err := e.collectCurrentIPs(ctx, task)
+		if err != nil {
+			return err
+		}
+		for _, r := range results {
+			if r.Status == store.HealthStatusUnknown {
+				return errHealthSnapshot
+			}
+		}
+		for _, tg := range task.Targets {
+			safe := !tg.Proxied
+			for _, typ := range ipTypes(task.IPType) {
+				key := healthTargetKey(tg, recordType(typ))
+				expected, ok := healthCheck.TargetSnapshots[key]
+				if !ok || snapshots[key] != expected {
+					safe = false
+				}
+			}
+			if safe {
+				for _, typ := range ipTypes(task.IPType) {
+					allowedHealthTargets[healthTargetKey(tg, recordType(typ))] = true
+				}
+			}
+		}
+		for _, r := range healthCheck.Results {
+			if r.Status == store.HealthStatusSkipped {
+				delete(allowedHealthTargets, r.TargetKey)
+			}
+		}
+		if len(allowedHealthTargets) == 0 {
+			return errHealthSnapshot
+		}
+	}
 	rl.Printf("━━ 更新 DNS 记录 ━━")
 	providers := map[uint]provider.Provider{}
 	names := map[uint]string{}
@@ -333,13 +514,18 @@ func (e *Engine) runTask(ctx context.Context, task *store.Task, run *store.Run, 
 		if err == nil {
 			names[acc.ID] = acc.Name
 			if p = providers[acc.ID]; p == nil {
-				p, err = provider.New(acc.Provider, acc.Config)
+				p, err = e.newProvider(acc.Provider, acc.Config)
 				providers[acc.ID] = p
 			}
 		}
 		for _, t := range ipTypes(task.IPType) {
 			fqdn := provider.FQDN(tg.RR, tg.Domain)
 			ch := store.DNSChange{AccountID: tg.AccountID, AccountName: names[tg.AccountID], FQDN: fqdn, Type: recordType(t)}
+			if run.Trigger == "health" && !allowedHealthTargets[healthTargetKey(tg, recordType(t))] {
+				ch.Action, ch.Message = "skip", "健康检查目标已变化或已跳过，保留现有记录"
+				run.Changes = append(run.Changes, ch)
+				continue
+			}
 			if err != nil {
 				ch.Action, ch.Message = "error", "DNS 账号不可用: "+err.Error()
 				ch.MessageKey, ch.MessageArgs = "accountUnavailable", map[string]any{"error": err.Error()}
@@ -356,7 +542,11 @@ func (e *Engine) runTask(ctx context.Context, task *store.Task, run *store.Run, 
 				continue
 			}
 			total++
-			changes, serr := e.syncTarget(ctx, p, tg, recordType(t), ips, !task.Update.SkipUnchanged)
+			var expected []string
+			if run.Trigger == "health" {
+				expected = []string{healthCheck.TargetSnapshots[healthTargetKey(tg, recordType(t))]}
+			}
+			changes, serr := e.syncTarget(ctx, p, tg, recordType(t), ips, !task.Update.SkipUnchanged, expected...)
 			for i := range changes {
 				changes[i].AccountID, changes[i].AccountName = tg.AccountID, names[tg.AccountID]
 				c := changes[i]
@@ -372,7 +562,7 @@ func (e *Engine) runTask(ctx context.Context, task *store.Task, run *store.Run, 
 				case "error":
 					rl.Printf("✗ %s %s: %s", c.FQDN, c.Type, c.Message)
 				}
-				if c.Action != "skip" && c.Action != "error" {
+				if c.Action == "create" || c.Action == "delete" || (c.Action == "update" && c.OldValue != c.NewValue) {
 					run.Changed = true
 				}
 			}
@@ -468,7 +658,7 @@ func (e *Engine) lastEgress(taskID, runID uint) map[string]string {
 }
 
 // syncTarget 同步一条目标记录的一种类型；返回变更明细，error 表示该目标失败。
-func (e *Engine) syncTarget(ctx context.Context, p provider.Provider, tg store.Target, typ string, ips []string, force bool) ([]store.DNSChange, error) {
+func (e *Engine) syncTarget(ctx context.Context, p provider.Provider, tg store.Target, typ string, ips []string, force bool, expected ...string) ([]store.DNSChange, error) {
 	fqdn := provider.FQDN(tg.RR, tg.Domain)
 	rr := strings.TrimSpace(tg.RR)
 	if rr == "" {
@@ -486,8 +676,18 @@ func (e *Engine) syncTarget(ctx context.Context, p provider.Provider, tg store.T
 	}
 	var existing []provider.Record
 	for _, r := range all {
-		if strings.EqualFold(r.Type, typ) && sameLine(r.Line, tg.Line) {
+		if matchesTarget(r, tg, typ) {
 			existing = append(existing, r)
+		}
+	}
+	if len(expected) > 0 {
+		if tg.Proxied || recordFingerprint(existing) != expected[0] {
+			return fail(errHealthSnapshot)
+		}
+		for _, r := range existing {
+			if r.Proxied {
+				return fail(errHealthSnapshot)
+			}
 		}
 	}
 	plan := MakePlan(existing, ips)

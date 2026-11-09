@@ -2,6 +2,13 @@ package i18n
 
 // en 为English翻译，键为简体中文原文。
 var en = map[string]string{
+	"健康检查间隔需在 1-1440 分钟之间":    "Health check interval must be between 1 and 1440 minutes",
+	"健康检查阈值必须为有限的非负数":         "Health check thresholds must be finite nonnegative numbers",
+	"健康检查至少需要一个延迟或速度阈值":       "Health checks require at least one latency or speed threshold",
+	"健康检查连续异常次数需在 1-20 之间":    "Consecutive health failures must be between 1 and 20",
+	"健康检查冷却时间需在 0-10080 分钟之间": "Health check cooldown must be between 0 and 10080 minutes",
+	"备份中的健康检查数据无效":            "Backup contains invalid health check data",
+
 	// DNS 服务商表单
 	"认证方式":          "Authentication",
 	"API Token（推荐）": "API Token (recommended)",

@@ -28,6 +28,14 @@ func BuildMessage(prefix string, task *store.Task, run *store.Run) notify.Messag
 	title = strings.TrimSpace(title)
 
 	var txt, md strings.Builder
+	if run.Trigger == "health" {
+		line := fmt.Sprintf("触发方式: 健康检查（%s）", run.HealthReason)
+		if run.HealthCheckID != nil {
+			line += fmt.Sprintf(" #%d", *run.HealthCheckID)
+		}
+		txt.WriteString(line + "\n")
+		md.WriteString(line + "\n\n")
+	}
 	best := func(ipType, label string) {
 		for _, r := range run.Results {
 			if r.IPType == ipType && r.Rank == 1 {

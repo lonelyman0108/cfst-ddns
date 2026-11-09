@@ -346,6 +346,9 @@ func (s *Store) SaveHealthState(state HealthState) error {
 
 // CreateHealthCheck 保存一次健康检查批次。
 func (s *Store) CreateHealthCheck(check *HealthCheck) error {
+	if check.Results == nil {
+		check.Results = []HealthResult{}
+	}
 	return s.DB.Create(check).Error
 }
 
@@ -357,8 +360,13 @@ func (s *Store) ListHealthChecks(taskID uint, limit int) ([]HealthCheck, error) 
 	if limit > 200 {
 		limit = 200
 	}
-	var list []HealthCheck
+	list := []HealthCheck{}
 	err := s.DB.Where("task_id = ?", taskID).Order("checked_at DESC, id DESC").Limit(limit).Find(&list).Error
+	for i := range list {
+		if list[i].Results == nil {
+			list[i].Results = []HealthResult{}
+		}
+	}
 	return list, err
 }
 
@@ -368,8 +376,16 @@ func (s *Store) PurgeHealthChecks(days int) (int64, error) {
 		return 0, i18n.New("天数必须大于 0")
 	}
 	before := time.Now().AddDate(0, 0, -days)
-	res := s.DB.Where("created_at < ?", before).Delete(&HealthCheck{})
-	return res.RowsAffected, res.Error
+	var count int64
+	err := s.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&Run{}).Where("health_check_id IN (?)", tx.Model(&HealthCheck{}).Select("id").Where("created_at < ?", before)).Update("health_check_id", nil).Error; err != nil {
+			return err
+		}
+		res := tx.Where("created_at < ?", before).Delete(&HealthCheck{})
+		count = res.RowsAffected
+		return res.Error
+	})
+	return count, err
 }
 
 // ---------- 执行记录 ----------
@@ -380,6 +396,30 @@ func (s *Store) PurgeRuns(days int) (int64, error) {
 		return 0, i18n.New("天数必须大于 0")
 	}
 	before := time.Now().AddDate(0, 0, -days)
-	res := s.DB.Where("created_at < ? AND status NOT IN ?", before, []string{StatusQueued, StatusRunning}).Delete(&Run{})
-	return res.RowsAffected, res.Error
+	var count int64
+	err := s.DB.Transaction(func(tx *gorm.DB) error {
+		res := tx.Where("created_at < ? AND status NOT IN ?", before, []string{StatusQueued, StatusRunning}).Delete(&Run{})
+		if res.Error != nil {
+			return res.Error
+		}
+		count = res.RowsAffected
+		st := s.WithDB(tx)
+		if err := st.ClearStaleHealthRunLinks(); err != nil {
+			return err
+		}
+		_, err := st.PurgeHealthChecks(days)
+		return err
+	})
+	return count, err
+}
+
+// ClearStaleHealthRunLinks keeps health API links valid after history deletion.
+func (s *Store) ClearStaleHealthRunLinks() error {
+	return s.DB.Transaction(func(tx *gorm.DB) error {
+		ids := tx.Model(&Run{}).Select("id")
+		if err := tx.Model(&HealthState{}).Where("last_triggered_run_id IS NOT NULL AND last_triggered_run_id NOT IN (?)", ids).Update("last_triggered_run_id", nil).Error; err != nil {
+			return err
+		}
+		return tx.Model(&HealthCheck{}).Where("triggered_run_id IS NOT NULL AND triggered_run_id NOT IN (?)", ids).Update("triggered_run_id", nil).Error
+	})
 }
