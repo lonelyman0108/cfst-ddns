@@ -242,11 +242,13 @@ export interface HealthResult {
   latency?: number | null
   speed?: number | null
   lossRate?: number | null
+  latencyMeasured?: boolean
+  speedMeasured?: boolean
+  lossMeasured?: boolean
   healthy: boolean
   status?: HealthCheckStatus
   reason?: string
-  speedMeasured?: boolean
-  latencyMeasured?: boolean
+  detail?: string
 }
 
 export interface HealthCheckHistory {

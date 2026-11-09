@@ -168,16 +168,19 @@ type HealthState struct {
 
 // HealthResult 是一次健康检查中对单个当前 IP 的结果。
 type HealthResult struct {
-	TargetKey string  `json:"targetKey"`
-	IPType    string  `json:"ipType"`
-	IP        string  `json:"ip"`
-	Latency   float64 `json:"latency"`
-	Speed     float64 `json:"speed"`
-	LossRate  float64 `json:"lossRate"`
-	Healthy   bool    `json:"healthy"`
-	Status    string  `json:"status"` // healthy/unhealthy/unknown/skipped
-	Detail    string  `json:"detail,omitempty"`
-	Reason    string  `json:"reason,omitempty"`
+	TargetKey       string  `json:"targetKey"`
+	IPType          string  `json:"ipType"`
+	IP              string  `json:"ip"`
+	Latency         float64 `json:"latency"`
+	Speed           float64 `json:"speed"`
+	LossRate        float64 `json:"lossRate"`
+	Healthy         bool    `json:"healthy"`
+	Status          string  `json:"status"` // healthy/unhealthy/unknown/skipped
+	LatencyMeasured bool    `json:"latencyMeasured"`
+	SpeedMeasured   bool    `json:"speedMeasured"`
+	LossMeasured    bool    `json:"lossMeasured"`
+	Detail          string  `json:"detail,omitempty"`
+	Reason          string  `json:"reason,omitempty"`
 }
 
 // HealthCheck 是一次健康检查批次，不计入普通 Run 统计。

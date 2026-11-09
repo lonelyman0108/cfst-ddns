@@ -10,10 +10,10 @@ export default {
     noIP: "沒有取得任何可用 IP，DNS 紀錄未修改",
     noTargets: "任務未設定目標紀錄",
     proxyDetected: "偵測到測速流量經過代理，DNS 記錄未修改",
-    interrupted: "服務重新啟動，執行被中斷",
+    healthSnapshot: "健康檢查觸發的執行中，DNS 目標已變更或無法安全更新，紀錄未修改",
   },
   change: {
     keptNoIP: "無可用 IP，保留原紀錄",
-    accountUnavailable: "DNS 帳號無法使用：{error}",
+    healthTargetChanged: "健康檢查目標已變更或已跳過，保留原紀錄",
   },
 }

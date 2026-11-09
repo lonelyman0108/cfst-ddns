@@ -26,7 +26,7 @@ import StatusBadge from '@/components/StatusBadge.vue'
 import ToneBadge from '@/components/ToneBadge.vue'
 import { confirm } from '@/composables/useConfirm'
 import { describeCron } from '@/utils/cron'
-import { fmtTime, fromNow, ipTypeLabel } from '@/utils/format'
+import { fmtTime, fromNow, ipTypeLabel, dayjs } from '@/utils/format'
 import { useVisibleInterval } from '@/utils/useMedia'
 
 const { t } = useI18n()
@@ -90,6 +90,12 @@ function healthTone(task: Task) {
 function healthLabel(task: Task) {
   return t(`health.history.status${healthState(task)[0].toUpperCase()}${healthState(task).slice(1)}`)
 }
+
+function cooldownActive(task: Task) {
+  const until = task.healthStatus?.cooldownUntil
+  return !!until && dayjs(until).isAfter(dayjs())
+}
+
 
 async function runNow(task: Task, dryRun = false) {
   running.value[task.id] = true
@@ -178,7 +184,7 @@ async function remove(task: Task) {
               <div v-if="t.healthCheck?.enabled" class="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
                 <ToneBadge :tone="healthTone(t)">{{ healthLabel(t) }}</ToneBadge>
                 <span v-if="t.healthStatus?.consecutiveFailures" class="text-muted-foreground tabular-nums">{{ t.healthStatus.consecutiveFailures }}×</span>
-                <span v-if="t.healthStatus?.cooldownUntil" class="text-muted-foreground truncate" :title="fmtTime(t.healthStatus.cooldownUntil)">{{ $t('health.history.cooldown') }} {{ fromNow(t.healthStatus.cooldownUntil) }}</span>
+                <span v-if="cooldownActive(t)" class="text-muted-foreground truncate" :title="fmtTime(t.healthStatus?.cooldownUntil)">{{ $t('health.history.cooldown') }} {{ fromNow(t.healthStatus?.cooldownUntil) }}</span>
               </div>
             </TableCell>
             <TableCell>

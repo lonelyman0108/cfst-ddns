@@ -335,6 +335,8 @@ func messageKeyOf(err error) string {
 		return "allFailed"
 	case errors.Is(err, errProxyDetected):
 		return "proxyDetected"
+	case errors.Is(err, errHealthSnapshot):
+		return "healthSnapshot"
 	}
 	return ""
 }
@@ -357,6 +359,7 @@ func (e *Engine) runTask(ctx context.Context, task *store.Task, run *store.Run, 
 		count = 1
 	}
 	var healthCheck store.HealthCheck
+	healthCounts := map[string]int{}
 	selectionConfig := task.SpeedTest
 	if run.Trigger == "health" {
 		if run.HealthCheckID == nil {
@@ -368,12 +371,9 @@ func (e *Engine) runTask(ctx context.Context, task *store.Task, run *store.Run, 
 		if !task.Enabled || !task.HealthCheck.Enabled || healthCheck.ConfigFingerprint != healthConfigFingerprint(task) {
 			return errHealthSnapshot
 		}
-		counts := map[string]int{}
-		for _, r := range healthCheck.Results {
-			if r.IP != "" && r.Status != store.HealthStatusSkipped && r.Status != store.HealthStatusUnknown {
-				counts[r.TargetKey]++
-				count = max(count, counts[r.TargetKey])
-			}
+		healthCounts = healthRequiredCounts(healthCheck.Results, count)
+		for _, required := range healthCounts {
+			count = max(count, required)
 		}
 		selectionConfig.ExtraArgs = ""
 		if task.HealthCheck.MinSpeed > 0 || selectionConfig.MinSpeed > 0 {
@@ -522,7 +522,7 @@ func (e *Engine) runTask(ctx context.Context, task *store.Task, run *store.Run, 
 			fqdn := provider.FQDN(tg.RR, tg.Domain)
 			ch := store.DNSChange{AccountID: tg.AccountID, AccountName: names[tg.AccountID], FQDN: fqdn, Type: recordType(t)}
 			if run.Trigger == "health" && !allowedHealthTargets[healthTargetKey(tg, recordType(t))] {
-				ch.Action, ch.Message = "skip", "健康检查目标已变化或已跳过，保留现有记录"
+				ch.Action, ch.Message, ch.MessageKey = "skip", "健康检查目标已变化或已跳过，保留现有记录", "healthTargetChanged"
 				run.Changes = append(run.Changes, ch)
 				continue
 			}
@@ -540,6 +540,18 @@ func (e *Engine) runTask(ctx context.Context, task *store.Task, run *store.Run, 
 				ch.Action, ch.Message, ch.MessageKey = "skip", "无可用 IP，保留原记录", "keptNoIP"
 				run.Changes = append(run.Changes, ch)
 				continue
+			}
+			if run.Trigger == "health" {
+				required := task.Update.RecordCount
+				if n := healthCounts[healthTargetKey(tg, recordType(t))]; n > 0 {
+					required = n
+				}
+				if required < 1 {
+					required = 1
+				}
+				if len(ips) > required {
+					ips = ips[:required]
+				}
 			}
 			total++
 			var expected []string

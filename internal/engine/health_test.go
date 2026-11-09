@@ -218,7 +218,7 @@ func TestHealthUnknownAndMissingRecords(t *testing.T) {
 	}
 	e.HealthJob(context.Background(), task.ID)
 	state, _ = e.Store.GetHealthState(task.ID)
-	if state.ConsecutiveFailures != 1 || state.Status != "unknown" {
+	if state.ConsecutiveFailures != 2 || state.Status != "unhealthy" {
 		t.Fatalf("timeout state=%+v", state)
 	}
 	fp.records = map[string]provider.Record{}
@@ -226,6 +226,55 @@ func TestHealthUnknownAndMissingRecords(t *testing.T) {
 	state, _ = e.Store.GetHealthState(task.ID)
 	if state.ConsecutiveFailures != 1 || state.Status != "unhealthy" {
 		t.Fatalf("missing state=%+v", state)
+	}
+}
+
+func TestHealthDeadlineRemainsUnhealthy(t *testing.T) {
+	e, task, _ := healthEngine(t)
+	e.HealthProbe = func(ctx context.Context, _ cfst.RunOptions, _ cfst.Output) ([]store.SpeedResult, error) {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	result, err := e.HealthJob(ctx, task.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var check store.HealthCheck
+	if err := e.Store.DB.First(&check, result.CheckID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if check.Status != store.HealthStatusUnhealthy || check.FailureReason != "timeout" {
+		t.Fatalf("check=%+v", check)
+	}
+	state, _ := e.Store.GetHealthState(task.ID)
+	if state.ConsecutiveFailures != 1 {
+		t.Fatalf("state=%+v", state)
+	}
+}
+func TestHealthUnsupportedLineIsUnknown(t *testing.T) {
+	e, task, _ := healthEngine(t)
+	task.Targets[0].Line = "telecom"
+	ips, results, err := e.CollectCurrentIPs(context.Background(), task)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ips) != 0 || len(results) == 0 || results[0].Status != store.HealthStatusUnknown || results[0].Reason != "unsupportedLine" {
+		t.Fatalf("ips=%+v results=%+v", ips, results)
+	}
+}
+
+func TestHealthRequiredCountsArePerTarget(t *testing.T) {
+	counts := healthRequiredCounts([]store.HealthResult{
+		{TargetKey: "a", IP: "1.1.1.1", Status: store.HealthStatusUnhealthy},
+		{TargetKey: "a", IP: "2.2.2.2", Status: store.HealthStatusUnhealthy},
+		{TargetKey: "a", IP: "3.3.3.3", Status: store.HealthStatusHealthy},
+		{TargetKey: "b", IP: "4.4.4.4", Status: store.HealthStatusHealthy},
+		{TargetKey: "b", IP: "", Status: store.HealthStatusSkipped},
+	}, 1)
+	if counts["a"] != 3 || counts["b"] != 1 {
+		t.Fatalf("counts=%v", counts)
 	}
 }
 

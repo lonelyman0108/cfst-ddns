@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import EmptyState from '@/components/EmptyState.vue'
 import ToneBadge from '@/components/ToneBadge.vue'
 import { useVisibleInterval } from '@/utils/useMedia'
-import { fmtLatency, fmtPercent, fmtSpeed, fmtTime, fromNow } from '@/utils/format'
+import { fmtLatency, fmtPercent, fmtTime, fromNow, dayjs } from '@/utils/format'
 
 const props = defineProps<{
   taskId: number
@@ -59,9 +59,21 @@ function reasonLabel(reason?: string) {
   const known: Record<string, string> = {
     proxied: 'health.history.reasonProxySkipped',
     proxySkipped: 'health.history.reasonProxySkipped',
+    provider: 'health.history.reasonProviderUnavailable',
     providerUnavailable: 'health.history.reasonProviderUnavailable',
+    unsupportedLine: 'health.history.reasonUnsupportedLine',
+    missingResult: 'health.history.reasonNoResult',
     noResult: 'health.history.reasonNoResult',
+    probeError: 'health.history.reasonProbeError',
+    invalidIP: 'health.history.reasonInvalidIp',
+    proxyDetected: 'health.history.reasonProxyDetected',
+    noRecords: 'health.history.reasonNoRecords',
+    busy: 'health.history.reasonBusy',
+    disabled: 'health.history.reasonDisabled',
+    unreachable: 'health.history.reasonUnreachable',
     timeout: 'health.history.reasonTimeout',
+    unknown: 'health.history.statusUnknown',
+    skipped: 'health.history.statusSkipped',
     latency: 'health.history.reasonThresholdLatency',
     speed: 'health.history.reasonThresholdSpeed',
     loss: 'health.history.reasonLoss',
@@ -80,8 +92,22 @@ function metric(value: number | null | undefined, measured = true, formatter: (v
 }
 
 function speedMetric(result: HealthResult) {
-  return metric(result.speed, result.speedMeasured !== false, fmtSpeed)
+  if (result.speedMeasured !== false && typeof result.speed === 'number' && Number.isFinite(result.speed) && result.speed >= 0) {
+    return `${result.speed.toFixed(2)} MB/s`
+  }
+  return t('health.history.measuredUnavailable')
 }
+
+function lossMetric(result: HealthResult) {
+  return result.lossMeasured !== false && typeof result.lossRate === 'number' && Number.isFinite(result.lossRate)
+    ? fmtPercent(result.lossRate)
+    : t('health.history.measuredUnavailable')
+}
+
+const cooldownActive = computed(() => {
+  const until = effectiveState.value?.cooldownUntil
+  return !!until && dayjs(until).isAfter(dayjs())
+})
 
 async function load() {
   if (!props.taskId) return
@@ -115,7 +141,7 @@ defineExpose({ reload: load })
           <CardTitle class="flex items-center gap-2"><Gauge class="text-muted-foreground size-4" />{{ t('health.history.title') }}</CardTitle>
           <CardDescription class="mt-1">{{ t('health.history.summary') }}</CardDescription>
         </div>
-        <Button variant="ghost" size="icon" class="size-8" :aria-label="t('health.history.refresh')" :disabled="loading" @click="load">
+        <Button type="button" variant="ghost" size="icon" class="size-8" :aria-label="t('health.history.refresh')" :disabled="loading" @click="load">
           <RefreshCw :class="loading ? 'animate-spin' : ''" />
         </Button>
       </div>
@@ -140,8 +166,8 @@ defineExpose({ reload: load })
           <div class="mt-1 font-medium tabular-nums">{{ effectiveState?.consecutiveFailures ?? 0 }}</div>
         </div>
         <div>
-          <div class="text-muted-foreground text-xs">{{ effectiveState?.cooldownUntil ? t('health.history.cooldown') : t('health.history.next') }}</div>
-          <div class="mt-1 font-medium tabular-nums">{{ fmtTime(effectiveState?.cooldownUntil || props.nextRunAt) }}</div>
+          <div class="text-muted-foreground text-xs">{{ cooldownActive ? t('health.history.cooldown') : t('health.history.next') }}</div>
+          <div class="mt-1 font-medium tabular-nums">{{ fmtTime(cooldownActive ? effectiveState?.cooldownUntil : props.nextRunAt) }}</div>
         </div>
       </div>
 
@@ -188,10 +214,11 @@ defineExpose({ reload: load })
                     <TableCell class="font-mono text-xs whitespace-normal break-all">{{ result.ip || '-' }}</TableCell>
                     <TableCell class="text-right text-xs tabular-nums">{{ metric(result.latency, result.latencyMeasured !== false, fmtLatency) }}</TableCell>
                     <TableCell class="text-right text-xs tabular-nums">{{ speedMetric(result) }}</TableCell>
-                    <TableCell class="text-right text-xs tabular-nums">{{ typeof result.lossRate === 'number' ? fmtPercent(result.lossRate) : t('health.history.measuredUnavailable') }}</TableCell>
+                    <TableCell class="text-right text-xs tabular-nums">{{ lossMetric(result) }}</TableCell>
                     <TableCell class="pr-3 text-xs whitespace-normal break-words">
                       <ToneBadge :tone="statusTone(resultStatus(result, item))">{{ statusLabel(resultStatus(result, item)) }}</ToneBadge>
                       <span v-if="result.reason" class="text-muted-foreground mt-1 block">{{ reasonLabel(result.reason) }}</span>
+                      <span v-if="result.detail" class="text-muted-foreground mt-1 block break-words">{{ result.detail }}</span>
                     </TableCell>
                   </TableRow>
                 </TableBody>

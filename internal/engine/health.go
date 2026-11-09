@@ -115,12 +115,22 @@ func (e *Engine) collectCurrentIPs(ctx context.Context, task *store.Task) ([]Hea
 		targetResults := []store.HealthResult{}
 		targetSnapshots := map[string]string{}
 		proxied := tg.Proxied
+		providerType := ""
+		if acc != nil {
+			providerType = acc.Provider
+		}
 		for _, ipType := range ipTypes(task.IPType) {
 			typ := recordType(ipType)
 			key := healthTargetKey(tg, typ)
 			result := store.HealthResult{TargetKey: key, IPType: ipType}
 			if tg.Proxied {
 				result.Status, result.Reason = store.HealthStatusSkipped, "proxied"
+				targetResults = append(targetResults, result)
+				continue
+			}
+			if !provider.SupportsLine(providerType, tg.Line) {
+				result.Status, result.Reason = store.HealthStatusUnknown, "unsupportedLine"
+				result.Detail = "DNS provider does not support the configured line"
 				targetResults = append(targetResults, result)
 				continue
 			}
@@ -240,6 +250,27 @@ func EvaluateHealth(results []store.HealthResult, cfg store.HealthCheckConfig) (
 	return reason == "", reason
 }
 
+// healthRequiredCounts keeps the number of currently managed IPs per target.
+// Each target is allowed to preserve its own Top-N cardinality.
+func healthRequiredCounts(results []store.HealthResult, defaultCount int) map[string]int {
+	if defaultCount < 1 {
+		defaultCount = 1
+	}
+	counts := map[string]int{}
+	for _, r := range results {
+		if r.IP == "" || r.Status == store.HealthStatusSkipped || r.Status == store.HealthStatusUnknown {
+			continue
+		}
+		counts[r.TargetKey]++
+	}
+	for key, count := range counts {
+		if count < defaultCount {
+			counts[key] = defaultCount
+		}
+	}
+	return counts
+}
+
 var errHealthSnapshot = errors.New("健康检查目标已变化或不可安全更新，DNS 记录未修改")
 
 func qualifiedReplacement(r store.SpeedResult, task *store.Task) bool {
@@ -307,6 +338,7 @@ func (e *Engine) HealthJob(parent context.Context, taskID uint) (HealthJobResult
 		snapshots = current
 		check.Results = results
 		hasUnknown := false
+		probeTimedOut := false
 		for _, r := range results {
 			if r.Status == store.HealthStatusUnknown {
 				hasUnknown = true
@@ -339,6 +371,7 @@ func (e *Engine) HealthJob(parent context.Context, taskID uint) (HealthJobResult
 				}
 				byIP := map[string]store.SpeedResult{}
 				probeReason, probeDetail := "", ""
+				probeStatus := store.HealthStatusUnknown
 				if hasUnknown {
 					probeReason = "proxyDetected"
 				} else {
@@ -348,10 +381,15 @@ func (e *Engine) HealthJob(parent context.Context, taskID uint) (HealthJobResult
 					}
 					measured, probeErr := probe(ctx, cfst.RunOptions{IPType: ipType, IPs: ips, Config: healthProbeConfig(task, len(ips)), WorkDir: e.TempDir, Tag: fmt.Sprintf("health%d", task.ID)}, discardHealthOutput{})
 					if probeErr != nil || ctx.Err() != nil {
-						probeReason = "probeError"
+						if errors.Is(probeErr, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+							probeTimedOut = true
+							probeStatus, probeReason = store.HealthStatusUnhealthy, "timeout"
+						} else {
+							probeReason = "probeError"
+						}
 						if probeErr != nil {
 							probeDetail = probeErr.Error()
-						} else {
+						} else if ctx.Err() != nil {
 							probeDetail = ctx.Err().Error()
 						}
 					} else if !task.SpeedTest.IsProxy() && !task.SpeedTest.Httping && netcheck.LatencyAnomalous(measured) {
@@ -369,9 +407,12 @@ func (e *Engine) HealthJob(parent context.Context, taskID uint) (HealthJobResult
 					}
 					r := store.HealthResult{TargetKey: m.TargetKey, IPType: m.IPType, IP: m.IP}
 					if probeReason != "" {
-						r.Status, r.Reason, r.Detail = store.HealthStatusUnknown, probeReason, probeDetail
+						r.Status, r.Reason, r.Detail = probeStatus, probeReason, probeDetail
 					} else if v, ok := byIP[m.IP]; ok {
 						r.Latency, r.Speed, r.LossRate = v.Latency, v.Speed, v.LossRate
+						r.LatencyMeasured = true
+						r.SpeedMeasured = task.HealthCheck.MinSpeed > 0
+						r.LossMeasured = true
 						r.Healthy, r.Reason = EvaluateHealth([]store.HealthResult{r}, task.HealthCheck)
 						r.Status = store.HealthStatusUnhealthy
 						if r.Healthy {
@@ -410,7 +451,7 @@ func (e *Engine) HealthJob(parent context.Context, taskID uint) (HealthJobResult
 				}
 			}
 		}
-		if ctx.Err() != nil {
+		if ctx.Err() != nil && !probeTimedOut {
 			check.Status, check.FailureReason = store.HealthStatusUnknown, "probeError"
 		}
 	}

@@ -14,6 +14,7 @@ import (
 
 	"github.com/lonelyman0108/cfst-ddns/internal/engine"
 	"github.com/lonelyman0108/cfst-ddns/internal/i18n"
+	"github.com/lonelyman0108/cfst-ddns/internal/provider"
 	"github.com/lonelyman0108/cfst-ddns/internal/scheduler"
 	"github.com/lonelyman0108/cfst-ddns/internal/store"
 )
@@ -165,8 +166,12 @@ func normalizeTaskIn(st *store.Store, t *store.Task) error {
 		if tg.Domain == "" {
 			return i18n.Errorf("第 %d 条目标记录的主域名不能为空", i+1)
 		}
-		if _, err := st.GetAccount(tg.AccountID); err != nil {
+		acc, err := st.GetAccount(tg.AccountID)
+		if err != nil {
 			return i18n.Errorf("第 %d 条目标记录的 DNS 账号不存在", i+1)
+		}
+		if !provider.SupportsLine(acc.Provider, tg.Line) {
+			return i18n.Errorf("第 %d 条目标记录的 DNS 服务商不支持线路 %q", i+1, tg.Line)
 		}
 		key := fmt.Sprintf("%d|%s|%s|%s", tg.AccountID, tg.RR, tg.Domain, tg.Line)
 		if seen[key] {
