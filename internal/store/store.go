@@ -40,7 +40,7 @@ func Open(path string, box *secret.Box) (*Store, error) {
 		return nil, err
 	}
 	sqlDB.SetMaxOpenConns(1) // SQLite 单写者，避免 SQLITE_BUSY
-	if err := db.AutoMigrate(&User{}, &KV{}, &Account{}, &Notifier{}, &Task{}, &Run{}, &RecordState{}); err != nil {
+	if err := db.AutoMigrate(&User{}, &KV{}, &Account{}, &Notifier{}, &Task{}, &Run{}, &RecordState{}, &HealthState{}, &HealthCheck{}); err != nil {
 		return nil, fmt.Errorf("数据库迁移失败: %w", err)
 	}
 	return &Store{DB: db, box: box}, nil
@@ -322,6 +322,54 @@ func (s *Store) UpsertRecordState(st RecordState) error {
 		Columns:   []clause.Column{{Name: "task_id"}, {Name: "account_id"}, {Name: "fqdn"}, {Name: "type"}},
 		DoUpdates: clause.AssignmentColumns([]string{"value", "updated_at"}),
 	}).Create(&st).Error
+}
+
+// ---------- 健康检查 ----------
+
+// GetHealthState 返回任务健康状态；首次读取不存在时返回零值状态。
+func (s *Store) GetHealthState(taskID uint) (*HealthState, error) {
+	var state HealthState
+	if err := s.DB.First(&state, "task_id = ?", taskID).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return &HealthState{TaskID: taskID}, nil
+		}
+		return nil, err
+	}
+	return &state, nil
+}
+
+// SaveHealthState 保存任务健康状态。
+func (s *Store) SaveHealthState(state HealthState) error {
+	state.UpdatedAt = time.Now()
+	return s.DB.Save(&state).Error
+}
+
+// CreateHealthCheck 保存一次健康检查批次。
+func (s *Store) CreateHealthCheck(check *HealthCheck) error {
+	return s.DB.Create(check).Error
+}
+
+// ListHealthChecks 返回任务最近的健康检查记录。
+func (s *Store) ListHealthChecks(taskID uint, limit int) ([]HealthCheck, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	var list []HealthCheck
+	err := s.DB.Where("task_id = ?", taskID).Order("checked_at DESC, id DESC").Limit(limit).Find(&list).Error
+	return list, err
+}
+
+// PurgeHealthChecks 删除早于指定天数的健康检查记录。
+func (s *Store) PurgeHealthChecks(days int) (int64, error) {
+	if days <= 0 {
+		return 0, i18n.New("天数必须大于 0")
+	}
+	before := time.Now().AddDate(0, 0, -days)
+	res := s.DB.Where("created_at < ?", before).Delete(&HealthCheck{})
+	return res.RowsAffected, res.Error
 }
 
 // ---------- 执行记录 ----------

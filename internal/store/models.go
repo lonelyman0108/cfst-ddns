@@ -91,7 +91,16 @@ type UpdatePolicy struct {
 	SkipUnchanged bool `json:"skipUnchanged"`
 }
 
-// Target 为一条需要维护的 DNS 记录。
+// HealthCheckConfig 控制任务对当前 DNS IP 的定时健康检测。
+type HealthCheckConfig struct {
+	Enabled             bool    `json:"enabled"`
+	IntervalMinutes     int     `json:"intervalMinutes"`
+	MaxLatency          float64 `json:"maxLatency"`
+	MinSpeed            float64 `json:"minSpeed"`
+	ConsecutiveFailures int     `json:"consecutiveFailures"`
+	CooldownMinutes     int     `json:"cooldownMinutes"`
+}
+
 type Target struct {
 	AccountID uint   `json:"accountId"`
 	Domain    string `json:"domain"`
@@ -103,20 +112,61 @@ type Target struct {
 
 // Task 为一个测速 + 更新任务。
 type Task struct {
-	ID          uint            `gorm:"primaryKey" json:"id"`
-	Name        string          `gorm:"size:128" json:"name"`
-	Enabled     bool            `json:"enabled"`
-	Cron        string          `gorm:"size:128" json:"cron"`
-	IPType      string          `gorm:"column:ip_type;size:8" json:"ipType"`
-	SpeedTest   SpeedTestConfig `gorm:"serializer:json" json:"speedTest"`
-	Update      UpdatePolicy    `gorm:"serializer:json" json:"update"`
-	Targets     []Target        `gorm:"serializer:json" json:"targets"`
-	NotifierIDs []uint          `gorm:"column:notifier_ids;serializer:json" json:"notifierIds"`
-	CreatedAt   time.Time       `json:"createdAt"`
-	UpdatedAt   time.Time       `json:"updatedAt"`
+	ID          uint              `gorm:"primaryKey" json:"id"`
+	Name        string            `gorm:"size:128" json:"name"`
+	Enabled     bool              `json:"enabled"`
+	Cron        string            `gorm:"size:128" json:"cron"`
+	IPType      string            `gorm:"column:ip_type;size:8" json:"ipType"`
+	SpeedTest   SpeedTestConfig   `gorm:"serializer:json" json:"speedTest"`
+	HealthCheck HealthCheckConfig `gorm:"serializer:json" json:"healthCheck"`
+	Targets     []Target          `gorm:"serializer:json" json:"targets"`
+	NotifierIDs []uint            `gorm:"column:notifier_ids;serializer:json" json:"notifierIds"`
+	CreatedAt   time.Time         `json:"createdAt"`
+	UpdatedAt   time.Time         `json:"updatedAt"`
 }
 
-// 执行状态。
+const (
+	HealthStatusHealthy   = "healthy"
+	HealthStatusUnhealthy = "unhealthy"
+	HealthStatusUnknown   = "unknown"
+	HealthStatusSkipped   = "skipped"
+)
+
+// HealthState 保存每个任务的连续异常和冷却状态。
+type HealthState struct {
+	TaskID              uint       `gorm:"primaryKey" json:"taskId"`
+	ConsecutiveFailures int        `json:"consecutiveFailures"`
+	LastCheckedAt       *time.Time `json:"lastCheckedAt"`
+	LastHealthy         *bool      `json:"lastHealthy"`
+	CooldownUntil       *time.Time `json:"cooldownUntil"`
+	LastTriggeredRunID  *uint      `json:"lastTriggeredRunId"`
+	UpdatedAt           time.Time  `json:"updatedAt"`
+}
+
+// HealthResult 是一次健康检查中对单个当前 IP 的结果。
+type HealthResult struct {
+	TargetKey string  `json:"targetKey"`
+	IPType    string  `json:"ipType"`
+	IP        string  `json:"ip"`
+	Latency   float64 `json:"latency"`
+	Speed     float64 `json:"speed"`
+	LossRate  float64 `json:"lossRate"`
+	Healthy   bool    `json:"healthy"`
+	Reason    string  `json:"reason,omitempty"`
+}
+
+// HealthCheck 是一次健康检查批次，不计入普通 Run 统计。
+type HealthCheck struct {
+	ID             uint           `gorm:"primaryKey" json:"id"`
+	TaskID         uint           `gorm:"index" json:"taskId"`
+	CheckedAt      time.Time      `gorm:"index" json:"checkedAt"`
+	Status         string         `gorm:"size:16" json:"status"`
+	FailureReason  string         `json:"failureReason,omitempty"`
+	Results        []HealthResult `gorm:"serializer:json" json:"results"`
+	TriggeredRunID *uint          `json:"triggeredRunId,omitempty"`
+	CreatedAt      time.Time      `json:"createdAt"`
+}
+
 const (
 	StatusQueued   = "queued"
 	StatusRunning  = "running"

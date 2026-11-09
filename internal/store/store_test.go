@@ -3,6 +3,7 @@ package store
 import (
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/lonelyman0108/cfst-ddns/internal/schema"
 	"github.com/lonelyman0108/cfst-ddns/internal/secret"
@@ -50,6 +51,59 @@ func TestUpsertRecordState(t *testing.T) {
 	st.DB.Find(&list)
 	if len(list) != 1 || list[0].Value != "2.2.2.2" {
 		t.Fatalf("got %+v", list)
+	}
+}
+
+func TestHealthStateUpsertAndDefault(t *testing.T) {
+	st := open(t)
+	state, err := st.GetHealthState(42)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.TaskID != 42 || state.ConsecutiveFailures != 0 || state.LastCheckedAt != nil {
+		t.Fatalf("default state = %+v", state)
+	}
+	state.ConsecutiveFailures = 2
+	if err := st.SaveHealthState(*state); err != nil {
+		t.Fatal(err)
+	}
+	state.ConsecutiveFailures = 3
+	if err := st.SaveHealthState(*state); err != nil {
+		t.Fatal(err)
+	}
+	var count int64
+	if err := st.DB.Model(&HealthState{}).Where("task_id = ?", 42).Count(&count).Error; err != nil {
+		t.Fatal(err)
+	}
+	got, err := st.GetHealthState(42)
+	if err != nil || count != 1 || got.ConsecutiveFailures != 3 {
+		t.Fatalf("state = %+v count=%d err=%v", got, count, err)
+	}
+}
+
+func TestHealthCheckJSONAndPurge(t *testing.T) {
+	st := open(t)
+	old := time.Now().Add(-48 * time.Hour)
+	if err := st.CreateHealthCheck(&HealthCheck{
+		TaskID: 1, CheckedAt: old, CreatedAt: old, Status: HealthStatusUnhealthy,
+		Results: []HealthResult{{TargetKey: "1|cdn.example.com|A|", IPType: "v4", IP: "1.1.1.1", Latency: 250, Speed: 2.5, Healthy: false, Reason: "latency"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.CreateHealthCheck(&HealthCheck{TaskID: 1, CheckedAt: time.Now(), Status: HealthStatusHealthy}); err != nil {
+		t.Fatal(err)
+	}
+	items, err := st.ListHealthChecks(1, 20)
+	if err != nil || len(items) != 2 || len(items[1].Results) != 1 || items[1].Results[0].IP != "1.1.1.1" {
+		t.Fatalf("items = %+v err=%v", items, err)
+	}
+	deleted, err := st.PurgeHealthChecks(1)
+	if err != nil || deleted != 1 {
+		t.Fatalf("deleted=%d err=%v", deleted, err)
+	}
+	items, err = st.ListHealthChecks(1, 20)
+	if err != nil || len(items) != 1 || items[0].Status != HealthStatusHealthy {
+		t.Fatalf("remaining = %+v err=%v", items, err)
 	}
 }
 
