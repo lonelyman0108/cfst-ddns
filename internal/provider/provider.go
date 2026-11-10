@@ -117,7 +117,29 @@ func New(t string, cfg schema.Config) (Provider, error) {
 	return e.factory(cfg)
 }
 
-// ErrNotFound 表示资源不存在。
+// IsDefaultLine reports whether a line name means the provider's default view.
+func IsDefaultLine(line string) bool {
+	switch strings.ToLower(strings.TrimSpace(line)) {
+	case "", "默认", "default", "default_view", "0":
+		return true
+	default:
+		return false
+	}
+}
+
+// SupportsLine reports whether a provider can address a non-default line.
+func SupportsLine(providerType, line string) bool {
+	if IsDefaultLine(line) {
+		return true
+	}
+	switch providerType {
+	case "dnspod", "tencentcloud", "alidns", "huaweicloud":
+		return true
+	default:
+		return false
+	}
+}
+
 var ErrNotFound = errors.New("not found")
 
 // FQDN 由主机记录与主域名拼出完整域名。

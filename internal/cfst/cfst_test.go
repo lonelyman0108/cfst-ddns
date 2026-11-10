@@ -1,8 +1,12 @@
 package cfst
 
 import (
+	"context"
 	"io"
+	"os"
+	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -77,6 +81,97 @@ func TestBuildArgs(t *testing.T) {
 	got, _ = BuildArgs(store.SpeedTestConfig{MaxLossRate: 1, MaxLatency: 9999, NetworkMode: store.NetworkProxy}, "a", "b")
 	if strings.Join(got, " ") != "-httping -f a -o b -p 0" {
 		t.Fatalf("proxy mode got %v", got)
+	}
+}
+
+func TestBuildArgsForIPs(t *testing.T) {
+	c := store.SpeedTestConfig{Threads: 200, PingTimes: 4, Port: 443, MaxLatency: 9999, MaxLossRate: 1}
+	got, err := BuildArgsForIPs(c, []string{" 1.1.1.1 ", "2606:4700::1", "1.1.1.1"}, "out.csv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "-ip 1.1.1.1,2606:4700::1 -o out.csv -p 0"
+	if strings.Join(got, " ") != want {
+		t.Fatalf("got %q, want %q", strings.Join(got, " "), want)
+	}
+	if strings.Contains(strings.Join(got, " "), "-f ") {
+		t.Fatal("精确 IP 模式不应传入 -f")
+	}
+
+	c = store.SpeedTestConfig{Httping: true, HttpingCode: 200, URL: "https://example.com/url", MaxLatency: 9999, MaxLossRate: 1}
+	got, err = BuildArgsForIPs(c, []string{"203.0.113.10"}, "out.csv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	args := strings.Join(got, " ")
+	for _, want := range []string{"-httping", "-httping-code 200", "-url https://example.com/url", "-ip 203.0.113.10", "-o out.csv", "-p 0"} {
+		if !strings.Contains(args, want) {
+			t.Fatalf("args %q missing %q", args, want)
+		}
+	}
+}
+
+func TestExactIPsCanonicalAndSafeArguments(t *testing.T) {
+	args, err := BuildArgsForIPs(store.SpeedTestConfig{MaxLossRate: 1}, []string{"2606:4700:0000:0000:0000:0000:0000:0001", "2606:4700::1", "::ffff:1.1.1.1", "1.1.1.1"}, "out")
+	if err != nil || !strings.Contains(strings.Join(args, " "), "-ip 2606:4700::1,1.1.1.1 ") {
+		t.Fatalf("args=%v err=%v", args, err)
+	}
+	for _, extra := range []string{"-ip 9.9.9.9", "-ip=9.9.9.9", "--f=bad", "-f bad", "-o bad", "-p 10", "positional", "-debug positional", "-- -f bad"} {
+		if _, err := BuildArgsForIPs(store.SpeedTestConfig{ExtraArgs: extra}, []string{"1.1.1.1"}, "out"); err == nil {
+			t.Errorf("unsafe extra args accepted: %q", extra)
+		}
+	}
+}
+
+func TestRunExactIPsEmptyNeverUsesDefaultFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX fixture")
+	}
+	dir := t.TempDir()
+	m := &Manager{Dir: dir}
+	if err := os.WriteFile(m.BinPath(), []byte("#!/bin/sh\nexit 0\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(m.IPFile("v4"), []byte("1.0.0.0/8"), 0644)
+	_, err := m.Run(context.Background(), RunOptions{IPType: "v4", IPs: []string{}, WorkDir: filepath.Join(dir, "work")}, &captured{})
+	if err == nil || !strings.Contains(err.Error(), "精确 IP 列表为空") {
+		t.Fatalf("empty exact list: %v", err)
+	}
+}
+
+func TestRunExactIPsUsesNoRangeFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX fixture")
+	}
+	dir := t.TempDir()
+	m := &Manager{Dir: dir}
+	script := "#!/bin/sh\nprintf '%s\\n' \"$@\" > args.txt\nwhile [ \"$#\" -gt 0 ]; do\n if [ \"$1\" = -o ]; then shift; out=\"$1\"; fi\n shift\ndone\nprintf 'IP,sent,received,loss,latency,speed\\n2606:4700::1,4,4,0,80,7\\n' > \"$out\"\n"
+	if err := os.WriteFile(m.BinPath(), []byte(script), 0755); err != nil {
+		t.Fatal(err)
+	}
+	result, err := m.Run(context.Background(), RunOptions{IPType: "v6", IPs: []string{"2606:4700::1"}, Config: store.SpeedTestConfig{NetworkMode: store.NetworkProxy, MaxLossRate: 1, DisableDownload: true}, WorkDir: dir, Tag: "exact"}, &captured{})
+	if err != nil || len(result) != 1 || result[0].IP != "2606:4700::1" {
+		t.Fatalf("result=%+v err=%v", result, err)
+	}
+	args, err := os.ReadFile(filepath.Join(dir, "args.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"-ip\n2606:4700::1", "-httping", "-dd"} {
+		if !strings.Contains(string(args), want) {
+			t.Fatalf("args=%s", args)
+		}
+	}
+	if strings.Contains(string(args), "-f\n") {
+		t.Fatalf("default range file used: %s", args)
+	}
+}
+
+func TestParseCSVRejectsMalformedMetrics(t *testing.T) {
+	for _, csv := range []string{"", "IP,sent,received,loss,latency,speed\n1.1.1.1,4,4,0,NaN,2\n", "IP,sent,received,loss,latency,speed\n1.1.1.1,4,4,0,broken,2\n", "IP,sent,received,loss,latency,speed\n1.1.1.1,4\n"} {
+		if _, err := ParseCSV([]byte(csv), "v4"); err == nil {
+			t.Errorf("malformed CSV accepted: %q", csv)
+		}
 	}
 }
 

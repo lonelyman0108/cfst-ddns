@@ -198,6 +198,75 @@ export interface SpeedTestConfig {
 export type NetworkMode = 'direct' | 'proxy'
 
 
+export interface HealthCheckConfig {
+  enabled: boolean
+  intervalMinutes: number
+  maxLatency: number
+  minSpeed: number
+  consecutiveFailures: number
+  cooldownMinutes: number
+}
+
+export const DEFAULT_HEALTH_CHECK: HealthCheckConfig = {
+  enabled: false,
+  intervalMinutes: 10,
+  maxLatency: 0,
+  minSpeed: 0,
+  consecutiveFailures: 3,
+  cooldownMinutes: 30,
+}
+
+export function normalizeHealthCheck(value?: Partial<HealthCheckConfig> | null): HealthCheckConfig {
+  return { ...DEFAULT_HEALTH_CHECK, ...(value ?? {}) }
+}
+
+export type HealthCheckStatus = 'healthy' | 'unhealthy' | 'unknown' | 'skipped'
+
+export interface HealthStatus {
+  taskId: number
+  consecutiveFailures: number
+  lastCheckedAt: string | null
+  lastHealthy: boolean | null
+  cooldownUntil: string | null
+  lastTriggeredRunId: number | null
+  lastStatus?: HealthCheckStatus
+  status?: HealthCheckStatus
+}
+
+export interface HealthResult {
+  targetKey: string
+  fqdn?: string
+  accountName?: string
+  ipType: 'v4' | 'v6' | string
+  ip: string
+  latency?: number | null
+  speed?: number | null
+  lossRate?: number | null
+  latencyMeasured?: boolean
+  speedMeasured?: boolean
+  lossMeasured?: boolean
+  healthy: boolean
+  status?: HealthCheckStatus
+  reason?: string
+  detail?: string
+}
+
+export interface HealthCheckHistory {
+  id: number
+  taskId: number
+  checkedAt: string
+  status: HealthCheckStatus
+  failureReason?: string
+  results: HealthResult[]
+  triggeredRunId?: number | null
+  createdAt: string
+}
+
+export interface HealthResponse {
+  state: HealthStatus
+  items: HealthCheckHistory[]
+}
+
 export interface UpdatePolicy {
   recordCount: number
   skipUnchanged: boolean
@@ -220,6 +289,7 @@ export interface Task {
   cron: string
   ipType: IPType
   speedTest: SpeedTestConfig
+  healthCheck: HealthCheckConfig
   update: UpdatePolicy
   targets: Target[]
   notifierIds: number[]
@@ -228,12 +298,14 @@ export interface Task {
   // 只读
   running: boolean
   nextRunAt: string | null
+  healthStatus?: HealthStatus
+  healthNextRunAt?: string | null
   lastRun: RunSummary | null
 }
 
 export type TaskInput = Pick<
   Task,
-  'name' | 'enabled' | 'cron' | 'ipType' | 'speedTest' | 'update' | 'targets' | 'notifierIds'
+  'name' | 'enabled' | 'cron' | 'ipType' | 'speedTest' | 'healthCheck' | 'update' | 'targets' | 'notifierIds'
 >
 
 export interface RunStarted {
@@ -246,7 +318,7 @@ export interface CronPreview {
 
 // ---------- 执行记录 ----------
 export type RunStatus = 'queued' | 'running' | 'success' | 'partial' | 'failed' | 'canceled'
-export type RunTrigger = 'manual' | 'cron' | 'hook'
+export type RunTrigger = 'manual' | 'cron' | 'hook' | 'health'
 
 export interface RunSummary {
   id: number
@@ -328,6 +400,9 @@ export interface RunDetail extends RunSummary {
   results: SpeedResult[]
   /** 各 IP 类型实际测得的结果数；results 只保存前 100 个（旧记录无此字段） */
   resultTotals?: Partial<Record<'v4' | 'v6', number>>
+  /** 健康检查触发的完整测速关联（旧记录无此字段） */
+  healthCheckId?: number
+  healthReason?: string
   changes: DNSChange[]
   log: string
   /** 网络自检（旧记录无此字段） */

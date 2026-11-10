@@ -3,6 +3,7 @@ package store
 import (
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/lonelyman0108/cfst-ddns/internal/schema"
 	"github.com/lonelyman0108/cfst-ddns/internal/secret"
@@ -53,6 +54,59 @@ func TestUpsertRecordState(t *testing.T) {
 	}
 }
 
+func TestHealthStateUpsertAndDefault(t *testing.T) {
+	st := open(t)
+	state, err := st.GetHealthState(42)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.TaskID != 42 || state.ConsecutiveFailures != 0 || state.LastCheckedAt != nil {
+		t.Fatalf("default state = %+v", state)
+	}
+	state.ConsecutiveFailures = 2
+	if err := st.SaveHealthState(*state); err != nil {
+		t.Fatal(err)
+	}
+	state.ConsecutiveFailures = 3
+	if err := st.SaveHealthState(*state); err != nil {
+		t.Fatal(err)
+	}
+	var count int64
+	if err := st.DB.Model(&HealthState{}).Where("task_id = ?", 42).Count(&count).Error; err != nil {
+		t.Fatal(err)
+	}
+	got, err := st.GetHealthState(42)
+	if err != nil || count != 1 || got.ConsecutiveFailures != 3 {
+		t.Fatalf("state = %+v count=%d err=%v", got, count, err)
+	}
+}
+
+func TestHealthCheckJSONAndPurge(t *testing.T) {
+	st := open(t)
+	old := time.Now().Add(-48 * time.Hour)
+	if err := st.CreateHealthCheck(&HealthCheck{
+		TaskID: 1, CheckedAt: old, CreatedAt: old, Status: HealthStatusUnhealthy,
+		Results: []HealthResult{{TargetKey: "1|cdn.example.com|A|", IPType: "v4", IP: "1.1.1.1", Latency: 250, Speed: 2.5, Healthy: false, Reason: "latency"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.CreateHealthCheck(&HealthCheck{TaskID: 1, CheckedAt: time.Now(), Status: HealthStatusHealthy}); err != nil {
+		t.Fatal(err)
+	}
+	items, err := st.ListHealthChecks(1, 20)
+	if err != nil || len(items) != 2 || len(items[1].Results) != 1 || items[1].Results[0].IP != "1.1.1.1" {
+		t.Fatalf("items = %+v err=%v", items, err)
+	}
+	deleted, err := st.PurgeHealthChecks(1)
+	if err != nil || deleted != 1 {
+		t.Fatalf("deleted=%d err=%v", deleted, err)
+	}
+	items, err = st.ListHealthChecks(1, 20)
+	if err != nil || len(items) != 1 || items[0].Status != HealthStatusHealthy {
+		t.Fatalf("remaining = %+v err=%v", items, err)
+	}
+}
+
 func TestSettingsRoundTrip(t *testing.T) {
 	st := open(t)
 	def := st.GetSettings()
@@ -72,11 +126,44 @@ func TestTaskJSONColumns(t *testing.T) {
 	st := open(t)
 	task := &Task{Name: "t", IPType: "both", Targets: []Target{{AccountID: 1, Domain: "example.com", RR: "@"}}, NotifierIDs: []uint{3}}
 	task.SpeedTest.Threads = 123
+	task.Update = UpdatePolicy{RecordCount: 3, SkipUnchanged: true}
 	if err := st.DB.Create(task).Error; err != nil {
 		t.Fatal(err)
 	}
 	got, err := st.GetTask(task.ID)
-	if err != nil || got.SpeedTest.Threads != 123 || len(got.Targets) != 1 || got.NotifierIDs[0] != 3 {
+	if err != nil || got.SpeedTest.Threads != 123 || got.Update != task.Update || len(got.Targets) != 1 || got.NotifierIDs[0] != 3 {
 		t.Fatalf("got %+v %v", got, err)
+	}
+}
+
+func TestHealthRetentionAndStaleRunLinks(t *testing.T) {
+	st := open(t)
+	old := time.Now().Add(-72 * time.Hour)
+	run := Run{TaskID: 1, Status: StatusSuccess, CreatedAt: old}
+	if err := st.DB.Create(&run).Error; err != nil {
+		t.Fatal(err)
+	}
+	active := Run{TaskID: 2, Status: StatusRunning, CreatedAt: old}
+	st.DB.Create(&active)
+	until := time.Now().Add(time.Hour)
+	st.SaveHealthState(HealthState{TaskID: 1, CooldownUntil: &until, LastTriggeredRunID: &run.ID})
+	st.CreateHealthCheck(&HealthCheck{TaskID: 1, CheckedAt: old, CreatedAt: old, Status: HealthStatusUnhealthy, TriggeredRunID: &run.ID})
+	st.CreateHealthCheck(&HealthCheck{TaskID: 1, CheckedAt: time.Now(), Status: HealthStatusUnknown, TriggeredRunID: &run.ID})
+	deleted, err := st.PurgeRuns(1)
+	if err != nil || deleted != 1 {
+		t.Fatalf("purge=%d %v", deleted, err)
+	}
+	checks, err := st.ListHealthChecks(1, 50)
+	if err != nil || len(checks) != 1 || checks[0].TriggeredRunID != nil {
+		t.Fatalf("checks=%+v %v", checks, err)
+	}
+	state, _ := st.GetHealthState(1)
+	if state.CooldownUntil == nil || state.LastTriggeredRunID != nil {
+		t.Fatalf("state=%+v", state)
+	}
+	var count int64
+	st.DB.Model(&Run{}).Where("id = ?", active.ID).Count(&count)
+	if count != 1 {
+		t.Fatal("active run purged")
 	}
 }

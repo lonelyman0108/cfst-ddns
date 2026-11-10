@@ -11,6 +11,7 @@ export default {
   trigger: {
     manual: '手動',
     cron: '排程',
+    health: '健康檢查觸發',
   },
   action: {
     create: '新增',

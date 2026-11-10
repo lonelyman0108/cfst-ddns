@@ -283,35 +283,58 @@ func (s *Server) hookRun(c *gin.Context) {
 // ---------- 备份与恢复 ----------
 
 type backupFile struct {
-	Format     string           `json:"format"`
-	Version    int              `json:"version"`
-	ExportedAt time.Time        `json:"exportedAt"`
-	Settings   store.Settings   `json:"settings"`
-	Accounts   []store.Account  `json:"accounts"`
-	Notifiers  []store.Notifier `json:"notifiers"`
-	Tasks      []store.Task     `json:"tasks"`
+	Format       string              `json:"format"`
+	Version      int                 `json:"version"`
+	ExportedAt   time.Time           `json:"exportedAt"`
+	Settings     store.Settings      `json:"settings"`
+	Accounts     []store.Account     `json:"accounts"`
+	Notifiers    []store.Notifier    `json:"notifiers"`
+	Tasks        []store.Task        `json:"tasks"`
+	HealthStates []store.HealthState `json:"healthStates"`
+	HealthChecks []store.HealthCheck `json:"healthChecks"`
+}
+
+func validHealthStatus(status string, empty bool) bool {
+	switch status {
+	case store.HealthStatusHealthy, store.HealthStatusUnhealthy, store.HealthStatusUnknown, store.HealthStatusSkipped:
+		return true
+	case "":
+		return empty
+	}
+	return false
 }
 
 const backupFormat = "cfst-ddns-backup"
 
 func (s *Server) backup(c *gin.Context) {
-	accounts, err := s.Store.ListAccounts()
+	b := backupFile{Format: backupFormat, Version: 1, ExportedAt: time.Now(), HealthStates: []store.HealthState{}, HealthChecks: []store.HealthCheck{}}
+	err := s.Store.DB.Transaction(func(tx *gorm.DB) error {
+		st := s.Store.WithDB(tx)
+		var err error
+		if b.Accounts, err = st.ListAccounts(); err != nil {
+			return err
+		}
+		if b.Notifiers, err = st.ListNotifiers(); err != nil {
+			return err
+		}
+		if b.Tasks, err = st.ListTasks(); err != nil {
+			return err
+		}
+		b.Settings = st.GetSettings()
+		if err := tx.Order("task_id").Find(&b.HealthStates).Error; err != nil {
+			return err
+		}
+		return tx.Order("id").Find(&b.HealthChecks).Error
+	})
 	if err != nil {
 		dbFail(c, err)
 		return
 	}
-	notifiers, err := s.Store.ListNotifiers()
-	if err != nil {
-		dbFail(c, err)
-		return
+	for i := range b.HealthChecks {
+		if b.HealthChecks[i].Results == nil {
+			b.HealthChecks[i].Results = []store.HealthResult{}
+		}
 	}
-	tasks, err := s.Store.ListTasks()
-	if err != nil {
-		dbFail(c, err)
-		return
-	}
-	b := backupFile{Format: backupFormat, Version: 1, ExportedAt: time.Now(), Settings: s.Store.GetSettings(),
-		Accounts: accounts, Notifiers: notifiers, Tasks: tasks}
 	name := fmt.Sprintf("cfst-ddns-backup-%s.json", time.Now().Format("20060102-150405"))
 	c.Header("Content-Disposition", `attachment; filename="`+name+`"`)
 	c.IndentedJSON(http.StatusOK, b)
@@ -327,6 +350,12 @@ func (s *Server) restore(c *gin.Context) {
 		failMsg(c, http.StatusBadRequest, "不是有效的 cfst-ddns 备份文件")
 		return
 	}
+	release, guardErr := s.Engine.BeginMaintenance()
+	if guardErr != nil {
+		failMsg(c, http.StatusConflict, "有任务正在执行，请稍后再恢复")
+		return
+	}
+	defer release()
 	var active int64
 	s.Store.DB.Model(&store.Run{}).Where("status IN ?", []string{store.StatusQueued, store.StatusRunning}).Count(&active)
 	if active > 0 {
@@ -347,7 +376,7 @@ func (s *Server) restore(c *gin.Context) {
 	}
 	old, _ := s.Store.ListTasks()
 	err := s.Store.DB.Transaction(func(tx *gorm.DB) error {
-		for _, m := range []any{&store.Task{}, &store.Account{}, &store.Notifier{}, &store.RecordState{}} {
+		for _, m := range []any{&store.HealthState{}, &store.HealthCheck{}, &store.Task{}, &store.Account{}, &store.Notifier{}, &store.RecordState{}} {
 			if err := tx.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(m).Error; err != nil {
 				return err
 			}
@@ -364,7 +393,47 @@ func (s *Server) restore(c *gin.Context) {
 			}
 		}
 		for i := range b.Tasks {
+			// Older backups may contain disabled, incomplete legacy tasks.
+			// Preserve those configurations while validating the new health fields.
+			if err := normalizeHealthConfig(&b.Tasks[i].HealthCheck); err != nil {
+				return err
+			}
 			if err := tx.Create(&b.Tasks[i]).Error; err != nil {
+				return err
+			}
+		}
+		// Run history is not included in configuration backups. Imported links cannot
+		// be trusted even if a local run happens to reuse the same numeric ID.
+		if err := tx.Session(&gorm.Session{AllowGlobalUpdate: true}).Model(&store.Run{}).Update("health_check_id", nil).Error; err != nil {
+			return err
+		}
+		for _, state := range b.HealthStates {
+			if _, err := txs.GetTask(state.TaskID); err != nil {
+				return err
+			}
+			if state.ConsecutiveFailures < 0 || !validHealthStatus(state.Status, true) {
+				return i18n.New("备份中的健康检查数据无效")
+			}
+			state.LastTriggeredRunID = nil
+			if err := txs.SaveHealthState(state); err != nil {
+				return err
+			}
+		}
+		for i := range b.HealthChecks {
+			check := &b.HealthChecks[i]
+			if _, err := txs.GetTask(check.TaskID); err != nil {
+				return err
+			}
+			if !validHealthStatus(check.Status, false) {
+				return i18n.New("备份中的健康检查数据无效")
+			}
+			for _, r := range check.Results {
+				if !validHealthStatus(r.Status, true) {
+					return i18n.New("备份中的健康检查数据无效")
+				}
+			}
+			check.TriggeredRunID = nil
+			if err := txs.CreateHealthCheck(check); err != nil {
 				return err
 			}
 		}

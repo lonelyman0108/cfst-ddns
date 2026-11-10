@@ -10,10 +10,10 @@ export default {
     noIP: "利用可能な IP が見つからず、DNS レコードは変更していません",
     noTargets: "タスクに対象レコードが設定されていません",
     proxyDetected: "テスト通信がプロキシを経由しているため、DNS レコードは変更していません",
-    interrupted: "サービスの再起動により中断されました",
+    healthSnapshot: "ヘルスチェック起点の実行中に DNS 対象が変化したか安全に更新できなくなったため、レコードは変更していません",
   },
   change: {
     keptNoIP: "利用可能な IP がないため、既存のレコードを保持しました",
-    accountUnavailable: "DNS アカウントを利用できません：{error}",
+    healthTargetChanged: "ヘルスチェック対象が変化またはスキップされたため、既存のレコードを保持しました",
   },
 }

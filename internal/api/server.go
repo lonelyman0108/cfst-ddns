@@ -96,6 +96,7 @@ func (s *Server) Handler() http.Handler {
 	a.GET("/tasks", s.listTasks)
 	a.GET("/tasks/defaults", s.taskDefaults)
 	a.GET("/tasks/:id", s.getTask)
+	a.GET("/tasks/:id/health", s.taskHealth)
 	a.POST("/tasks", s.createTask)
 	a.PUT("/tasks/:id", s.updateTask)
 	a.PATCH("/tasks/:id/enabled", s.setTaskEnabled)

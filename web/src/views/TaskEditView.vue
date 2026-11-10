@@ -10,6 +10,7 @@ import {
   CircleX,
   Gauge,
   Globe,
+  HeartPulse,
   Loader2,
   Plus,
   Save,
@@ -21,7 +22,7 @@ import {
   UserRoundKey,
 } from '@lucide/vue'
 import { accountsApi, notifiersApi, tasksApi } from '@/api'
-import type { Account, DNSRecord, IPType, Notifier, SpeedTestConfig, Target, TaskInput } from '@/api/types'
+import type { Account, DNSRecord, IPType, Notifier, SpeedTestConfig, Target, Task, TaskInput } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardAction } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -37,6 +38,7 @@ import { Textarea } from '@/components/ui/textarea'
 import BrandIcon from '@/components/BrandIcon.vue'
 import CronInput from '@/components/CronInput.vue'
 import EmptyState from '@/components/EmptyState.vue'
+import HealthHistory from '@/components/HealthHistory.vue'
 import FormItem from '@/components/FormItem.vue'
 import NumInput from '@/components/NumInput.vue'
 import SettingRow from '@/components/SettingRow.vue'
@@ -46,6 +48,7 @@ import { confirm } from '@/composables/useConfirm'
 import { useMetaStore } from '@/stores/meta'
 import { describeCron } from '@/utils/cron'
 import { fmtTime, fromNow, ipTypeLabel } from '@/utils/format'
+import { normalizeHealthCheck } from '@/api/types'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -62,6 +65,8 @@ const accounts = ref<Account[]>([])
 const notifiers = ref<Notifier[]>([])
 const advancedOpen = ref(false)
 const nextRuns = ref<string[]>([])
+const healthState = ref<Task['healthStatus']>()
+const healthNextRunAt = ref<string | null>(null)
 
 const DEFAULT_SPEED: SpeedTestConfig = {
   threads: 200,
@@ -92,6 +97,7 @@ const form = reactive<TaskInput>({
   cron: '',
   ipType: 'v4',
   speedTest: { ...DEFAULT_SPEED },
+  healthCheck: normalizeHealthCheck(),
   update: { recordCount: 1, skipUnchanged: true },
   targets: [],
   notifierIds: [],
@@ -119,6 +125,9 @@ async function load() {
     form.cron = task.cron ?? ''
     form.ipType = task.ipType || 'v4'
     form.speedTest = { ...DEFAULT_SPEED, ...(task.speedTest ?? {}) }
+    form.healthCheck = normalizeHealthCheck(task.healthCheck)
+    healthState.value = task.healthStatus
+    healthNextRunAt.value = task.healthNextRunAt ?? null
     form.update = Object.assign({ recordCount: 1, skipUnchanged: true }, task.update ?? {})
     form.targets = (task.targets ?? []).map((t) => ({ ...newTarget(), ...t }))
     form.notifierIds = [...(task.notifierIds ?? [])]
@@ -256,6 +265,14 @@ function validate(): string {
     if (showV4.value && !form.speedTest.ipv4Ranges.trim()) return t('tasks.edit.v.ipv4Ranges')
     if (showV6.value && !form.speedTest.ipv6Ranges.trim()) return t('tasks.edit.v.ipv6Ranges')
   }
+  if (form.healthCheck.enabled) {
+    const hc = form.healthCheck
+    if (!Number.isFinite(hc.intervalMinutes) || hc.intervalMinutes < 1 || hc.intervalMinutes > 1440) return t('tasks.edit.v.healthInterval')
+    if (!Number.isFinite(hc.maxLatency) || hc.maxLatency < 0 || !Number.isFinite(hc.minSpeed) || hc.minSpeed < 0) return t('tasks.edit.v.healthThreshold')
+    if (hc.maxLatency <= 0 && hc.minSpeed <= 0) return t('health.config.thresholdRequired')
+    if (!Number.isFinite(hc.consecutiveFailures) || hc.consecutiveFailures < 1 || hc.consecutiveFailures > 20) return t('tasks.edit.v.healthFailures')
+    if (!Number.isFinite(hc.cooldownMinutes) || hc.cooldownMinutes < 0 || hc.cooldownMinutes > 10080) return t('tasks.edit.v.healthCooldown')
+  }
   return ''
 }
 
@@ -286,6 +303,14 @@ async function save() {
       minLatency: n(st.minLatency, 0),
       maxLossRate: n(st.maxLossRate, 1),
       minSpeed: n(st.minSpeed, 0),
+    },
+    healthCheck: {
+      enabled: !!form.healthCheck.enabled,
+      intervalMinutes: n(form.healthCheck.intervalMinutes, 10),
+      maxLatency: n(form.healthCheck.maxLatency, 0),
+      minSpeed: n(form.healthCheck.minSpeed, 0),
+      consecutiveFailures: n(form.healthCheck.consecutiveFailures, 3),
+      cooldownMinutes: n(form.healthCheck.cooldownMinutes, 30),
     },
     update: { recordCount: n(form.update.recordCount, 1), skipUnchanged: form.update.skipUnchanged },
     targets: form.targets.map((t) => ({
@@ -358,6 +383,43 @@ async function save() {
             <FormItem :label="$t('tasks.schedule')" class="md:col-span-3">
               <CronInput v-model="form.cron" @next="nextRuns = $event" />
             </FormItem>
+          </CardContent>
+        </Card>
+
+        <!-- 健康检查 -->
+        <Card>
+          <CardHeader>
+            <CardTitle class="flex items-center gap-2"><HeartPulse class="text-muted-foreground size-4" />{{ $t('health.config.title') }}</CardTitle>
+            <CardDescription>{{ $t('health.config.description') }}</CardDescription>
+          </CardHeader>
+          <CardContent class="grid grid-cols-1 gap-4">
+            <div class="divide-y rounded-md border">
+              <SettingRow :label="$t('health.config.enabled')" :description="$t('health.config.enabledDesc')">
+                <Switch v-model="form.healthCheck.enabled" />
+              </SettingRow>
+            </div>
+            <template v-if="form.healthCheck.enabled">
+              <div class="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+                <FormItem :label="$t('health.config.interval')" :help="$t('health.config.intervalHelp')">
+                  <NumInput v-model="form.healthCheck.intervalMinutes" :min="1" :max="1440" :suffix="$t('health.config.minutesUnit')" />
+                </FormItem>
+                <FormItem :label="$t('health.config.maxLatency')" :help="$t('health.config.maxLatencyHelp')">
+                  <NumInput v-model="form.healthCheck.maxLatency" :min="0" :max="999999" :step="1" :decimals="2" suffix="ms" />
+                </FormItem>
+                <FormItem :label="$t('health.config.minSpeed')" :help="$t('health.config.minSpeedHelp')">
+                  <NumInput v-model="form.healthCheck.minSpeed" :min="0" :max="999999" :step="0.5" :decimals="2" suffix="MB/s" />
+                </FormItem>
+                <FormItem :label="$t('health.config.failures')" :help="$t('health.config.failuresHelp')">
+                  <NumInput v-model="form.healthCheck.consecutiveFailures" :min="1" :max="20" />
+                </FormItem>
+                <FormItem :label="$t('health.config.cooldown')" :help="$t('health.config.cooldownHelp')">
+                  <NumInput v-model="form.healthCheck.cooldownMinutes" :min="0" :max="10080" :suffix="$t('health.config.minutesUnit')" />
+                </FormItem>
+              </div>
+              <p class="text-muted-foreground flex items-start gap-1.5 text-xs">
+                <TriangleAlert class="mt-0.5 size-3.5 shrink-0" />{{ $t('health.config.proxyNotice') }}
+              </p>
+            </template>
           </CardContent>
         </Card>
 
@@ -575,6 +637,14 @@ async function save() {
             </div>
           </CardContent>
         </Card>
+
+        <HealthHistory
+          v-if="!isNew"
+          :task-id="taskId"
+          :enabled="form.healthCheck.enabled"
+          :initial-state="healthState"
+          :next-run-at="healthNextRunAt"
+        />
 
         <!-- 更新策略 + 通知 -->
         <div class="grid grid-cols-1 gap-4 md:grid-cols-2">

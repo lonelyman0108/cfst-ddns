@@ -122,18 +122,13 @@ func Serve(c Config, build api.BuildInfo, static fs.FS) error {
 	}
 
 	mgr := &cfst.Manager{Dir: filepath.Join(c.DataDir, "cfst"), BundleDir: c.BundleDir, Log: log,
-		Mirror: func() string { return st.GetSettings().GithubMirror },
-		Busy: func() bool {
-			var n int64
-			st.DB.Model(&store.Run{}).Where("status IN ?", []string{store.StatusQueued, store.StatusRunning}).Count(&n)
-			return n > 0
-		}}
+		Mirror: func() string { return st.GetSettings().GithubMirror }}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	prepareCFST(ctx, c, mgr, log)
-
 	hub := logbus.NewHub()
 	eng := engine.New(st, mgr, hub, log, filepath.Join(c.DataDir, "tmp"))
+	mgr.Busy = eng.Busy
+	prepareCFST(ctx, c, mgr, log)
 	eng.Start(ctx)
 	sch := scheduler.New(st, eng, log)
 	if err := sch.Start(); err != nil {

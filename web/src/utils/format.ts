@@ -95,6 +95,9 @@ export const runTriggerLabel: Record<RunTrigger, string> = {
   get cron() {
     return t('format.trigger.cron')
   },
+  get health() {
+    return t('format.trigger.health')
+  },
   hook: 'Webhook',
 }
 

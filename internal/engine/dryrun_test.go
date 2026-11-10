@@ -120,7 +120,7 @@ func TestDryRun(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		e.execute(context.Background(), <-e.queue)
+		e.executeJob(context.Background(), <-e.queue)
 		var r store.Run
 		st.DB.First(&r, id)
 		return r

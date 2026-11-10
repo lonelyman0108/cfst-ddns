@@ -6,6 +6,24 @@ import (
 	"github.com/lonelyman0108/cfst-ddns/internal/schema"
 )
 
+func TestProviderLineCapabilities(t *testing.T) {
+	for _, typ := range []string{"dnspod", "tencentcloud", "alidns", "huaweicloud"} {
+		if !SupportsLine(typ, "telecom") {
+			t.Errorf("%s should support lines", typ)
+		}
+	}
+	for _, typ := range []string{"cloudflare", "godaddy"} {
+		if SupportsLine(typ, "telecom") {
+			t.Errorf("%s should reject unsupported lines", typ)
+		}
+	}
+	for _, typ := range []string{"cloudflare", "godaddy", "dnspod"} {
+		if !SupportsLine(typ, "") || !SupportsLine(typ, "default") || !SupportsLine(typ, "默认") {
+			t.Errorf("%s should support default line", typ)
+		}
+	}
+}
+
 func TestRegistry(t *testing.T) {
 	want := []string{"cloudflare", "dnspod", "tencentcloud", "alidns", "huaweicloud", "godaddy"}
 	metas := Metas()

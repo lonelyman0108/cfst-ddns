@@ -10,10 +10,10 @@ export default {
     noIP: "No usable IP found, DNS records left unchanged",
     noTargets: "The task has no target records",
     proxyDetected: "Speed test traffic appears to go through a proxy; DNS records were not changed",
-    interrupted: "Interrupted by a service restart",
+    healthSnapshot: "The DNS targets changed or became unsafe during the health-triggered run; records were left unchanged",
   },
   change: {
     keptNoIP: "No usable IP, existing record kept",
-    accountUnavailable: "DNS account unavailable: {error}",
+    healthTargetChanged: "Health target changed or was skipped; existing record kept",
   },
 }

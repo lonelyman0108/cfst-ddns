@@ -124,7 +124,33 @@ interface UpdatePolicy {
   recordCount: number    // 每种类型写入前 N 个 IP（多条同名记录），默认 1
   skipUnchanged: boolean // IP 未变化时不调用更新接口，默认 true
 }
-interface Target {
+interface HealthCheckConfig {
+  enabled: boolean
+  intervalMinutes: number       // 默认 10，范围 1-1440
+  maxLatency: number             // 0 表示不限制，单位 ms
+  minSpeed: number               // 0 表示不限制，单位 MB/s
+  consecutiveFailures: number   // 默认 3
+  cooldownMinutes: number       // 默认 30，0 表示不冷却
+}
+interface HealthStatus {
+  lastCheckedAt: string | null
+  lastHealthy: boolean | null
+  consecutiveFailures: number
+  cooldownUntil: string | null
+  lastTriggeredRunId: number | null
+}
+interface HealthResult {
+  targetKey: string; ipType: 'v4'|'v6'; ip: string
+  latency: number; speed: number; lossRate: number
+  healthy: boolean; reason?: string
+}
+interface HealthCheck {
+  id: number; taskId: number; checkedAt: string
+  status: 'healthy'|'unhealthy'|'unknown'|'skipped'
+  failureReason?: string; results: HealthResult[]
+  triggeredRunId?: number; createdAt: string
+}
+
   accountId: number
   domain: string         // 主域名 example.com
   rr: string             // 主机记录 www / @ / *.cdn
@@ -136,10 +162,13 @@ interface Task {
   id: number; name: string; enabled: boolean; cron: string  // 空字符串 = 仅手动
   ipType: IPType
   speedTest: SpeedTestConfig; update: UpdatePolicy
+  healthCheck: HealthCheckConfig
   targets: Target[]; notifierIds: number[]
   createdAt: string; updatedAt: string
   // 只读
   running: boolean; nextRunAt: string | null
+  healthStatus: HealthStatus
+  healthNextRunAt: string | null
   lastRun: RunSummary | null   // 最近一次正式执行（不含试运行）
 }
 ```
@@ -155,7 +184,7 @@ interface Task {
 | DELETE | /api/tasks/:id | — | `{ok}` |
 | POST | /api/tasks/:id/clone | — | `Task` |
 | POST | /api/tasks/:id/run | 可选 `{dryRun?: boolean}`（请求体可省略） | `{runId}`；已在运行或排队时 409（试运行同样去重） |
-| GET | /api/cron/preview?expr=0 */6 * * * | — | `{next: string[5]}`；表达式非法 400 |
+| GET | /api/tasks/:id/health?limit=50 | — | `{state: HealthStatus, items: HealthCheck[]}`；limit 默认 50，最大 200 |
 
 试运行（`dryRun: true`）：只测速并记录结果，不修改 DNS、不发送通知、不写入仪表盘「当前记录」、不计入趋势与 24 小时统计、不作为任务的 `lastRun`；日志中打印「试运行：跳过 DNS 同步与通知」，成功时 message 为「试运行完成，未修改 DNS」。试运行不要求任务配置目标记录。定时与 Webhook 触发始终为正常执行。
 
@@ -163,7 +192,7 @@ interface Task {
 
 ```ts
 type RunStatus = 'queued' | 'running' | 'success' | 'partial' | 'failed' | 'canceled'
-interface RunSummary { id: number; taskId: number; taskName: string; trigger: 'manual'|'cron'|'hook'
+interface RunSummary { id: number; taskId: number; taskName: string; trigger: 'manual'|'cron'|'hook'|'health'
   dryRun: boolean  // 试运行
   status: RunStatus; startedAt: string | null; finishedAt: string | null; durationMs: number
   bestIPv4: string; bestIPv6: string; bestLatency: number; bestSpeed: number

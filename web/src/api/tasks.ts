@@ -1,5 +1,5 @@
 import { del, get, patch, post, put } from './http'
-import type { CronPreview, OkResponse, RunStarted, Task, TaskInput } from './types'
+import type { CronPreview, HealthResponse, OkResponse, RunStarted, Task, TaskInput } from './types'
 
 export const tasksApi = {
   list: () => get<Task[]>('/api/tasks'),
@@ -7,6 +7,7 @@ export const tasksApi = {
   get: (id: number) => get<Task>(`/api/tasks/${id}`),
   create: (body: TaskInput) => post<Task>('/api/tasks', body),
   update: (id: number, body: TaskInput) => put<Task>(`/api/tasks/${id}`, body),
+  health: (id: number, limit = 50) => get<HealthResponse>(`/api/tasks/${id}/health`, { params: { limit } }),
   setEnabled: (id: number, enabled: boolean) => patch<Task>(`/api/tasks/${id}/enabled`, { enabled }),
   remove: (id: number) => del<OkResponse>(`/api/tasks/${id}`),
   clone: (id: number) => post<Task>(`/api/tasks/${id}/clone`),

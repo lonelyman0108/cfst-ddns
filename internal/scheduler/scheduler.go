@@ -2,6 +2,7 @@
 package scheduler
 
 import (
+	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
@@ -53,14 +54,16 @@ type Scheduler struct {
 	store  *store.Store
 	log    *slog.Logger
 
-	mu      sync.Mutex
-	entries map[uint]cron.EntryID
-	exprs   map[uint]string
+	mu            sync.Mutex
+	entries       map[uint]cron.EntryID
+	exprs         map[uint]string
+	healthEntries map[uint]cron.EntryID
+	healthExprs   map[uint]string
 }
 
 func New(st *store.Store, e *engine.Engine, log *slog.Logger) *Scheduler {
 	return &Scheduler{cron: cron.New(cron.WithParser(Parser)), engine: e, store: st, log: log,
-		entries: map[uint]cron.EntryID{}, exprs: map[uint]string{}}
+		entries: map[uint]cron.EntryID{}, exprs: map[uint]string{}, healthEntries: map[uint]cron.EntryID{}, healthExprs: map[uint]string{}}
 }
 
 // Start 加载全部任务并启动；另外每天 04:10 清理过期历史。
@@ -97,44 +100,77 @@ func (s *Scheduler) purge() {
 func (s *Scheduler) Sync(t *store.Task) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	expr := strings.TrimSpace(t.Cron)
+	expr, healthExpr := strings.TrimSpace(t.Cron), ""
 	if !t.Enabled {
 		expr = ""
+	} else if t.HealthCheck.Enabled {
+		interval := t.HealthCheck.IntervalMinutes
+		if interval <= 0 {
+			interval = 10
+		}
+		healthExpr = fmt.Sprintf("@every %dm", interval)
 	}
-	if old, ok := s.entries[t.ID]; ok {
-		if s.exprs[t.ID] == expr {
+	s.syncEntry(t.ID, expr, s.entries, s.exprs, func() {
+		if _, err := s.engine.Enqueue(t.ID, "cron", false); err != nil {
+			s.log.Warn("定时触发任务失败", "task", t.ID, "err", err)
+		}
+	})
+	s.syncEntry(t.ID, healthExpr, s.healthEntries, s.healthExprs, func() {
+		if err := s.engine.EnqueueHealth(t.ID); err != nil {
+			s.log.Warn("定时健康检查失败", "task", t.ID, "err", err)
+		}
+	})
+}
+
+func (s *Scheduler) syncEntry(taskID uint, expr string, entries map[uint]cron.EntryID, exprs map[uint]string, run func()) {
+	if old, ok := entries[taskID]; ok {
+		if exprs[taskID] == expr {
 			return
 		}
 		s.cron.Remove(old)
-		delete(s.entries, t.ID)
-		delete(s.exprs, t.ID)
+		delete(entries, taskID)
+		delete(exprs, taskID)
 	}
 	if expr == "" {
 		return
 	}
-	id := t.ID
-	entry, err := s.cron.AddFunc(expr, func() {
-		if _, err := s.engine.Enqueue(id, "cron", false); err != nil {
-			s.log.Warn("定时触发任务失败", "task", id, "err", err)
-		}
-	})
+	entry, err := s.cron.AddFunc(expr, run)
 	if err != nil {
-		s.log.Error("注册定时任务失败", "task", t.Name, "cron", expr, "err", err)
+		s.log.Error("注册定时任务失败", "task", taskID, "cron", expr, "err", err)
 		return
 	}
-	s.entries[id] = entry
-	s.exprs[id] = expr
+	entries[taskID], exprs[taskID] = entry, expr
 }
 
 // Remove 在任务删除后移除调度。
 func (s *Scheduler) Remove(taskID uint) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	delete(s.healthExprs, taskID)
+	if id, ok := s.healthEntries[taskID]; ok {
+		s.cron.Remove(id)
+		delete(s.healthEntries, taskID)
+	}
 	if e, ok := s.entries[taskID]; ok {
 		s.cron.Remove(e)
 		delete(s.entries, taskID)
 		delete(s.exprs, taskID)
 	}
+}
+
+// HealthNext returns the next check, independently of the full-run cron.
+func (s *Scheduler) HealthNext(taskID uint) *time.Time {
+	s.mu.Lock()
+	id, ok := s.healthEntries[taskID]
+	s.mu.Unlock()
+	if !ok {
+		return nil
+	}
+	next := s.cron.Entry(id).Next
+	if next.IsZero() {
+		return nil
+	}
+	return &next
 }
 
 // Next 返回任务下次执行时间。

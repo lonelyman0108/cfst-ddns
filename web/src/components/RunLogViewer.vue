@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { ChevronDown, CircleX, Gauge, ListTree, Network, RefreshCw, ScrollText, Timer, TriangleAlert, Zap } from '@lucide/vue'
 import { runsApi, tasksApi } from '@/api'
 import type { NetworkProbe, RunDetail, RunSummary, SpeedResult } from '@/api/types'
+import { normalizeHealthCheck } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -115,9 +116,9 @@ async function switchToProxy() {
   switching.value = true
   try {
     const task = await tasksApi.get(s.taskId)
-    const { name, enabled, cron, ipType, speedTest, update, targets, notifierIds } = task
+    const { name, enabled, cron, ipType, speedTest, healthCheck, update, targets, notifierIds } = task
     await tasksApi.update(task.id, {
-      name, enabled, cron, ipType, update, targets, notifierIds,
+      name, enabled, cron, ipType, healthCheck: normalizeHealthCheck(healthCheck), update, targets, notifierIds,
       speedTest: { ...speedTest, networkMode: 'proxy', httping: true },
     })
     const { runId } = await tasksApi.run(task.id, { dryRun: s.dryRun })
@@ -356,6 +357,14 @@ defineExpose({ reload: start })
             :class="summary.status === 'partial' ? 'border-warning/40 text-warning' : ''"
           >
             <AlertDescription :class="summary.status === 'failed' ? 'text-destructive' : ''">{{ runMessage(summary) }}</AlertDescription>
+          </Alert>
+          <Alert v-if="summary.trigger === 'health'" class="border-primary/30 bg-primary/5">
+            <AlertDescription class="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span>{{ t('health.history.triggeredRun') }}</span>
+              <span v-if="detail?.healthCheckId" class="font-mono">#{{ detail.healthCheckId }}</span>
+              <span v-if="detail?.healthReason" class="text-muted-foreground">{{ detail.healthReason }}</span>
+              <router-link :to="`/tasks/${summary.taskId}`" class="text-primary hover:underline">{{ t('health.history.title') }}</router-link>
+            </AlertDescription>
           </Alert>
         </CardContent>
       </Card>

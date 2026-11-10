@@ -3,23 +3,29 @@ package api
 import (
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 
 	"github.com/lonelyman0108/cfst-ddns/internal/engine"
 	"github.com/lonelyman0108/cfst-ddns/internal/i18n"
+	"github.com/lonelyman0108/cfst-ddns/internal/provider"
 	"github.com/lonelyman0108/cfst-ddns/internal/scheduler"
 	"github.com/lonelyman0108/cfst-ddns/internal/store"
 )
 
 type taskView struct {
 	store.Task
-	Running   bool       `json:"running"`
-	NextRunAt *time.Time `json:"nextRunAt"`
-	LastRun   *store.Run `json:"lastRun"`
+	Running         bool               `json:"running"`
+	NextRunAt       *time.Time         `json:"nextRunAt"`
+	LastRun         *store.Run         `json:"lastRun"`
+	HealthStatus    *store.HealthState `json:"healthStatus"`
+	HealthNextRunAt *time.Time         `json:"healthNextRunAt"`
 }
 
 // DefaultTask 为新建任务的默认值。
@@ -31,6 +37,7 @@ func DefaultTask() store.Task {
 		SpeedTest: store.SpeedTestConfig{Threads: 200, PingTimes: 4, DownloadCount: 10, DownloadTime: 10,
 			Port: 443, MaxLatency: 9999, MaxLossRate: 1, IPSource: "default",
 			NetworkMode: store.NetworkDirect},
+		HealthCheck: store.DefaultHealthCheckConfig(),
 		Update:      store.UpdatePolicy{RecordCount: 1, SkipUnchanged: true},
 		Targets:     []store.Target{},
 		NotifierIDs: []uint{},
@@ -58,7 +65,13 @@ func (s *Server) view(t store.Task, last map[uint]*store.Run) taskView {
 	if t.NotifierIDs == nil {
 		t.NotifierIDs = []uint{}
 	}
-	return taskView{Task: t, Running: running, NextRunAt: s.Scheduler.Next(t.ID), LastRun: last[t.ID]}
+	t.HealthCheck = t.HealthCheck.WithDefaults()
+	state, err := s.Store.GetHealthState(t.ID)
+	if err != nil {
+		state = &store.HealthState{TaskID: t.ID, Status: store.HealthStatusUnknown}
+		s.Log.Warn("读取健康状态失败", "task", t.ID, "err", err)
+	}
+	return taskView{Task: t, Running: running, NextRunAt: s.Scheduler.Next(t.ID), LastRun: last[t.ID], HealthStatus: state, HealthNextRunAt: s.Scheduler.HealthNext(t.ID)}
 }
 
 func (s *Server) listTasks(c *gin.Context) {
@@ -97,6 +110,9 @@ func (s *Server) normalizeTask(t *store.Task) error { return normalizeTaskIn(s.S
 
 // normalizeTaskIn 使用指定的 Store（如事务）校验目标账号是否存在。
 func normalizeTaskIn(st *store.Store, t *store.Task) error {
+	if err := normalizeHealthConfig(&t.HealthCheck); err != nil {
+		return err
+	}
 	t.Name = strings.TrimSpace(t.Name)
 	if t.Name == "" {
 		return i18n.New("任务名称不能为空")
@@ -150,8 +166,12 @@ func normalizeTaskIn(st *store.Store, t *store.Task) error {
 		if tg.Domain == "" {
 			return i18n.Errorf("第 %d 条目标记录的主域名不能为空", i+1)
 		}
-		if _, err := st.GetAccount(tg.AccountID); err != nil {
+		acc, err := st.GetAccount(tg.AccountID)
+		if err != nil {
 			return i18n.Errorf("第 %d 条目标记录的 DNS 账号不存在", i+1)
+		}
+		if !provider.SupportsLine(acc.Provider, tg.Line) {
+			return i18n.Errorf("第 %d 条目标记录的 DNS 服务商不支持线路 %q", i+1, tg.Line)
 		}
 		key := fmt.Sprintf("%d|%s|%s|%s", tg.AccountID, tg.RR, tg.Domain, tg.Line)
 		if seen[key] {
@@ -163,6 +183,49 @@ func normalizeTaskIn(st *store.Store, t *store.Task) error {
 		t.NotifierIDs = []uint{}
 	}
 	return nil
+}
+
+func normalizeHealthConfig(cfg *store.HealthCheckConfig) error {
+	*cfg = cfg.WithDefaults()
+	if cfg.IntervalMinutes < 1 || cfg.IntervalMinutes > 1440 {
+		return i18n.New("健康检查间隔需在 1-1440 分钟之间")
+	}
+	if math.IsNaN(cfg.MaxLatency) || math.IsInf(cfg.MaxLatency, 0) || math.IsNaN(cfg.MinSpeed) || math.IsInf(cfg.MinSpeed, 0) || cfg.MaxLatency < 0 || cfg.MinSpeed < 0 {
+		return i18n.New("健康检查阈值必须为有限的非负数")
+	}
+	if cfg.Enabled && cfg.MaxLatency == 0 && cfg.MinSpeed == 0 {
+		return i18n.New("健康检查至少需要一个延迟或速度阈值")
+	}
+	if cfg.ConsecutiveFailures < 1 || cfg.ConsecutiveFailures > 20 {
+		return i18n.New("健康检查连续异常次数需在 1-20 之间")
+	}
+	if cfg.CooldownMinutes < 0 || cfg.CooldownMinutes > 10080 {
+		return i18n.New("健康检查冷却时间需在 0-10080 分钟之间")
+	}
+	return nil
+}
+
+func (s *Server) taskHealth(c *gin.Context) {
+	id, ok := idParam(c)
+	if !ok {
+		return
+	}
+	if _, err := s.Store.GetTask(id); err != nil {
+		dbFail(c, err)
+		return
+	}
+	state, err := s.Store.GetHealthState(id)
+	if err != nil {
+		dbFail(c, err)
+		return
+	}
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	items, err := s.Store.ListHealthChecks(id, limit)
+	if err != nil {
+		dbFail(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"state": state, "items": items})
 }
 
 func (s *Server) createTask(c *gin.Context) {
@@ -245,11 +308,26 @@ func (s *Server) deleteTask(c *gin.Context) {
 		failMsg(c, http.StatusConflict, "任务正在执行，请先取消")
 		return
 	}
-	if err := s.Store.DB.Delete(&store.Task{}, id).Error; err != nil {
+	release, err := s.Engine.BeginMaintenance()
+	if err != nil {
+		failMsg(c, http.StatusConflict, "任务正在执行，请先取消")
+		return
+	}
+	defer release()
+	if err := s.Store.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Delete(&store.Task{}, id).Error; err != nil {
+			return err
+		}
+		for _, model := range []any{&store.RecordState{}, &store.HealthState{}, &store.HealthCheck{}} {
+			if err := tx.Where("task_id = ?", id).Delete(model).Error; err != nil {
+				return err
+			}
+		}
+		return tx.Model(&store.Run{}).Where("task_id = ?", id).Update("health_check_id", nil).Error
+	}); err != nil {
 		dbFail(c, err)
 		return
 	}
-	s.Store.DB.Where("task_id = ?", id).Delete(&store.RecordState{})
 	s.Scheduler.Remove(id)
 	okJSON(c)
 }

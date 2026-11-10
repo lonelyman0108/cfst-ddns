@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -28,6 +30,7 @@ type Output interface {
 // RunOptions 为一次测速（单一 IP 类型）的参数。
 type RunOptions struct {
 	IPType  string // v4 / v6
+	IPs     []string
 	Config  store.SpeedTestConfig
 	WorkDir string // 临时文件目录
 	Tag     string // 临时文件名前缀
@@ -36,10 +39,53 @@ type RunOptions struct {
 // BuildArgs 生成 cfst 参数。ipFile/outFile 由调用方提供。
 // 附加参数放在前面，必须由程序控制的参数（-f/-o/-p）放在最后以覆盖同名参数。
 func BuildArgs(c store.SpeedTestConfig, ipFile, outFile string) ([]string, error) {
+	return buildArgs(c, nil, ipFile, outFile)
+}
+
+// BuildArgsForIPs 生成只测试指定 IP 的 cfst 参数。
+func BuildArgsForIPs(c store.SpeedTestConfig, ips []string, outFile string) ([]string, error) {
+	ips, err := normalizeIPs(ips)
+	if err != nil {
+		return nil, err
+	}
+	if len(ips) == 0 {
+		return nil, errors.New("精确 IP 列表为空")
+	}
+	return buildArgs(c, ips, "", outFile)
+}
+
+func normalizeIPs(ips []string) ([]string, error) {
+	seen := make(map[string]struct{}, len(ips))
+	out := make([]string, 0, len(ips))
+	for _, raw := range ips {
+		ip := strings.TrimSpace(raw)
+		if ip == "" {
+			continue
+		}
+		parsed := net.ParseIP(ip)
+		if parsed == nil {
+			return nil, fmt.Errorf("无效的 IP 地址: %s", ip)
+		}
+		ip = parsed.String()
+		if _, ok := seen[ip]; ok {
+			continue
+		}
+		seen[ip] = struct{}{}
+		out = append(out, ip)
+	}
+	return out, nil
+}
+
+func buildArgs(c store.SpeedTestConfig, ips []string, ipFile, outFile string) ([]string, error) {
 	var args []string
 	extra, err := SplitArgs(c.ExtraArgs)
 	if err != nil {
 		return nil, err
+	}
+	if ips != nil {
+		if err := validateExactExtraArgs(extra); err != nil {
+			return nil, err
+		}
 	}
 	args = append(args, extra...)
 	intArg := func(flag string, v, def int) {
@@ -81,8 +127,40 @@ func BuildArgs(c store.SpeedTestConfig, ipFile, outFile string) ([]string, error
 	if c.AllIP {
 		args = append(args, "-allip")
 	}
-	args = append(args, "-f", ipFile, "-o", outFile, "-p", "0")
+	if len(ips) > 0 {
+		args = append(args, "-ip", strings.Join(ips, ","))
+	} else {
+		args = append(args, "-f", ipFile)
+	}
+	args = append(args, "-o", outFile, "-p", "0")
 	return args, nil
+}
+
+// Exact probes reject controlled flags and positional arguments: Go's flag parser stops
+// at a positional, so appending our own flags is insufficient protection.
+func validateExactExtraArgs(args []string) error {
+	values := map[string]bool{"n": true, "t": true, "dn": true, "dt": true, "tp": true, "url": true, "httping-code": true, "cfcolo": true, "tl": true, "tll": true, "tlr": true, "sl": true}
+	bools := map[string]bool{"debug": true, "dd": true, "allip": true, "httping": true}
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if !strings.HasPrefix(arg, "-") {
+			return fmt.Errorf("精确 IP 模式不允许附加位置参数: %s", arg)
+		}
+		name, _, assigned := strings.Cut(strings.TrimLeft(arg, "-"), "=")
+		if bools[name] {
+			continue
+		}
+		if !values[name] {
+			return fmt.Errorf("精确 IP 模式不允许附加参数: %s", arg)
+		}
+		if !assigned {
+			i++
+			if i >= len(args) {
+				return fmt.Errorf("附加参数缺少值: %s", arg)
+			}
+		}
+	}
+	return nil
 }
 
 // SplitArgs 按空白拆分参数，支持单/双引号。
@@ -132,29 +210,38 @@ func (m *Manager) Run(ctx context.Context, opt RunOptions, out Output) ([]store.
 	if err := os.MkdirAll(opt.WorkDir, 0o755); err != nil {
 		return nil, err
 	}
-	ipFile := m.IPFile(opt.IPType)
-	if opt.Config.IPSource == "custom" {
-		ranges := opt.Config.IPv4Ranges
-		if opt.IPType == "v6" {
-			ranges = opt.Config.IPv6Ranges
+	var ipFile string
+	if opt.IPs == nil {
+		ipFile = m.IPFile(opt.IPType)
+		if opt.Config.IPSource == "custom" {
+			ranges := opt.Config.IPv4Ranges
+			if opt.IPType == "v6" {
+				ranges = opt.Config.IPv6Ranges
+			}
+			ranges = strings.TrimSpace(strings.NewReplacer(",", "\n", "，", "\n").Replace(ranges))
+			if ranges == "" {
+				return nil, fmt.Errorf("自定义 IP 段（%s）为空", opt.IPType)
+			}
+			ipFile = filepath.Join(opt.WorkDir, fmt.Sprintf("%s-%s-ip.txt", opt.Tag, opt.IPType))
+			if err := os.WriteFile(ipFile, []byte(ranges+"\n"), 0o644); err != nil {
+				return nil, err
+			}
+			defer os.Remove(ipFile)
+		} else if _, err := os.Stat(ipFile); err != nil {
+			return nil, fmt.Errorf("IP 段文件不存在: %s", ipFile)
 		}
-		ranges = strings.TrimSpace(strings.NewReplacer(",", "\n", "，", "\n").Replace(ranges))
-		if ranges == "" {
-			return nil, fmt.Errorf("自定义 IP 段（%s）为空", opt.IPType)
-		}
-		ipFile = filepath.Join(opt.WorkDir, fmt.Sprintf("%s-%s-ip.txt", opt.Tag, opt.IPType))
-		if err := os.WriteFile(ipFile, []byte(ranges+"\n"), 0o644); err != nil {
-			return nil, err
-		}
-		defer os.Remove(ipFile)
-	} else if _, err := os.Stat(ipFile); err != nil {
-		return nil, fmt.Errorf("IP 段文件不存在: %s", ipFile)
 	}
 	outFile := filepath.Join(opt.WorkDir, fmt.Sprintf("%s-%s.csv", opt.Tag, opt.IPType))
 	_ = os.Remove(outFile)
 	defer os.Remove(outFile)
 
-	args, err := BuildArgs(opt.Config, ipFile, outFile)
+	var args []string
+	var err error
+	if opt.IPs != nil {
+		args, err = BuildArgsForIPs(opt.Config, opt.IPs, outFile)
+	} else {
+		args, err = BuildArgs(opt.Config, ipFile, outFile)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +274,10 @@ func (m *Manager) Run(ctx context.Context, opt RunOptions, out Output) ([]store.
 	f, err := os.ReadFile(outFile)
 	if err != nil {
 		// 没有任何 IP 满足条件时 cfst 不会生成文件
-		return nil, nil
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("读取测速结果失败: %w", err)
 	}
 	return ParseCSV(f, opt.IPType)
 }
@@ -300,17 +390,31 @@ func ParseCSV(data []byte, ipType string) ([]store.SpeedResult, error) {
 	if err != nil {
 		return nil, fmt.Errorf("解析测速结果失败: %w", err)
 	}
+	if len(rows) == 0 || len(rows[0]) < 6 {
+		return nil, errors.New("测速结果 CSV 缺少表头")
+	}
 	var out []store.SpeedResult
 	for i, row := range rows {
-		if i == 0 || len(row) < 6 {
+		if i == 0 {
 			continue
 		}
-		f := func(s string) float64 {
-			v, _ := strconv.ParseFloat(strings.TrimSpace(s), 64)
-			return v
+		if len(row) < 6 {
+			return nil, fmt.Errorf("测速结果第 %d 行不完整", i+1)
 		}
-		res := store.SpeedResult{IPType: ipType, Rank: len(out) + 1, IP: strings.TrimSpace(row[0]),
-			Sent: int(f(row[1])), Received: int(f(row[2])), LossRate: f(row[3]), Latency: f(row[4]), Speed: f(row[5])}
+		metrics := make([]float64, 5)
+		for j := range metrics {
+			value, err := strconv.ParseFloat(strings.TrimSpace(row[j+1]), 64)
+			if err != nil || math.IsNaN(value) || math.IsInf(value, 0) || value < 0 {
+				return nil, fmt.Errorf("测速结果第 %d 行包含无效指标", i+1)
+			}
+			metrics[j] = value
+		}
+		ip := net.ParseIP(strings.TrimSpace(row[0]))
+		if ip == nil {
+			return nil, fmt.Errorf("测速结果第 %d 行包含无效 IP", i+1)
+		}
+		res := store.SpeedResult{IPType: ipType, Rank: len(out) + 1, IP: ip.String(),
+			Sent: int(metrics[0]), Received: int(metrics[1]), LossRate: metrics[2], Latency: metrics[3], Speed: metrics[4]}
 		if len(row) > 6 {
 			res.Colo = strings.TrimSpace(row[6])
 		}
