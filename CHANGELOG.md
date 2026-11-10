@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 自 2.0.0 起由 [release-please](https://github.com/googleapis/release-please) 根据约定式提交自动生成。
 
+## [2.4.0](https://github.com/lonelyman0108/cfst-ddns/compare/v2.3.0...v2.4.0) (2026-11-10)
+
+
+### 新功能
+
+* 增加优选 IP 健康检测 ([0a54c16](https://github.com/lonelyman0108/cfst-ddns/commit/0a54c1639f491e8674a8b8cbb7cfda050bdedfdb)), closes [#18](https://github.com/lonelyman0108/cfst-ddns/issues/18)
+
 ## [2.3.0](https://github.com/lonelyman0108/cfst-ddns/compare/v2.2.0...v2.3.0) (2026-10-30)
 
 
