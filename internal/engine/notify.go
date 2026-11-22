@@ -36,18 +36,36 @@ func BuildMessage(prefix string, task *store.Task, run *store.Run) notify.Messag
 		txt.WriteString(line + "\n")
 		md.WriteString(line + "\n\n")
 	}
-	best := func(ipType, label string) {
+	hasBest := run.BestIPv4 != "" || run.BestIPv6 != ""
+	best := func(ipType, bestIP, label string) {
+		writeResult := func(r store.SpeedResult) {
+			line := fmt.Sprintf("%s: %s（%.0f ms / %.2f MB/s / %s）", label, r.IP, r.Latency, r.Speed, orNA(r.Colo))
+			txt.WriteString(line + "\n")
+			md.WriteString("- **" + label + "**: `" + r.IP + "` " + fmt.Sprintf("%.0f ms / %.2f MB/s / %s", r.Latency, r.Speed, orNA(r.Colo)) + "\n")
+		}
+		if bestIP != "" {
+			for _, r := range run.Results {
+				if r.IPType == ipType && r.IP == bestIP {
+					writeResult(r)
+					return
+				}
+			}
+			txt.WriteString(fmt.Sprintf("%s: %s\n", label, bestIP))
+			md.WriteString("- **" + label + "**: `" + bestIP + "`\n")
+			return
+		}
+		if hasBest || run.Status == store.StatusFailed {
+			return
+		}
 		for _, r := range run.Results {
 			if r.IPType == ipType && r.Rank == 1 {
-				line := fmt.Sprintf("%s: %s（%.0f ms / %.2f MB/s / %s）", label, r.IP, r.Latency, r.Speed, orNA(r.Colo))
-				txt.WriteString(line + "\n")
-				md.WriteString("- **" + label + "**: `" + r.IP + "` " + fmt.Sprintf("%.0f ms / %.2f MB/s / %s", r.Latency, r.Speed, orNA(r.Colo)) + "\n")
+				writeResult(r)
 				return
 			}
 		}
 	}
-	best("v4", "最优 IPv4")
-	best("v6", "最优 IPv6")
+	best("v4", run.BestIPv4, "最优 IPv4")
+	best("v6", run.BestIPv6, "最优 IPv6")
 	if run.Message != "" {
 		txt.WriteString("结果: " + run.Message + "\n")
 		md.WriteString("- **结果**: " + run.Message + "\n")

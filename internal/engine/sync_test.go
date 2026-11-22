@@ -165,6 +165,24 @@ func TestBuildMessage(t *testing.T) {
 			t.Fatalf("content missing %q:\n%s", want, msg.Content)
 		}
 	}
+
+	// 失败或双栈部分类型无可用 IP 时，不展示未达标的 Rank=1 结果
+	failed := &store.Run{Status: store.StatusFailed, Message: "未找到满足健康检查阈值的新 IP，DNS 记录未修改",
+		Results: []store.SpeedResult{{IPType: "v4", Rank: 1, IP: "9.9.9.9", Latency: 300, Speed: 1}}}
+	fmsg := BuildMessage("CFST DDNS", &store.Task{Name: "主任务"}, failed)
+	if contains(fmsg.Content, "最优 IP") || contains(fmsg.Content, "9.9.9.9") {
+		t.Fatalf("failed message should omit unqualified best IP:\n%s", fmsg.Content)
+	}
+
+	partialType := &store.Run{Status: store.StatusSuccess, BestIPv4: "1.1.1.1",
+		Results: []store.SpeedResult{
+			{IPType: "v4", Rank: 1, IP: "1.1.1.1", Latency: 50, Speed: 10},
+			{IPType: "v6", Rank: 1, IP: "2606:4700::1", Latency: 400, Speed: 0.5},
+		}}
+	pmsg := BuildMessage("CFST DDNS", &store.Task{Name: "双栈任务"}, partialType)
+	if !contains(pmsg.Content, "最优 IPv4: 1.1.1.1") || contains(pmsg.Content, "最优 IPv6") {
+		t.Fatalf("partial dual-stack message unexpected:\n%s", pmsg.Content)
+	}
 }
 
 func TestShouldNotify(t *testing.T) {

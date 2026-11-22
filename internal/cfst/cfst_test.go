@@ -111,6 +111,51 @@ func TestBuildArgsForIPs(t *testing.T) {
 	}
 }
 
+func TestFilterHealthExtraArgs(t *testing.T) {
+	raw := `-url "https://a b/c" -tp 8443 -cfcolo 'HKG,NRT' -httping -debug -allip -dd -f bad -tl 1 -sl 5 -dn 1 -ip 1.1.1.1 -o out.csv -p 0 -tll 10 -tlr 0.1 -v`
+	probe := FilterHealthExtraArgs(raw, true)
+	for _, want := range []string{`-url "https://a b/c"`, `-tp 8443`, `-cfcolo HKG,NRT`, `-httping`, `-debug`} {
+		if !strings.Contains(probe, want) {
+			t.Fatalf("probe=%q missing %q", probe, want)
+		}
+	}
+	for _, drop := range []string{`-allip`, `-dd`, `-f`, `bad`, `-tl `, `-sl `, `-dn `, `-ip `, `-o `, `-p `, `-tll `, `-tlr `, `-v`} {
+		if strings.Contains(probe, drop) {
+			t.Fatalf("probe=%q should not contain %q", probe, drop)
+		}
+	}
+	if _, err := BuildArgsForIPs(store.SpeedTestConfig{ExtraArgs: probe, MaxLossRate: 1}, []string{"1.1.1.1"}, "out.csv"); err != nil {
+		t.Fatalf("filtered probe args rejected by BuildArgsForIPs: %v", err)
+	}
+
+	full := FilterHealthExtraArgs(raw, false)
+	if !strings.Contains(full, `-allip`) {
+		t.Fatalf("full=%q should retain -allip", full)
+	}
+
+	// 位置参数与 -- 之后的危险参数应截断
+	if got := FilterHealthExtraArgs(`-tp 8443 positional -url https://x`, false); got != `-tp 8443` {
+		t.Fatalf("positional truncation got %q", got)
+	}
+	if got := FilterHealthExtraArgs(`-tp 8443 -- -f bad`, false); got != `-tp 8443` {
+		t.Fatalf("double-dash truncation got %q", got)
+	}
+	if got := FilterHealthExtraArgs(`-url "unclosed`, false); got != "" {
+		t.Fatalf("invalid quotes got %q", got)
+	}
+
+	// 同时包含单引号、双引号和空格的参数应能无损往返 SplitArgs(quoteArg(s))
+	mixed := `a 'b' "c"`
+	quoted := quoteArg(mixed)
+	parsed, err := SplitArgs(quoted)
+	if err != nil {
+		t.Fatalf("SplitArgs(quoteArg(%q)) unexpected error: %v (quoted=%q)", mixed, err, quoted)
+	}
+	if len(parsed) != 1 || parsed[0] != mixed {
+		t.Fatalf("SplitArgs(quoteArg(%q)) = %#v, want [%q] (quoted=%q)", mixed, parsed, mixed, quoted)
+	}
+}
+
 func TestExactIPsCanonicalAndSafeArguments(t *testing.T) {
 	args, err := BuildArgsForIPs(store.SpeedTestConfig{MaxLossRate: 1}, []string{"2606:4700:0000:0000:0000:0000:0000:0001", "2606:4700::1", "::ffff:1.1.1.1", "1.1.1.1"}, "out")
 	if err != nil || !strings.Contains(strings.Join(args, " "), "-ip 2606:4700::1,1.1.1.1 ") {
