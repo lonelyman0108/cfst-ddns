@@ -124,6 +124,14 @@ var en = map[string]string{
 	"每行一个，格式为 Key: Value":      "One per line, in the form Key: Value",
 	"请求体模板":                    "Body template",
 	"留空使用默认模板；JSON 模式下占位符的值会自动转义，表单模式下会做 URL 编码。{{status}} 为 success 或 failure": "Leave empty to use the default template. Placeholder values are escaped in JSON mode and URL-encoded in form mode. {{status}} is success or failure",
+	"代理地址（可选）":                             "Proxy URL (optional)",
+	"http://127.0.0.1:7890 或 socks5://127.0.0.1:1080": "http://127.0.0.1:7890 or socks5://127.0.0.1:1080",
+	"支持 http/https/socks5，仅用于发送通知，不影响测速": "Supports http/https/socks5; used only for sending notifications, does not affect speed tests",
+	"代理地址无效: %v":                            "Invalid proxy URL: %v",
+	"不支持的代理协议: %s":                           "Unsupported proxy scheme: %s",
+	"代理地址缺少主机名":                             "Proxy URL is missing a hostname",
+	"代理端口需在 1-65535 之间":                        "Proxy port must be between 1 and 65535",
+	"SOCKS5 代理必须指定端口":                         "SOCKS5 proxy URL must specify a port",
 
 	// 配置校验
 	"%s 不能为空":              "%s is required",

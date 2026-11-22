@@ -9,6 +9,7 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/lonelyman0108/cfst-ddns/internal/httpx"
 	"github.com/lonelyman0108/cfst-ddns/internal/i18n"
 	"github.com/lonelyman0108/cfst-ddns/internal/schema"
 )
@@ -39,6 +40,20 @@ var (
 	registry = map[string]entry{}
 	order    []string
 )
+
+var proxyField = schema.Field{
+	Key:         "proxy",
+	Label:       "代理地址（可选）",
+	Type:        schema.Text,
+	Placeholder: "http://127.0.0.1:7890 或 socks5://127.0.0.1:1080",
+	Help:        "支持 http/https/socks5，仅用于发送通知，不影响测速",
+}
+
+// registerHTTP registers an HTTP-based notifier with the shared optional proxy field.
+func registerHTTP(meta schema.TypeMeta, f Factory) {
+	meta.Fields = append(append([]schema.Field(nil), meta.Fields...), proxyField)
+	Register(meta, f)
+}
 
 // Register 注册一个通知渠道，通常在 init() 中调用。
 func Register(meta schema.TypeMeta, f Factory) {
@@ -83,6 +98,29 @@ func Meta(t string) (schema.TypeMeta, bool) {
 	return e.meta, ok
 }
 
+// Validate 校验通知渠道配置（含可选代理地址格式）。
+func Validate(t string, cfg schema.Config) error {
+	mu.RLock()
+	e, ok := registry[t]
+	mu.RUnlock()
+	if !ok {
+		return i18n.Errorf("不支持的通知渠道: %s", t)
+	}
+	cfg = e.meta.ApplyDefaults(cfg)
+	if err := e.meta.Validate(cfg); err != nil {
+		return err
+	}
+	for _, f := range e.meta.Fields {
+		if f.Key == "proxy" {
+			if _, err := httpx.ValidateProxyURL(cfg.Get("proxy")); err != nil {
+				return err
+			}
+			break
+		}
+	}
+	return nil
+}
+
 // New 校验配置并构造 Notifier。
 func New(t string, cfg schema.Config) (Notifier, error) {
 	mu.RLock()
@@ -92,7 +130,7 @@ func New(t string, cfg schema.Config) (Notifier, error) {
 		return nil, i18n.Errorf("不支持的通知渠道: %s", t)
 	}
 	cfg = e.meta.ApplyDefaults(cfg)
-	if err := e.meta.Validate(cfg); err != nil {
+	if err := Validate(t, cfg); err != nil {
 		return nil, err
 	}
 	return e.factory(cfg)

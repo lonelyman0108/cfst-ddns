@@ -10,7 +10,7 @@ import (
 )
 
 func init() {
-	Register(schema.TypeMeta{
+	registerHTTP(schema.TypeMeta{
 		Type:        "wecom",
 		Name:        "企业微信群机器人",
 		Description: "在企业微信群聊中添加群机器人，复制其 Webhook 地址",
@@ -49,7 +49,7 @@ func (w *wecom) Send(ctx context.Context, msg Message) error {
 		text := truncateBytes("## "+msg.Title+"\n\n"+markdownOf(msg), 4096)
 		body = map[string]any{"msgtype": "markdown", "markdown": map[string]any{"content": text}}
 	}
-	resp, err := httpx.Do(ctx, httpx.Request{Method: "POST", URL: w.url(), JSON: body})
+	resp, err := httpx.Do(ctx, httpx.Request{Method: "POST", URL: w.url(), JSON: body, ProxyURL: w.cfg.Get("proxy")})
 	if err != nil {
 		return err
 	}

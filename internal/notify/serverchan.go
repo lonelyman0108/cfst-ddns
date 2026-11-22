@@ -10,7 +10,7 @@ import (
 )
 
 func init() {
-	Register(schema.TypeMeta{
+	registerHTTP(schema.TypeMeta{
 		Type:        "serverchan",
 		Name:        "Server 酱",
 		Description: "支持 Server 酱 Turbo（SCT 开头）与 Server 酱³（sctp 开头）的 SendKey",
@@ -38,7 +38,8 @@ func (s *serverchan) Send(ctx context.Context, msg Message) error {
 		Form: map[string]string{
 			"title": truncateRunes(msg.Title, 32), // 标题最长 32 字符
 			"desp":  markdownOf(msg),
-		}})
+		},
+		ProxyURL: s.cfg.Get("proxy")})
 	if err != nil {
 		return err
 	}

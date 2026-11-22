@@ -12,7 +12,7 @@ import (
 )
 
 func init() {
-	Register(schema.TypeMeta{
+	registerHTTP(schema.TypeMeta{
 		Type:        "ntfy",
 		Name:        "ntfy",
 		Description: "开源推送服务，可使用公共服务器 ntfy.sh 或自建",
@@ -64,7 +64,7 @@ func (n *ntfy) Send(ctx context.Context, msg Message) error {
 		h["Authorization"] = "Basic " + base64.StdEncoding.EncodeToString([]byte(u+":"+n.cfg.Get("password")))
 	}
 	resp, err := httpx.Do(ctx, httpx.Request{Method: "POST",
-		URL: strings.TrimRight(n.cfg.Get("server"), "/") + "/", Header: h, JSON: body})
+		URL: strings.TrimRight(n.cfg.Get("server"), "/") + "/", Header: h, JSON: body, ProxyURL: n.cfg.Get("proxy")})
 	if err != nil {
 		return err
 	}

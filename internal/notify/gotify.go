@@ -11,7 +11,7 @@ import (
 )
 
 func init() {
-	Register(schema.TypeMeta{
+	registerHTTP(schema.TypeMeta{
 		Type:        "gotify",
 		Name:        "Gotify",
 		Description: "自建推送服务，在 Gotify 后台 Apps 中创建应用获取 Token",
@@ -33,9 +33,10 @@ func (g *gotify) Send(ctx context.Context, msg Message) error {
 		"priority": g.cfg.Int("priority", 5),
 	}
 	resp, err := httpx.Do(ctx, httpx.Request{Method: "POST",
-		URL:    strings.TrimRight(g.cfg.Get("server"), "/") + "/message",
-		Header: map[string]string{"X-Gotify-Key": g.cfg.Get("appToken")},
-		JSON:   body})
+		URL:      strings.TrimRight(g.cfg.Get("server"), "/") + "/message",
+		Header:   map[string]string{"X-Gotify-Key": g.cfg.Get("appToken")},
+		JSON:     body,
+		ProxyURL: g.cfg.Get("proxy")})
 	if err != nil {
 		return err
 	}

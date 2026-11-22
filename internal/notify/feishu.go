@@ -12,7 +12,7 @@ import (
 )
 
 func init() {
-	Register(schema.TypeMeta{
+	registerHTTP(schema.TypeMeta{
 		Type:        "feishu",
 		Name:        "飞书 / Lark 群机器人",
 		Description: "群设置 → 群机器人 → 添加自定义机器人，复制 Webhook 地址；Lark 国际版请填写完整地址",
@@ -67,7 +67,7 @@ func (f *feishu) Send(ctx context.Context, msg Message) error {
 		body["timestamp"] = strconv.FormatInt(ts, 10)
 		body["sign"] = sign
 	}
-	resp, err := httpx.Do(ctx, httpx.Request{Method: "POST", URL: f.url(), JSON: body})
+	resp, err := httpx.Do(ctx, httpx.Request{Method: "POST", URL: f.url(), JSON: body, ProxyURL: f.cfg.Get("proxy")})
 	if err != nil {
 		return err
 	}

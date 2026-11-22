@@ -10,7 +10,7 @@ import (
 )
 
 func init() {
-	Register(schema.TypeMeta{
+	registerHTTP(schema.TypeMeta{
 		Type:        "bark",
 		Name:        "Bark",
 		Description: "iOS 推送，App Store 搜索 Bark 获取设备密钥",
@@ -45,7 +45,7 @@ func (b *bark) Send(ctx context.Context, msg Message) error {
 		body["icon"] = s
 	}
 	resp, err := httpx.Do(ctx, httpx.Request{Method: "POST",
-		URL: strings.TrimRight(b.cfg.Get("server"), "/") + "/push", JSON: body})
+		URL: strings.TrimRight(b.cfg.Get("server"), "/") + "/push", JSON: body, ProxyURL: b.cfg.Get("proxy")})
 	if err != nil {
 		return err
 	}

@@ -11,7 +11,7 @@ import (
 )
 
 func init() {
-	Register(schema.TypeMeta{
+	registerHTTP(schema.TypeMeta{
 		Type:        "telegram",
 		Name:        "Telegram",
 		Description: "通过 @BotFather 创建机器人获取 Token，向机器人发消息后访问 getUpdates 获取 Chat ID",
@@ -41,7 +41,7 @@ func (t *telegram) Send(ctx context.Context, msg Message) error {
 		body["message_thread_id"] = id
 	}
 	url := strings.TrimRight(t.cfg.Get("apiBase"), "/") + "/bot" + t.cfg.Get("botToken") + "/sendMessage"
-	resp, err := httpx.Do(ctx, httpx.Request{Method: "POST", URL: url, JSON: body})
+	resp, err := httpx.Do(ctx, httpx.Request{Method: "POST", URL: url, JSON: body, ProxyURL: t.cfg.Get("proxy")})
 	if err != nil {
 		return err
 	}
