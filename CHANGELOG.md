@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 自 2.0.0 起由 [release-please](https://github.com/googleapis/release-please) 根据约定式提交自动生成。
 
+## [2.5.0](https://github.com/lonelyman0108/cfst-ddns/compare/v2.4.0...v2.5.0) (2026-11-22)
+
+
+### 新功能
+
+* **engine:** 支持写入 DNS 前与健康检查中的协议级验证 ([#25](https://github.com/lonelyman0108/cfst-ddns/issues/25)) ([3b980ff](https://github.com/lonelyman0108/cfst-ddns/commit/3b980ffd2647f8de43d40235ff72b8ea1baf627e))
+* **notify:** 支持通知渠道独立代理（HTTP/SOCKS5） ([#24](https://github.com/lonelyman0108/cfst-ddns/issues/24)) ([177ba0a](https://github.com/lonelyman0108/cfst-ddns/commit/177ba0a4a24c7a27523acb61dc4ab4b5c84ac465))
+
 ## [2.4.0](https://github.com/lonelyman0108/cfst-ddns/compare/v2.3.0...v2.4.0) (2026-11-10)
 
 
