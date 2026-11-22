@@ -121,6 +121,61 @@ func (c HealthCheckConfig) WithDefaults() HealthCheckConfig {
 	return c
 }
 
+const (
+	VerifyModeTLS       = "tls"
+	VerifyModeHTTP      = "http"
+	VerifyModeWebSocket = "websocket"
+)
+
+// VerifyConfig 控制写入 DNS 前与健康检查中的协议级验证。
+type VerifyConfig struct {
+	Enabled        bool   `json:"enabled"`
+	Mode           string `json:"mode"`           // tls | http | websocket
+	Host           string `json:"host"`           // SNI 与 HTTP Host
+	Port           int    `json:"port"`           // 0 = 复用测速端口
+	Path           string `json:"path"`           // http/websocket 路径，默认 "/"
+	ExpectStatus   string `json:"expectStatus"`   // 空则 http=200, websocket=101，支持逗号分隔
+	Insecure       bool   `json:"insecure"`       // 跳过 TLS 证书校验
+	TimeoutSeconds int    `json:"timeoutSeconds"` // 单 IP 验证超时（秒），默认 5
+	MaxCandidates  int    `json:"maxCandidates"`  // 最多尝试候选数，默认 15
+	Concurrency    int    `json:"concurrency"`    // 并行验证数，默认 5
+}
+
+func DefaultVerifyConfig() VerifyConfig {
+	return VerifyConfig{
+		Mode:           VerifyModeWebSocket,
+		Path:           "/",
+		TimeoutSeconds: 5,
+		MaxCandidates:  15,
+		Concurrency:    5,
+	}
+}
+
+// WithDefaults 为未启用或历史缺省的协议验证配置填充默认值。
+func (c VerifyConfig) WithDefaults() VerifyConfig {
+	if c == (VerifyConfig{}) {
+		return DefaultVerifyConfig()
+	}
+	if c.Mode == "" {
+		c.Mode = VerifyModeWebSocket
+	}
+	if c.Path == "" {
+		c.Path = "/"
+	}
+	if !c.Enabled {
+		if c.TimeoutSeconds == 0 {
+			c.TimeoutSeconds = 5
+		}
+		if c.MaxCandidates == 0 {
+			c.MaxCandidates = 15
+		}
+		if c.Concurrency == 0 {
+			c.Concurrency = 5
+		}
+	}
+	return c
+}
+
 type Target struct {
 	AccountID uint   `json:"accountId"`
 	Domain    string `json:"domain"`
@@ -140,6 +195,7 @@ type Task struct {
 	SpeedTest   SpeedTestConfig   `gorm:"serializer:json" json:"speedTest"`
 	Update      UpdatePolicy      `gorm:"serializer:json" json:"update"`
 	HealthCheck HealthCheckConfig `gorm:"serializer:json" json:"healthCheck"`
+	Verify      VerifyConfig      `gorm:"serializer:json" json:"verify"`
 	Targets     []Target          `gorm:"serializer:json" json:"targets"`
 	NotifierIDs []uint            `gorm:"column:notifier_ids;serializer:json" json:"notifierIds"`
 	CreatedAt   time.Time         `json:"createdAt"`

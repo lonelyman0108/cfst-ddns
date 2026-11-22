@@ -77,6 +77,7 @@ function reasonLabel(reason?: string) {
     latency: 'health.history.reasonThresholdLatency',
     speed: 'health.history.reasonThresholdSpeed',
     loss: 'health.history.reasonLoss',
+    verifyFailed: 'health.history.reasonVerifyFailed',
   }
   return known[reason] ? t(known[reason]) : reason
 }

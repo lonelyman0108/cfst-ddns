@@ -64,5 +64,6 @@ export default {
     reasonThresholdLatency: 'Above latency threshold',
     reasonThresholdSpeed: 'Below speed threshold',
     reasonLoss: 'Packet loss or unreachable',
+    reasonVerifyFailed: 'Protocol verification failed',
   },
 }

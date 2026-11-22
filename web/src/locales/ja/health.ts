@@ -64,5 +64,6 @@ export default {
     reasonThresholdLatency: 'レイテンシ条件を超過',
     reasonThresholdSpeed: '速度条件を下回る',
     reasonLoss: 'パケットロスまたは接続不可',
+    reasonVerifyFailed: 'プロトコル検証に失敗しました',
   },
 }

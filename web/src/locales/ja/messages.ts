@@ -9,6 +9,7 @@ export default {
     allFailed: "すべての DNS レコードの更新に失敗しました",
     noIP: "利用可能な IP が見つからず、DNS レコードは変更していません",
     healthNoQualifiedIP: "ヘルスチェックのしきい値を満たす新しい IP が見つからなかったため、DNS レコードは変更されませんでした",
+    verifyFailed: "プロトコル検証を通過した候補 IP がなかったため、DNS レコードは変更されませんでした",
     noTargets: "タスクに対象レコードが設定されていません",
     proxyDetected: "テスト通信がプロキシを経由しているため、DNS レコードは変更していません",
     healthSnapshot: "ヘルスチェック起点の実行中に DNS 対象が変化したか安全に更新できなくなったため、レコードは変更していません",

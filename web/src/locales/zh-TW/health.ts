@@ -64,5 +64,6 @@ export default {
     reasonThresholdLatency: '超過延遲閾值',
     reasonThresholdSpeed: '低於速度閾值',
     reasonLoss: '連線丟包或無法連線',
+    reasonVerifyFailed: '未通過協定驗證',
   },
 }

@@ -16,13 +16,14 @@ import {
   Save,
   Search,
   Settings2,
+  ShieldCheck,
   SlidersHorizontal,
   Trash2,
   TriangleAlert,
   UserRoundKey,
 } from '@lucide/vue'
 import { accountsApi, notifiersApi, tasksApi } from '@/api'
-import type { Account, DNSRecord, IPType, Notifier, SpeedTestConfig, Target, Task, TaskInput } from '@/api/types'
+import type { Account, DNSRecord, IPType, Notifier, SpeedTestConfig, Target, Task, TaskInput, VerifyMode } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardAction } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -48,7 +49,7 @@ import { confirm } from '@/composables/useConfirm'
 import { useMetaStore } from '@/stores/meta'
 import { describeCron } from '@/utils/cron'
 import { fmtTime, fromNow, ipTypeLabel } from '@/utils/format'
-import { normalizeHealthCheck } from '@/api/types'
+import { normalizeHealthCheck, normalizeVerify } from '@/api/types'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -98,6 +99,7 @@ const form = reactive<TaskInput>({
   ipType: 'v4',
   speedTest: { ...DEFAULT_SPEED },
   healthCheck: normalizeHealthCheck(),
+  verify: normalizeVerify(),
   update: { recordCount: 1, skipUnchanged: true },
   targets: [],
   notifierIds: [],
@@ -126,6 +128,7 @@ async function load() {
     form.ipType = task.ipType || 'v4'
     form.speedTest = { ...DEFAULT_SPEED, ...(task.speedTest ?? {}) }
     form.healthCheck = normalizeHealthCheck(task.healthCheck)
+    form.verify = normalizeVerify(task.verify)
     healthState.value = task.healthStatus
     healthNextRunAt.value = task.healthNextRunAt ?? null
     form.update = Object.assign({ recordCount: 1, skipUnchanged: true }, task.update ?? {})
@@ -269,9 +272,27 @@ function validate(): string {
     const hc = form.healthCheck
     if (!Number.isFinite(hc.intervalMinutes) || hc.intervalMinutes < 1 || hc.intervalMinutes > 1440) return t('tasks.edit.v.healthInterval')
     if (!Number.isFinite(hc.maxLatency) || hc.maxLatency < 0 || !Number.isFinite(hc.minSpeed) || hc.minSpeed < 0) return t('tasks.edit.v.healthThreshold')
-    if (hc.maxLatency <= 0 && hc.minSpeed <= 0) return t('health.config.thresholdRequired')
+    if (hc.maxLatency <= 0 && hc.minSpeed <= 0 && !form.verify.enabled) return t('health.config.thresholdRequired')
     if (!Number.isFinite(hc.consecutiveFailures) || hc.consecutiveFailures < 1 || hc.consecutiveFailures > 20) return t('tasks.edit.v.healthFailures')
     if (!Number.isFinite(hc.cooldownMinutes) || hc.cooldownMinutes < 0 || hc.cooldownMinutes > 10080) return t('tasks.edit.v.healthCooldown')
+  }
+  if (form.verify.enabled) {
+    const v = form.verify
+    const host = v.host.trim()
+    if (!host) return t('verify.v.hostRequired')
+    if (host.includes('://') || /[:/\s]/.test(host)) return t('verify.v.hostInvalid')
+    if (v.mode !== 'tls' && /\s/.test(v.path.trim())) return t('verify.v.pathInvalid')
+    if (!Number.isFinite(v.port) || v.port < 0 || v.port > 65535) return t('verify.v.port')
+    if (!Number.isFinite(v.timeoutSeconds) || v.timeoutSeconds < 1 || v.timeoutSeconds > 30) return t('verify.v.timeout')
+    if (!Number.isFinite(v.maxCandidates) || v.maxCandidates < 1 || v.maxCandidates > 50) return t('verify.v.maxCandidates')
+    if (!Number.isFinite(v.concurrency) || v.concurrency < 1 || v.concurrency > 10) return t('verify.v.concurrency')
+    const rawStatus = v.expectStatus.trim()
+    if (rawStatus) {
+      const codes = rawStatus.split(/[,\s，]+/).filter(Boolean)
+      if (!codes.length || codes.some((c) => !/^\d+$/.test(c) || Number(c) < 100 || Number(c) > 599)) {
+        return t('verify.v.expectStatus')
+      }
+    }
   }
   return ''
 }
@@ -311,6 +332,18 @@ async function save() {
       minSpeed: n(form.healthCheck.minSpeed, 0),
       consecutiveFailures: n(form.healthCheck.consecutiveFailures, 3),
       cooldownMinutes: n(form.healthCheck.cooldownMinutes, 30),
+    },
+    verify: {
+      enabled: !!form.verify.enabled,
+      mode: (form.verify.mode as VerifyMode) || 'websocket',
+      host: form.verify.host.trim(),
+      port: n(form.verify.port, 0),
+      path: form.verify.path.trim() || '/',
+      expectStatus: form.verify.expectStatus.trim(),
+      insecure: !!form.verify.insecure,
+      timeoutSeconds: n(form.verify.timeoutSeconds, 5),
+      maxCandidates: n(form.verify.maxCandidates, 15),
+      concurrency: n(form.verify.concurrency, 5),
     },
     update: { recordCount: n(form.update.recordCount, 1), skipUnchanged: form.update.skipUnchanged },
     targets: form.targets.map((t) => ({
@@ -418,6 +451,65 @@ async function save() {
               </div>
               <p class="text-muted-foreground flex items-start gap-1.5 text-xs">
                 <TriangleAlert class="mt-0.5 size-3.5 shrink-0" />{{ $t('health.config.proxyNotice') }}
+              </p>
+            </template>
+          </CardContent>
+        </Card>
+
+        <!-- 协议验证 -->
+        <Card>
+          <CardHeader>
+            <CardTitle class="flex items-center gap-2"><ShieldCheck class="text-muted-foreground size-4" />{{ $t('verify.config.title') }}</CardTitle>
+            <CardDescription>{{ $t('verify.config.description') }}</CardDescription>
+          </CardHeader>
+          <CardContent class="grid grid-cols-1 gap-4">
+            <div class="divide-y rounded-md border">
+              <SettingRow :label="$t('verify.config.enabled')" :description="$t('verify.config.enabledDesc')">
+                <Switch v-model="form.verify.enabled" />
+              </SettingRow>
+            </div>
+            <template v-if="form.verify.enabled">
+              <FormItem :label="$t('verify.config.mode')" :help="$t('verify.config.modeHelp')">
+                <Tabs v-model="form.verify.mode">
+                  <TabsList class="h-8">
+                    <TabsTrigger value="websocket" class="text-xs">WebSocket</TabsTrigger>
+                    <TabsTrigger value="tls" class="text-xs">TLS</TabsTrigger>
+                    <TabsTrigger value="http" class="text-xs">HTTP(S)</TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              </FormItem>
+              <div class="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+                <FormItem :label="$t('verify.config.host')" required :help="$t('verify.config.hostHelp')">
+                  <Input v-model="form.verify.host" placeholder="cdn.example.com" />
+                </FormItem>
+                <FormItem :label="$t('verify.config.port')" :help="$t('verify.config.portHelp')">
+                  <NumInput v-model="form.verify.port" :min="0" :max="65535" />
+                </FormItem>
+                <template v-if="form.verify.mode !== 'tls'">
+                  <FormItem :label="$t('verify.config.path')" :help="$t('verify.config.pathHelp')">
+                    <Input v-model="form.verify.path" placeholder="/ws" />
+                  </FormItem>
+                  <FormItem :label="$t('verify.config.expectStatus')" :help="$t('verify.config.expectStatusHelp')">
+                    <Input v-model="form.verify.expectStatus" :placeholder="form.verify.mode === 'websocket' ? '101' : '200'" />
+                  </FormItem>
+                </template>
+                <FormItem :label="$t('verify.config.timeout')" :help="$t('verify.config.timeoutHelp')">
+                  <NumInput v-model="form.verify.timeoutSeconds" :min="1" :max="30" :suffix="$t('tasks.edit.secondsUnit')" />
+                </FormItem>
+                <FormItem :label="$t('verify.config.maxCandidates')" :help="$t('verify.config.maxCandidatesHelp')">
+                  <NumInput v-model="form.verify.maxCandidates" :min="1" :max="50" :suffix="$t('tasks.edit.ipUnit')" />
+                </FormItem>
+                <FormItem :label="$t('verify.config.concurrency')" :help="$t('verify.config.concurrencyHelp')">
+                  <NumInput v-model="form.verify.concurrency" :min="1" :max="10" />
+                </FormItem>
+              </div>
+              <div class="divide-y rounded-md border">
+                <SettingRow :label="$t('verify.config.insecure')" :description="$t('verify.config.insecureDesc')">
+                  <Switch v-model="form.verify.insecure" />
+                </SettingRow>
+              </div>
+              <p class="text-muted-foreground text-xs">
+                {{ $t('verify.config.healthLinkNotice') }}
               </p>
             </template>
           </CardContent>

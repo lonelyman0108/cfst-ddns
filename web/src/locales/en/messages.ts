@@ -9,6 +9,7 @@ export default {
     allFailed: "All DNS record updates failed",
     noIP: "No usable IP found, DNS records left unchanged",
     healthNoQualifiedIP: "No new IP met the health check thresholds; DNS records were left unchanged",
+    verifyFailed: "No candidate IP passed protocol verification; DNS records were left unchanged",
     noTargets: "The task has no target records",
     proxyDetected: "Speed test traffic appears to go through a proxy; DNS records were not changed",
     healthSnapshot: "The DNS targets changed or became unsafe during the health-triggered run; records were left unchanged",

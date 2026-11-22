@@ -8,6 +8,15 @@ var en = map[string]string{
 	"健康检查连续异常次数需在 1-20 之间":        "Consecutive health failures must be between 1 and 20",
 	"健康检查冷却时间需在 0-10080 分钟之间":     "Health check cooldown must be between 0 and 10080 minutes",
 	"备份中的健康检查数据无效":                "Backup contains invalid health check data",
+	"期望状态码无效: %s":                  "Invalid expected status code: %s",
+	"协议验证模式必须为 tls、http 或 websocket": "Protocol verification mode must be tls, http, or websocket",
+	"协议验证端口需在 0-65535 之间":         "Protocol verification port must be between 0 and 65535",
+	"协议验证超时时间需在 1-30 秒之间":         "Protocol verification timeout must be between 1 and 30 seconds",
+	"协议验证最大候选数需在 1-50 之间":         "Protocol verification max candidates must be between 1 and 50",
+	"协议验证并发数需在 1-10 之间":           "Protocol verification concurrency must be between 1 and 10",
+	"协议验证主机名格式无效，请填写域名（不含协议或路径）": "Invalid verification host format; enter a hostname without scheme or path",
+	"协议验证路径不能包含空白字符":             "Protocol verification path must not contain whitespace",
+	"启用协议验证时必须填写验证域名（SNI / Host）": "Verification host (SNI / Host) is required when protocol verification is enabled",
 	"第 %d 条目标记录的 DNS 服务商不支持线路 %q": "DNS provider for target record #%d does not support line %q",
 
 	// DNS 服务商表单

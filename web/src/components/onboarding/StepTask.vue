@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { CircleCheck, Loader2, Plus, Save } from '@lucide/vue'
 import { accountsApi, notifiersApi, tasksApi } from '@/api'
 import type { Account, IPType, Notifier, Task, TaskInput } from '@/api/types'
-import { normalizeHealthCheck } from '@/api/types'
+import { normalizeHealthCheck, normalizeVerify } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -132,6 +132,7 @@ async function create() {
     ipType: tpl.value.ipType,
     speedTest: { ...d.speedTest },
     healthCheck: normalizeHealthCheck(d.healthCheck),
+    verify: normalizeVerify(d.verify),
     update: { ...d.update, recordCount: form.recordCount || 1 },
     targets: [
       {
