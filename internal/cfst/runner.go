@@ -163,6 +163,96 @@ func validateExactExtraArgs(args []string) error {
 	return nil
 }
 
+var (
+	cfstValueFlags = map[string]bool{
+		"n": true, "t": true, "dn": true, "dt": true, "tp": true, "url": true,
+		"httping-code": true, "cfcolo": true, "tl": true, "tll": true, "tlr": true,
+		"sl": true, "p": true, "f": true, "ip": true, "o": true,
+	}
+	cfstBoolFlags = map[string]bool{
+		"debug": true, "dd": true, "allip": true, "httping": true, "v": true, "h": true,
+	}
+	healthProbeStripFlags = map[string]bool{
+		"f": true, "ip": true, "o": true, "p": true,
+		"tl": true, "tll": true, "tlr": true, "sl": true,
+		"dd": true, "dn": true, "allip": true, "v": true, "h": true,
+	}
+	healthRunStripFlags = map[string]bool{
+		"f": true, "ip": true, "o": true, "p": true,
+		"tl": true, "tll": true, "tlr": true, "sl": true,
+		"dd": true, "dn": true, "v": true, "h": true,
+	}
+)
+
+// FilterHealthExtraArgs strips conflicting flags from ExtraArgs for health probes or health-triggered runs.
+func FilterHealthExtraArgs(raw string, probeOnly bool) string {
+	if probeOnly {
+		return FilterExtraArgs(raw, healthProbeStripFlags)
+	}
+	return FilterExtraArgs(raw, healthRunStripFlags)
+}
+
+// FilterExtraArgs retains known cfst flags not in strip, safely re-quoting values for SplitArgs.
+func FilterExtraArgs(raw string, strip map[string]bool) string {
+	args, err := SplitArgs(raw)
+	if err != nil {
+		return ""
+	}
+	var kept []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" || !strings.HasPrefix(arg, "-") {
+			break
+		}
+		name, _, assigned := strings.Cut(strings.TrimLeft(arg, "-"), "=")
+		switch {
+		case cfstBoolFlags[name]:
+			if !strip[name] {
+				kept = append(kept, quoteArg(arg))
+			}
+		case cfstValueFlags[name]:
+			if strip[name] {
+				if !assigned && i+1 < len(args) {
+					i++
+				}
+				continue
+			}
+			kept = append(kept, quoteArg(arg))
+			if !assigned && i+1 < len(args) {
+				i++
+				kept = append(kept, quoteArg(args[i]))
+			}
+		}
+	}
+	return strings.Join(kept, " ")
+}
+
+func quoteArg(s string) string {
+	if s == "" {
+		return `""`
+	}
+	if !strings.ContainsAny(s, " \t\n\r\"'") {
+		return s
+	}
+	if !strings.ContainsRune(s, '"') {
+		return `"` + s + `"`
+	}
+	if !strings.ContainsRune(s, '\'') {
+		return `'` + s + `'`
+	}
+	var b strings.Builder
+	b.WriteByte('"')
+	for _, r := range s {
+		if r == '"' {
+			b.WriteString(`"'"'"`)
+		} else {
+			b.WriteRune(r)
+		}
+	}
+	b.WriteByte('"')
+	return b.String()
+}
+
 // SplitArgs 按空白拆分参数，支持单/双引号。
 func SplitArgs(s string) ([]string, error) {
 	var out []string

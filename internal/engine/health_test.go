@@ -352,7 +352,7 @@ func TestHealthFullRunThresholdsAndProxiedTargets(t *testing.T) {
 		count       int
 		wantChanged bool
 	}{
-		{"health threshold", 40, 0, 1, false}, {"normal threshold", 200, 20, 1, false}, {"top N", 200, 0, 2, false}, {"qualified", 200, 0, 1, true},
+		{"health threshold", 40, 0, 1, false}, {"normal threshold", 200, 20, 1, false}, {"top N", 200, 0, 2, true}, {"qualified", 200, 0, 1, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			e, task, fp := healthEngine(t)
@@ -614,11 +614,113 @@ func TestHealthNotificationsOnlyFromTriggeredFullRun(t *testing.T) {
 	e.executeJob(context.Background(), <-e.queue)
 	var run store.Run
 	e.Store.DB.First(&run, id)
-	if run.Status != store.StatusFailed || hits.Load() != 1 {
+	if run.Status != store.StatusFailed || run.MessageKey != "healthNoQualifiedIP" || hits.Load() != 1 {
 		t.Fatalf("run=%+v hits=%d", run, hits.Load())
+	}
+	if !strings.Contains(run.Log, "测速返回 1 个 IP，但没有满足健康检查阈值的候选") {
+		t.Fatalf("run log missing filter summary:\n%s", run.Log)
 	}
 	msg := BuildMessage("test", task, &run)
 	if !strings.Contains(msg.Content, "健康检查") || !strings.Contains(msg.Content, "speed") {
 		t.Fatalf("missing health context: %s", msg.Content)
+	}
+	if strings.Contains(msg.Content, "最优 IP") {
+		t.Fatalf("failed health run should not report unqualified best IP:\n%s", msg.Content)
+	}
+}
+
+func TestHealthSelectionConfigAndExtraArgs(t *testing.T) {
+	task := &store.Task{
+		SpeedTest: store.SpeedTestConfig{
+			DownloadCount:   10,
+			MaxLatency:      9999,
+			MinSpeed:        0,
+			DisableDownload: true,
+			ExtraArgs:       `-url "https://speed.example/file" -tp 8443 -cfcolo hkg -httping -tl 50 -sl 1 -dd -f ip.txt -ip 1.1.1.1 -allip`,
+		},
+		HealthCheck: store.HealthCheckConfig{
+			Enabled:    true,
+			MaxLatency: 150.4,
+			MinSpeed:   5,
+		},
+	}
+	probeCfg := healthProbeConfig(task, 2)
+	if probeCfg.DisableDownload || probeCfg.DownloadCount != 2 {
+		t.Fatalf("probeCfg=%+v", probeCfg)
+	}
+	if strings.Contains(probeCfg.ExtraArgs, "-allip") || strings.Contains(probeCfg.ExtraArgs, "-tl") || !strings.Contains(probeCfg.ExtraArgs, `-url https://speed.example/file`) || !strings.Contains(probeCfg.ExtraArgs, "-tp 8443") {
+		t.Fatalf("probe ExtraArgs=%q", probeCfg.ExtraArgs)
+	}
+
+	selCfg := healthSelectionConfig(task, 2)
+	if selCfg.DisableDownload || selCfg.MinSpeed != 5 || selCfg.MaxLatency != 151 || selCfg.DownloadCount != 10 {
+		t.Fatalf("selCfg=%+v", selCfg)
+	}
+	if !strings.Contains(selCfg.ExtraArgs, "-allip") || !strings.Contains(selCfg.ExtraArgs, "-tp 8443") || strings.Contains(selCfg.ExtraArgs, "-sl") || strings.Contains(selCfg.ExtraArgs, "-dd") {
+		t.Fatalf("sel ExtraArgs=%q", selCfg.ExtraArgs)
+	}
+
+	// 仅配置健康检查最低速度且未限制延迟时，收敛 -dn 避免全网漫长扫描
+	task.HealthCheck.MaxLatency = 0
+	noLatCfg := healthSelectionConfig(task, 1)
+	if noLatCfg.DisableDownload || noLatCfg.MinSpeed != 5 || noLatCfg.DownloadCount != 3 {
+		t.Fatalf("noLatCfg=%+v", noLatCfg)
+	}
+
+	// SpeedTest 自身阈值更严格时保留更严格的值
+	task.SpeedTest.MaxLatency = 100
+	task.SpeedTest.MinSpeed = 12
+	task.HealthCheck.MaxLatency = 200
+	task.HealthCheck.MinSpeed = 5
+	strictCfg := healthSelectionConfig(task, 2)
+	if strictCfg.MaxLatency != 100 || strictCfg.MinSpeed != 12 || strictCfg.DownloadCount != 10 {
+		t.Fatalf("strictCfg=%+v", strictCfg)
+	}
+}
+
+func TestHealthRequiredCountsByTypeIndependentAndPartialAdopt(t *testing.T) {
+	results := []store.HealthResult{
+		{TargetKey: "1|cdn.example.com|A|default", IPType: "v4", IP: "1.1.1.1", Status: store.HealthStatusUnhealthy},
+		{TargetKey: "1|cdn.example.com|A|default", IPType: "v4", IP: "1.1.1.2", Status: store.HealthStatusUnhealthy},
+		{TargetKey: "1|cdn.example.com|A|default", IPType: "v4", IP: "1.1.1.3", Status: store.HealthStatusUnhealthy},
+		{TargetKey: "1|cdn.example.com|AAAA|default", IPType: "v6", IP: "2606:4700::1", Status: store.HealthStatusUnhealthy},
+	}
+	_, byType := healthRequiredCountsByType(results, []string{"v4", "v6"}, 1)
+	if byType["v4"] != 3 || byType["v6"] != 1 {
+		t.Fatalf("byType=%+v", byType)
+	}
+
+	e, task, fp := healthEngine(t)
+	installHealthFakeCFST(t, e)
+	t.Setenv("FAKE_CFST_ROWS", "2")
+	fp.records["2"] = provider.Record{ID: "2", Name: "cdn", Type: "A", Value: "1.1.1.2"}
+	fp.records["3"] = provider.Record{ID: "3", Name: "cdn", Type: "A", Value: "1.1.1.3"}
+	task.HealthCheck.ConsecutiveFailures = 1
+	task.HealthCheck.MaxLatency = 200
+	e.Store.DB.Save(task)
+
+	check, err := e.HealthJob(context.Background(), task.ID)
+	if err != nil || !check.TriggerFullRun {
+		t.Fatalf("check=%+v err=%v", check, err)
+	}
+	id, err := e.enqueue(task.ID, "health", false, check.CheckID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.executeJob(context.Background(), <-e.queue)
+	var run store.Run
+	e.Store.DB.First(&run, id)
+	if run.Status != store.StatusSuccess || !run.Changed || run.BestIPv4 != "1.2.3.4" {
+		t.Fatalf("run=%+v", run)
+	}
+	if !strings.Contains(run.Log, "将先采用已找到的合格 IP") {
+		t.Fatalf("log missing partial adoption note:\n%s", run.Log)
+	}
+	gotVals := map[string]bool{}
+	for _, r := range fp.records {
+		gotVals[r.Value] = true
+	}
+	if len(fp.records) != 2 || !gotVals["1.2.3.4"] || !gotVals["1.2.0.2"] {
+		t.Fatalf("expected partial replacement with 2 qualified IPs, got records=%+v", fp.records)
 	}
 }

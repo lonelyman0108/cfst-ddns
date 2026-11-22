@@ -8,6 +8,7 @@ export default {
     partialFailed: "{failed}/{total} 条记录更新失败",
     allFailed: "全部 DNS 记录更新失败",
     noIP: "没有获得任何可用 IP，DNS 记录未修改",
+    healthNoQualifiedIP: "未找到满足健康检查阈值的新 IP，DNS 记录未修改",
     noTargets: "任务未配置目标记录",
     proxyDetected: "检测到测速流量经过代理，DNS 记录未修改",
     healthSnapshot: "健康检查触发的执行中，DNS 目标已变化或无法安全更新，记录未修改",

@@ -318,9 +318,10 @@ func recordType(ipType string) string {
 
 // 有固定文案的整体失败原因；messageKeyOf 据此给出前端翻译用的代码。
 var (
-	errNoTargets = errors.New("任务未配置目标记录")
-	errNoIP      = errors.New("没有获得任何可用 IP，DNS 记录未修改")
-	errAllFailed = errors.New("全部 DNS 记录更新失败")
+	errNoTargets           = errors.New("任务未配置目标记录")
+	errNoIP                = errors.New("没有获得任何可用 IP，DNS 记录未修改")
+	errHealthNoQualifiedIP = errors.New("未找到满足健康检查阈值的新 IP，DNS 记录未修改")
+	errAllFailed           = errors.New("全部 DNS 记录更新失败")
 	// 中文原文同时用于通知，附带处理建议
 	errProxyDetected = errors.New("检测到测速流量经过代理，DNS 记录未修改；如为有意经代理测速，请把任务的测速网络改为「经代理」")
 )
@@ -331,6 +332,8 @@ func messageKeyOf(err error) string {
 		return "noTargets"
 	case errors.Is(err, errNoIP):
 		return "noIP"
+	case errors.Is(err, errHealthNoQualifiedIP):
+		return "healthNoQualifiedIP"
 	case errors.Is(err, errAllFailed):
 		return "allFailed"
 	case errors.Is(err, errProxyDetected):
@@ -360,7 +363,7 @@ func (e *Engine) runTask(ctx context.Context, task *store.Task, run *store.Run, 
 	}
 	var healthCheck store.HealthCheck
 	healthCounts := map[string]int{}
-	selectionConfig := task.SpeedTest
+	healthTypeCounts := map[string]int{}
 	if run.Trigger == "health" {
 		if run.HealthCheckID == nil {
 			return errHealthSnapshot
@@ -371,15 +374,7 @@ func (e *Engine) runTask(ctx context.Context, task *store.Task, run *store.Run, 
 		if !task.Enabled || !task.HealthCheck.Enabled || healthCheck.ConfigFingerprint != healthConfigFingerprint(task) {
 			return errHealthSnapshot
 		}
-		healthCounts = healthRequiredCounts(healthCheck.Results, count)
-		for _, required := range healthCounts {
-			count = max(count, required)
-		}
-		selectionConfig.ExtraArgs = ""
-		if task.HealthCheck.MinSpeed > 0 || selectionConfig.MinSpeed > 0 {
-			selectionConfig.DisableDownload = false
-			selectionConfig.DownloadCount = max(count, selectionConfig.DownloadCount)
-		}
+		healthCounts, healthTypeCounts = healthRequiredCountsByType(healthCheck.Results, ipTypes(task.IPType), count)
 	}
 
 	// 0. 网络自检
@@ -391,9 +386,18 @@ func (e *Engine) runTask(ctx context.Context, task *store.Task, run *store.Run, 
 
 	// 1. 测速
 	best := map[string][]string{} // ipType → 选中的 IP
+	healthFilteredOut := false
 	for _, t := range ipTypes(task.IPType) {
+		typeCount := count
+		runCfg := task.SpeedTest
+		if run.Trigger == "health" {
+			if n := healthTypeCounts[t]; n > typeCount {
+				typeCount = n
+			}
+			runCfg = healthSelectionConfig(task, typeCount)
+		}
 		rl.Printf("━━ 开始 IPv%s 测速 ━━", strings.TrimPrefix(t, "v"))
-		res, err := e.CFST.Run(ctx, cfst.RunOptions{IPType: t, Config: selectionConfig,
+		res, err := e.CFST.Run(ctx, cfst.RunOptions{IPType: t, Config: runCfg,
 			WorkDir: e.TempDir, Tag: fmt.Sprintf("run%d", run.ID)}, rl)
 		if err != nil {
 			if ctx.Err() != nil {
@@ -409,7 +413,12 @@ func (e *Engine) runTask(ctx context.Context, task *store.Task, run *store.Run, 
 		run.ResultTotals[t] = len(res)
 		run.Results = append(run.Results, res[:min(len(res), MaxStoredResults)]...)
 		if len(res) == 0 {
-			rl.Printf("! IPv%s 没有满足条件的 IP，将保留现有记录", strings.TrimPrefix(t, "v"))
+			if run.Trigger == "health" {
+				healthFilteredOut = true
+				rl.Printf("! IPv%s 测速没有满足健康检查阈值的候选，将保留现有记录", strings.TrimPrefix(t, "v"))
+			} else {
+				rl.Printf("! IPv%s 没有满足条件的 IP，将保留现有记录", strings.TrimPrefix(t, "v"))
+			}
 			continue
 		}
 		if checkLatency && netcheck.LatencyAnomalous(res) {
@@ -426,12 +435,19 @@ func (e *Engine) runTask(ctx context.Context, task *store.Task, run *store.Run, 
 					seen[r.IP] = true
 				}
 			}
-			res = qualified
-			if len(res) < count {
+			if len(qualified) == 0 {
+				healthFilteredOut = true
+				rl.Printf("! IPv%s 测速返回 %d 个 IP，但没有满足健康检查阈值的候选，将保留现有记录", strings.TrimPrefix(t, "v"), len(res))
 				continue
 			}
+			if len(qualified) < typeCount {
+				rl.Printf("! IPv%s 满足健康检查阈值的 IP 为 %d 个（少于目标所需的 %d 个），将先采用已找到的合格 IP", strings.TrimPrefix(t, "v"), len(qualified), typeCount)
+			} else {
+				rl.Printf("✓ IPv%s 测速返回 %d 个 IP，其中 %d 个满足健康检查阈值", strings.TrimPrefix(t, "v"), len(res), len(qualified))
+			}
+			res = qualified
 		}
-		for i := 0; i < len(res) && i < count; i++ {
+		for i := 0; i < len(res) && i < typeCount; i++ {
 			best[t] = append(best[t], res[i].IP)
 		}
 		top := res[0]
@@ -452,6 +468,9 @@ func (e *Engine) runTask(ctx context.Context, task *store.Task, run *store.Run, 
 		return errProxyDetected
 	}
 	if len(best) == 0 {
+		if run.Trigger == "health" && healthFilteredOut {
+			return errHealthNoQualifiedIP
+		}
 		return errNoIP
 	}
 	if run.DryRun {

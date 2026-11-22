@@ -271,6 +271,27 @@ func healthRequiredCounts(results []store.HealthResult, defaultCount int) map[st
 	return counts
 }
 
+// healthRequiredCountsByType computes required IP counts per TargetKey and per IPType.
+func healthRequiredCountsByType(results []store.HealthResult, enabledTypes []string, defaultCount int) (map[string]int, map[string]int) {
+	if defaultCount < 1 {
+		defaultCount = 1
+	}
+	perTarget := healthRequiredCounts(results, defaultCount)
+	perType := make(map[string]int, len(enabledTypes))
+	for _, t := range enabledTypes {
+		perType[t] = defaultCount
+	}
+	for _, r := range results {
+		if r.IP == "" || r.Status == store.HealthStatusSkipped || r.Status == store.HealthStatusUnknown {
+			continue
+		}
+		if n := perTarget[r.TargetKey]; n > perType[r.IPType] {
+			perType[r.IPType] = n
+		}
+	}
+	return perTarget, perType
+}
+
 var errHealthSnapshot = errors.New("健康检查目标已变化或不可安全更新，DNS 记录未修改")
 
 func qualifiedReplacement(r store.SpeedResult, task *store.Task) bool {
@@ -291,9 +312,34 @@ func ShouldTriggerHealth(state store.HealthState, now time.Time, cfg store.Healt
 func healthProbeConfig(task *store.Task, count int) store.SpeedTestConfig {
 	cfg := task.SpeedTest
 	cfg.MaxLatency, cfg.MinLatency, cfg.MaxLossRate, cfg.MinSpeed = 999999, 0, 1, 0
-	cfg.ExtraArgs = ""
+	cfg.ExtraArgs = cfst.FilterHealthExtraArgs(cfg.ExtraArgs, true)
 	cfg.DisableDownload = task.HealthCheck.MinSpeed <= 0
 	cfg.DownloadCount = count
+	return cfg
+}
+
+func healthSelectionConfig(task *store.Task, typeCount int) store.SpeedTestConfig {
+	if typeCount < 1 {
+		typeCount = 1
+	}
+	cfg := task.SpeedTest
+	cfg.ExtraArgs = cfst.FilterHealthExtraArgs(cfg.ExtraArgs, false)
+	effectiveMinSpeed := max(cfg.MinSpeed, task.HealthCheck.MinSpeed)
+	cfg.MinSpeed = effectiveMinSpeed
+	if task.HealthCheck.MaxLatency > 0 {
+		hcMaxLat := max(1, int(math.Ceil(task.HealthCheck.MaxLatency)))
+		if cfg.MaxLatency <= 0 || cfg.MaxLatency >= 9999 || hcMaxLat < cfg.MaxLatency {
+			cfg.MaxLatency = hcMaxLat
+		}
+	}
+	if effectiveMinSpeed > 0 {
+		cfg.DisableDownload = false
+		if (cfg.MaxLatency <= 0 || cfg.MaxLatency >= 9999) && task.SpeedTest.MinSpeed <= 0 {
+			cfg.DownloadCount = max(typeCount, 3)
+		} else {
+			cfg.DownloadCount = max(typeCount, cfg.DownloadCount)
+		}
+	}
 	return cfg
 }
 
