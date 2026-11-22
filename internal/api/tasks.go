@@ -17,6 +17,7 @@ import (
 	"github.com/lonelyman0108/cfst-ddns/internal/provider"
 	"github.com/lonelyman0108/cfst-ddns/internal/scheduler"
 	"github.com/lonelyman0108/cfst-ddns/internal/store"
+	"github.com/lonelyman0108/cfst-ddns/internal/verify"
 )
 
 type taskView struct {
@@ -38,6 +39,7 @@ func DefaultTask() store.Task {
 			Port: 443, MaxLatency: 9999, MaxLossRate: 1, IPSource: "default",
 			NetworkMode: store.NetworkDirect},
 		HealthCheck: store.DefaultHealthCheckConfig(),
+		Verify:      store.DefaultVerifyConfig(),
 		Update:      store.UpdatePolicy{RecordCount: 1, SkipUnchanged: true},
 		Targets:     []store.Target{},
 		NotifierIDs: []uint{},
@@ -66,6 +68,7 @@ func (s *Server) view(t store.Task, last map[uint]*store.Run) taskView {
 		t.NotifierIDs = []uint{}
 	}
 	t.HealthCheck = t.HealthCheck.WithDefaults()
+	t.Verify = t.Verify.WithDefaults()
 	state, err := s.Store.GetHealthState(t.ID)
 	if err != nil {
 		state = &store.HealthState{TaskID: t.ID, Status: store.HealthStatusUnknown}
@@ -110,7 +113,10 @@ func (s *Server) normalizeTask(t *store.Task) error { return normalizeTaskIn(s.S
 
 // normalizeTaskIn 使用指定的 Store（如事务）校验目标账号是否存在。
 func normalizeTaskIn(st *store.Store, t *store.Task) error {
-	if err := normalizeHealthConfig(&t.HealthCheck); err != nil {
+	if err := normalizeVerifyConfig(&t.Verify); err != nil {
+		return err
+	}
+	if err := normalizeHealthConfig(&t.HealthCheck, t.Verify.Enabled); err != nil {
 		return err
 	}
 	t.Name = strings.TrimSpace(t.Name)
@@ -185,7 +191,50 @@ func normalizeTaskIn(st *store.Store, t *store.Task) error {
 	return nil
 }
 
-func normalizeHealthConfig(cfg *store.HealthCheckConfig) error {
+func normalizeVerifyConfig(cfg *store.VerifyConfig) error {
+	*cfg = cfg.WithDefaults()
+	cfg.Mode = strings.ToLower(strings.TrimSpace(cfg.Mode))
+	switch cfg.Mode {
+	case store.VerifyModeTLS, store.VerifyModeHTTP, store.VerifyModeWebSocket:
+	default:
+		return i18n.New("协议验证模式必须为 tls、http 或 websocket")
+	}
+	cfg.Host = strings.TrimSpace(cfg.Host)
+	cfg.Path = strings.TrimSpace(cfg.Path)
+	cfg.ExpectStatus = strings.TrimSpace(cfg.ExpectStatus)
+	if cfg.Port < 0 || cfg.Port > 65535 {
+		return i18n.New("协议验证端口需在 0-65535 之间")
+	}
+	if cfg.TimeoutSeconds < 1 || cfg.TimeoutSeconds > 30 {
+		return i18n.New("协议验证超时时间需在 1-30 秒之间")
+	}
+	if cfg.MaxCandidates < 1 || cfg.MaxCandidates > 50 {
+		return i18n.New("协议验证最大候选数需在 1-50 之间")
+	}
+	if cfg.Concurrency < 1 || cfg.Concurrency > 10 {
+		return i18n.New("协议验证并发数需在 1-10 之间")
+	}
+	if _, err := verify.ParseExpectStatus(cfg.Mode, cfg.ExpectStatus); err != nil {
+		return err
+	}
+	if cfg.Mode != store.VerifyModeTLS {
+		if strings.ContainsAny(cfg.Path, " \t\r\n") {
+			return i18n.New("协议验证路径不能包含空白字符")
+		}
+		cfg.Path = verify.NormalizePath(cfg.Path)
+	} else if cfg.Path == "" {
+		cfg.Path = "/"
+	}
+	if cfg.Host != "" && (strings.Contains(cfg.Host, "://") || strings.ContainsAny(cfg.Host, ":/ \t\r\n")) {
+		return i18n.New("协议验证主机名格式无效，请填写域名（不含协议或路径）")
+	}
+	if cfg.Enabled && cfg.Host == "" {
+		return i18n.New("启用协议验证时必须填写验证域名（SNI / Host）")
+	}
+	return nil
+}
+
+func normalizeHealthConfig(cfg *store.HealthCheckConfig, verifyEnabled bool) error {
 	*cfg = cfg.WithDefaults()
 	if cfg.IntervalMinutes < 1 || cfg.IntervalMinutes > 1440 {
 		return i18n.New("健康检查间隔需在 1-1440 分钟之间")
@@ -193,7 +242,7 @@ func normalizeHealthConfig(cfg *store.HealthCheckConfig) error {
 	if math.IsNaN(cfg.MaxLatency) || math.IsInf(cfg.MaxLatency, 0) || math.IsNaN(cfg.MinSpeed) || math.IsInf(cfg.MinSpeed, 0) || cfg.MaxLatency < 0 || cfg.MinSpeed < 0 {
 		return i18n.New("健康检查阈值必须为有限的非负数")
 	}
-	if cfg.Enabled && cfg.MaxLatency == 0 && cfg.MinSpeed == 0 {
+	if cfg.Enabled && cfg.MaxLatency == 0 && cfg.MinSpeed == 0 && !verifyEnabled {
 		return i18n.New("健康检查至少需要一个延迟或速度阈值")
 	}
 	if cfg.ConsecutiveFailures < 1 || cfg.ConsecutiveFailures > 20 {

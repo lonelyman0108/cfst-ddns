@@ -17,6 +17,7 @@ import (
 	"github.com/lonelyman0108/cfst-ddns/internal/netcheck"
 	"github.com/lonelyman0108/cfst-ddns/internal/provider"
 	"github.com/lonelyman0108/cfst-ddns/internal/store"
+	"github.com/lonelyman0108/cfst-ddns/internal/verify"
 	"gorm.io/gorm"
 )
 
@@ -34,6 +35,7 @@ type Engine struct {
 	Probe           func(ctx context.Context, ipTypes []string, canary bool) []store.NetworkProbe
 	ProviderFactory ProviderFactory
 	HealthProbe     HealthProbe
+	VerifyProbe     func(context.Context, string, store.VerifyConfig, int) verify.Result
 
 	queue         chan job
 	workMu        sync.Mutex
@@ -321,6 +323,7 @@ var (
 	errNoTargets           = errors.New("任务未配置目标记录")
 	errNoIP                = errors.New("没有获得任何可用 IP，DNS 记录未修改")
 	errHealthNoQualifiedIP = errors.New("未找到满足健康检查阈值的新 IP，DNS 记录未修改")
+	errVerifyFailed        = errors.New("候选 IP 均未通过协议验证，DNS 记录未修改")
 	errAllFailed           = errors.New("全部 DNS 记录更新失败")
 	// 中文原文同时用于通知，附带处理建议
 	errProxyDetected = errors.New("检测到测速流量经过代理，DNS 记录未修改；如为有意经代理测速，请把任务的测速网络改为「经代理」")
@@ -334,6 +337,8 @@ func messageKeyOf(err error) string {
 		return "noIP"
 	case errors.Is(err, errHealthNoQualifiedIP):
 		return "healthNoQualifiedIP"
+	case errors.Is(err, errVerifyFailed):
+		return "verifyFailed"
 	case errors.Is(err, errAllFailed):
 		return "allFailed"
 	case errors.Is(err, errProxyDetected):
@@ -342,6 +347,13 @@ func messageKeyOf(err error) string {
 		return "healthSnapshot"
 	}
 	return ""
+}
+
+func (e *Engine) probeVerify(ctx context.Context, ip string, cfg store.VerifyConfig, defaultPort int) verify.Result {
+	if e.VerifyProbe != nil {
+		return e.VerifyProbe(ctx, ip, cfg, defaultPort)
+	}
+	return verify.Probe(ctx, ip, cfg, defaultPort)
 }
 
 // setMessage 同时记录中文原文（用于日志与通知）和供前端翻译的代码。
@@ -387,6 +399,7 @@ func (e *Engine) runTask(ctx context.Context, task *store.Task, run *store.Run, 
 	// 1. 测速
 	best := map[string][]string{} // ipType → 选中的 IP
 	healthFilteredOut := false
+	verifyFailed := false
 	for _, t := range ipTypes(task.IPType) {
 		typeCount := count
 		runCfg := task.SpeedTest
@@ -447,6 +460,41 @@ func (e *Engine) runTask(ctx context.Context, task *store.Task, run *store.Run, 
 			}
 			res = qualified
 		}
+		if task.Verify.Enabled {
+			vcfg := task.Verify.WithDefaults()
+			vport := vcfg.Port
+			if vport <= 0 {
+				vport = task.SpeedTest.Port
+			}
+			if vport <= 0 {
+				vport = 443
+			}
+			rl.Printf("━━ IPv%s 协议验证（%s，Host: %s，端口: %d，最多尝试 %d 个） ━━",
+				strings.TrimPrefix(t, "v"), vcfg.Mode, vcfg.Host, vport, min(len(res), vcfg.MaxCandidates))
+			verified := verify.Filter(ctx, res, vcfg, task.SpeedTest.Port, typeCount, e.probeVerify, func(r verify.Result) {
+				if r.OK {
+					if r.Status > 0 {
+						rl.Printf("✓ 验证通过: %s (%s HTTP %d, %s)", r.IP, vcfg.Mode, r.Status, r.Duration.Round(time.Millisecond))
+					} else {
+						rl.Printf("✓ 验证通过: %s (%s, %s)", r.IP, vcfg.Mode, r.Duration.Round(time.Millisecond))
+					}
+					return
+				}
+				rl.Printf("✗ 验证失败: %s [%s] %s", r.IP, r.Stage, r.Error)
+			})
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			if len(verified) == 0 {
+				verifyFailed = true
+				rl.Printf("! IPv%s 候选 IP 均未通过协议验证，将保留现有记录", strings.TrimPrefix(t, "v"))
+				continue
+			}
+			if len(verified) < typeCount {
+				rl.Printf("! IPv%s 通过协议验证的 IP 为 %d 个（少于目标所需的 %d 个），将先采用已通过验证的 IP", strings.TrimPrefix(t, "v"), len(verified), typeCount)
+			}
+			res = verified
+		}
 		for i := 0; i < len(res) && i < typeCount; i++ {
 			best[t] = append(best[t], res[i].IP)
 		}
@@ -468,6 +516,9 @@ func (e *Engine) runTask(ctx context.Context, task *store.Task, run *store.Run, 
 		return errProxyDetected
 	}
 	if len(best) == 0 {
+		if verifyFailed {
+			return errVerifyFailed
+		}
 		if run.Trigger == "health" && healthFilteredOut {
 			return errHealthNoQualifiedIP
 		}

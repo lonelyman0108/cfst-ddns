@@ -394,8 +394,11 @@ func (s *Server) restore(c *gin.Context) {
 		}
 		for i := range b.Tasks {
 			// Older backups may contain disabled, incomplete legacy tasks.
-			// Preserve those configurations while validating the new health fields.
-			if err := normalizeHealthConfig(&b.Tasks[i].HealthCheck); err != nil {
+			// Preserve those configurations while validating the new health and verify fields.
+			if err := normalizeVerifyConfig(&b.Tasks[i].Verify); err != nil {
+				return err
+			}
+			if err := normalizeHealthConfig(&b.Tasks[i].HealthCheck, b.Tasks[i].Verify.Enabled); err != nil {
 				return err
 			}
 			if err := tx.Create(&b.Tasks[i]).Error; err != nil {

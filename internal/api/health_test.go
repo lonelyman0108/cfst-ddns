@@ -234,3 +234,97 @@ func TestHealthBackupRoundtripAndLegacyCompatibility(t *testing.T) {
 		t.Fatal("old health history survived legacy restore")
 	}
 }
+
+func TestVerifyConfigValidationAndBackupCompatibility(t *testing.T) {
+	s, request, task := healthServer(t)
+	def := DefaultTask().Verify
+	if def.Enabled || def.Mode != store.VerifyModeWebSocket || def.Path != "/" || def.TimeoutSeconds != 5 || def.MaxCandidates != 15 || def.Concurrency != 5 {
+		t.Fatalf("verify defaults=%+v", def)
+	}
+
+	// 仅启用协议验证时，健康检查可不配置延迟与速度阈值
+	task.Verify = store.VerifyConfig{
+		Enabled:        true,
+		Mode:           store.VerifyModeWebSocket,
+		Host:           "cdn.example.com",
+		Path:           "ws",
+		ExpectStatus:   "101, 400",
+		TimeoutSeconds: 8,
+		MaxCandidates:  15,
+		Concurrency:    5,
+	}
+	task.HealthCheck = store.HealthCheckConfig{
+		Enabled:             true,
+		IntervalMinutes:     10,
+		ConsecutiveFailures: 3,
+		CooldownMinutes:     30,
+	}
+	w := request(http.MethodPut, fmt.Sprintf("/api/tasks/%d", task.ID), task)
+	if w.Code != 200 {
+		t.Fatalf("verify-only health should succeed: %d %s", w.Code, w.Body)
+	}
+	saved, _ := s.Store.GetTask(task.ID)
+	if saved.Verify.Path != "/ws" {
+		t.Fatalf("path not normalized: %+v", saved.Verify)
+	}
+
+	// 校验各类非法 VerifyConfig
+	badCases := []func(*store.VerifyConfig){
+		func(v *store.VerifyConfig) { v.Mode = "grpc" },
+		func(v *store.VerifyConfig) { v.Host = "" },
+		func(v *store.VerifyConfig) { v.Host = "https://cdn.example.com" },
+		func(v *store.VerifyConfig) { v.Host = "cdn.example.com/ws" },
+		func(v *store.VerifyConfig) { v.Host = "cdn.example.com:8443" },
+		func(v *store.VerifyConfig) { v.Path = "/ws bad" },
+		func(v *store.VerifyConfig) { v.Port = 70000 },
+		func(v *store.VerifyConfig) { v.TimeoutSeconds = 0 },
+		func(v *store.VerifyConfig) { v.TimeoutSeconds = 31 },
+		func(v *store.VerifyConfig) { v.MaxCandidates = 51 },
+		func(v *store.VerifyConfig) { v.Concurrency = 11 },
+		func(v *store.VerifyConfig) { v.ExpectStatus = "999" },
+	}
+	for _, mutate := range badCases {
+		bad := *saved
+		mutate(&bad.Verify)
+		w = request(http.MethodPut, fmt.Sprintf("/api/tasks/%d", task.ID), &bad)
+		if w.Code != 400 {
+			t.Fatalf("expected 400 for verify=%+v, got %d %s", bad.Verify, w.Code, w.Body)
+		}
+	}
+
+	// 关闭 Verify 后，无阈值的健康检查仍应拒绝
+	disabledVerify := *saved
+	disabledVerify.Verify.Enabled = false
+	w = request(http.MethodPut, fmt.Sprintf("/api/tasks/%d", task.ID), &disabledVerify)
+	if w.Code != 400 {
+		t.Fatalf("expected 400 when health has no thresholds and verify disabled, got %d", w.Code)
+	}
+
+	// 备份恢复保留 Verify，旧备份缺少 verify 字段时填充默认值
+	backup := request(http.MethodGet, "/api/backup", nil)
+	var b map[string]any
+	if err := json.Unmarshal(backup.Body.Bytes(), &b); err != nil {
+		t.Fatal(err)
+	}
+	w = request(http.MethodPost, "/api/backup/restore", b)
+	if w.Code != 200 {
+		t.Fatalf("restore with verify=%d %s", w.Code, w.Body)
+	}
+	restored, _ := s.Store.GetTask(task.ID)
+	if !restored.Verify.Enabled || restored.Verify.Host != "cdn.example.com" {
+		t.Fatalf("restored verify=%+v", restored.Verify)
+	}
+
+	tasks := b["tasks"].([]any)
+	t0 := tasks[0].(map[string]any)
+	delete(t0, "verify")
+	t0["healthCheck"].(map[string]any)["enabled"] = false
+	w = request(http.MethodPost, "/api/backup/restore", b)
+	if w.Code != 200 {
+		t.Fatalf("legacy restore without verify=%d %s", w.Code, w.Body)
+	}
+	restored, _ = s.Store.GetTask(task.ID)
+	if restored.Verify.Enabled || restored.Verify.Mode != store.VerifyModeWebSocket || restored.Verify.TimeoutSeconds != 5 {
+		t.Fatalf("legacy verify defaults=%+v", restored.Verify)
+	}
+}

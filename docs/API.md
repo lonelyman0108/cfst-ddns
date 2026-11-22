@@ -129,10 +129,22 @@ interface UpdatePolicy {
 interface HealthCheckConfig {
   enabled: boolean
   intervalMinutes: number       // 默认 10，范围 1-1440
-  maxLatency: number             // 0 表示不限制，单位 ms
+  maxLatency: number             // 0 表示不限制，单位 ms（启用协议验证时可同时为 0）
   minSpeed: number               // 0 表示不限制，单位 MB/s
   consecutiveFailures: number   // 默认 3
   cooldownMinutes: number       // 默认 30，0 表示不冷却
+}
+interface VerifyConfig {
+  enabled: boolean
+  mode: 'tls' | 'http' | 'websocket'  // 默认 websocket
+  host: string                        // SNI 与 HTTP Host（启用时必填）
+  port: number                        // 0 表示复用测速端口
+  path: string                        // http/websocket 路径，默认 "/"
+  expectStatus: string                // 留空时 http=200、websocket=101，支持逗号分隔
+  insecure: boolean                   // 跳过 TLS 证书校验
+  timeoutSeconds: number              // 默认 5，范围 1-30
+  maxCandidates: number               // 默认 15，范围 1-50
+  concurrency: number                 // 默认 5，范围 1-10
 }
 interface HealthStatus {
   lastCheckedAt: string | null
@@ -144,7 +156,7 @@ interface HealthStatus {
 interface HealthResult {
   targetKey: string; ipType: 'v4'|'v6'; ip: string
   latency: number; speed: number; lossRate: number
-  healthy: boolean; reason?: string
+  healthy: boolean; reason?: string // 含 verifyFailed
 }
 interface HealthCheck {
   id: number; taskId: number; checkedAt: string
@@ -165,6 +177,7 @@ interface Task {
   ipType: IPType
   speedTest: SpeedTestConfig; update: UpdatePolicy
   healthCheck: HealthCheckConfig
+  verify: VerifyConfig
   targets: Target[]; notifierIds: number[]
   createdAt: string; updatedAt: string
   // 只读
@@ -234,7 +247,7 @@ SSE 事件：
 - `status`：`data` 为 `RunSummary` JSON
 - `done`：`data` 为 `RunSummary` JSON，之后服务端关闭连接
 
-> `RunSummary` / `DNSChange` 另含可选的 `messageKey`、`messageArgs`：固定说明的代码与参数，前端据此按界面语言显示 `message`；为空时（如上游服务商报错）直接显示 `message`。
+> `RunSummary` / `DNSChange` 另含可选的 `messageKey`、`messageArgs`：固定说明的代码与参数，前端据此按界面语言显示 `message`；为空时（如上游服务商报错）直接显示 `message`。其中任务执行 `messageKey` 新增 `healthNoQualifiedIP`（健康触发未找到达标 IP）与 `verifyFailed`（协议验证未通过）。
 
 ## 仪表盘
 

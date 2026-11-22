@@ -18,6 +18,7 @@ import (
 	"github.com/lonelyman0108/cfst-ddns/internal/provider"
 	"github.com/lonelyman0108/cfst-ddns/internal/schema"
 	"github.com/lonelyman0108/cfst-ddns/internal/store"
+	"github.com/lonelyman0108/cfst-ddns/internal/verify"
 	"gorm.io/gorm"
 )
 
@@ -83,8 +84,9 @@ func healthConfigFingerprint(task *store.Task) string {
 		Targets []store.Target
 		Speed   store.SpeedTestConfig
 		Health  store.HealthCheckConfig
+		Verify  store.VerifyConfig
 		Update  store.UpdatePolicy
-	}{task.IPType, task.Targets, task.SpeedTest, task.HealthCheck, task.Update})
+	}{task.IPType, task.Targets, task.SpeedTest, task.HealthCheck, task.Verify, task.Update})
 }
 
 func (e *Engine) newProvider(kind string, cfg schema.Config) (provider.Provider, error) {
@@ -335,7 +337,11 @@ func healthSelectionConfig(task *store.Task, typeCount int) store.SpeedTestConfi
 	if effectiveMinSpeed > 0 {
 		cfg.DisableDownload = false
 		if (cfg.MaxLatency <= 0 || cfg.MaxLatency >= 9999) && task.SpeedTest.MinSpeed <= 0 {
-			cfg.DownloadCount = max(typeCount, 3)
+			floor := 3
+			if task.Verify.Enabled {
+				floor = min(max(1, task.Verify.WithDefaults().MaxCandidates), 10)
+			}
+			cfg.DownloadCount = max(typeCount, floor)
 		} else {
 			cfg.DownloadCount = max(typeCount, cfg.DownloadCount)
 		}
@@ -447,6 +453,30 @@ func (e *Engine) HealthJob(parent context.Context, taskID uint) (HealthJobResult
 						}
 					}
 				}
+				verifyResults := map[string]verify.Result{}
+				if task.Verify.Enabled && probeReason == "" {
+					for _, ip := range ips {
+						if ctx.Err() != nil {
+							break
+						}
+						v, ok := byIP[ip]
+						if !ok {
+							continue
+						}
+						tmp := store.HealthResult{
+							IP:              ip,
+							Latency:         v.Latency,
+							Speed:           v.Speed,
+							LossRate:        v.LossRate,
+							LatencyMeasured: true,
+							SpeedMeasured:   task.HealthCheck.MinSpeed > 0,
+							LossMeasured:    true,
+						}
+						if healthy, _ := EvaluateHealth([]store.HealthResult{tmp}, task.HealthCheck); healthy {
+							verifyResults[ip] = e.probeVerify(ctx, ip, task.Verify, task.SpeedTest.Port)
+						}
+					}
+				}
 				for _, m := range mappings {
 					if m.IPType != ipType {
 						continue
@@ -460,6 +490,13 @@ func (e *Engine) HealthJob(parent context.Context, taskID uint) (HealthJobResult
 						r.SpeedMeasured = task.HealthCheck.MinSpeed > 0
 						r.LossMeasured = true
 						r.Healthy, r.Reason = EvaluateHealth([]store.HealthResult{r}, task.HealthCheck)
+						if r.Healthy {
+							if vr, verified := verifyResults[m.IP]; verified && !vr.OK {
+								r.Healthy = false
+								r.Reason = "verifyFailed"
+								r.Detail = fmt.Sprintf("[%s] %s", vr.Stage, vr.Error)
+							}
+						}
 						r.Status = store.HealthStatusUnhealthy
 						if r.Healthy {
 							r.Status = store.HealthStatusHealthy

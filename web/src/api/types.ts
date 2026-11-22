@@ -198,6 +198,38 @@ export interface SpeedTestConfig {
 export type NetworkMode = 'direct' | 'proxy'
 
 
+export type VerifyMode = 'tls' | 'http' | 'websocket'
+
+export interface VerifyConfig {
+  enabled: boolean
+  mode: VerifyMode
+  host: string
+  port: number
+  path: string
+  expectStatus: string
+  insecure: boolean
+  timeoutSeconds: number
+  maxCandidates: number
+  concurrency: number
+}
+
+export const DEFAULT_VERIFY: VerifyConfig = {
+  enabled: false,
+  mode: 'websocket',
+  host: '',
+  port: 0,
+  path: '/',
+  expectStatus: '',
+  insecure: false,
+  timeoutSeconds: 5,
+  maxCandidates: 15,
+  concurrency: 5,
+}
+
+export function normalizeVerify(value?: Partial<VerifyConfig> | null): VerifyConfig {
+  return { ...DEFAULT_VERIFY, ...(value ?? {}) }
+}
+
 export interface HealthCheckConfig {
   enabled: boolean
   intervalMinutes: number
@@ -290,6 +322,7 @@ export interface Task {
   ipType: IPType
   speedTest: SpeedTestConfig
   healthCheck: HealthCheckConfig
+  verify: VerifyConfig
   update: UpdatePolicy
   targets: Target[]
   notifierIds: number[]
@@ -305,7 +338,7 @@ export interface Task {
 
 export type TaskInput = Pick<
   Task,
-  'name' | 'enabled' | 'cron' | 'ipType' | 'speedTest' | 'healthCheck' | 'update' | 'targets' | 'notifierIds'
+  'name' | 'enabled' | 'cron' | 'ipType' | 'speedTest' | 'healthCheck' | 'verify' | 'update' | 'targets' | 'notifierIds'
 >
 
 export interface RunStarted {

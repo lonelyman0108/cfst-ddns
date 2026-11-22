@@ -64,5 +64,6 @@ export default {
     reasonThresholdLatency: '超过延迟阈值',
     reasonThresholdSpeed: '低于速度阈值',
     reasonLoss: '连接丢包或不可达',
+    reasonVerifyFailed: '未通过协议验证',
   },
 }
