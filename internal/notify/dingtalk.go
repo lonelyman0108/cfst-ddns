@@ -12,7 +12,7 @@ import (
 )
 
 func init() {
-	Register(schema.TypeMeta{
+	registerHTTP(schema.TypeMeta{
 		Type:        "dingtalk",
 		Name:        "钉钉群机器人",
 		Description: "群设置 → 机器人 → 添加自定义机器人；安全设置推荐选择「加签」，若使用「自定义关键词」请确保通知标题包含该关键词",
@@ -65,7 +65,7 @@ func (d *dingtalk) Send(ctx context.Context, msg Message) error {
 			"text":  "## " + msg.Title + "\n\n" + markdownOf(msg),
 		},
 	}
-	resp, err := httpx.Do(ctx, httpx.Request{Method: "POST", URL: d.url(), JSON: body})
+	resp, err := httpx.Do(ctx, httpx.Request{Method: "POST", URL: d.url(), JSON: body, ProxyURL: d.cfg.Get("proxy")})
 	if err != nil {
 		return err
 	}

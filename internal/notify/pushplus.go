@@ -11,7 +11,7 @@ import (
 )
 
 func init() {
-	Register(schema.TypeMeta{
+	registerHTTP(schema.TypeMeta{
 		Type:        "pushplus",
 		Name:        "PushPlus 推送加",
 		Description: "微信公众号推送，在官网登录后获取 Token",
@@ -50,7 +50,7 @@ func (p *pushplus) Send(ctx context.Context, msg Message) error {
 	if t := p.cfg.Get("topic"); t != "" {
 		body["topic"] = t
 	}
-	resp, err := httpx.Do(ctx, httpx.Request{Method: "POST", URL: pushplusAPI, JSON: body})
+	resp, err := httpx.Do(ctx, httpx.Request{Method: "POST", URL: pushplusAPI, JSON: body, ProxyURL: p.cfg.Get("proxy")})
 	if err != nil {
 		return err
 	}

@@ -314,7 +314,7 @@ func (s *Server) createNotifier(c *gin.Context) {
 	if n.Name == "" {
 		n.Name = i18n.T(lang(c), meta.Name)
 	}
-	if err := meta.Validate(n.Config); err != nil {
+	if err := notify.Validate(n.Type, n.Config); err != nil {
 		fail(c, http.StatusBadRequest, err)
 		return
 	}
@@ -341,7 +341,7 @@ func (s *Server) updateNotifier(c *gin.Context) {
 	}
 	meta, _ := notify.Meta(n.Type)
 	n.Config = meta.ApplyDefaults(meta.Merge(n.Config, req.Config))
-	if err := meta.Validate(n.Config); err != nil {
+	if err := notify.Validate(n.Type, n.Config); err != nil {
 		fail(c, http.StatusBadRequest, err)
 		return
 	}

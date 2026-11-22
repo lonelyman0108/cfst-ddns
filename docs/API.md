@@ -85,6 +85,8 @@ interface Notifier { id: number; name: string; type: string; enabled: boolean; c
   createdAt: string; updatedAt: string }
 ```
 
+所有基于 HTTP 的通知渠道（除 `smtp` 外）均在 `config` 中提供可选 `proxy` 字段（支持 `http://`、`https://`、`socks5://`、`socks5h://`），仅作用于该渠道发送通知，与测速链路隔离。
+
 | 方法 | 路径 | 请求 | 响应 |
 |---|---|---|---|
 | GET | /api/notifiers | — | `Notifier[]` |

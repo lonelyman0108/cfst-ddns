@@ -8,8 +8,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/lonelyman0108/cfst-ddns/internal/i18n"
 )
 
 // Client 为全局共享客户端，单次请求超时 30 秒。
@@ -20,13 +24,46 @@ var UserAgent = "cfst-ddns/dev"
 
 // Request 描述一次 HTTP 调用。
 type Request struct {
-	Method  string
-	URL     string
-	Header  map[string]string
-	Body    []byte // 原始请求体
-	JSON    any    // 若非 nil 则序列化为 JSON 请求体，并设置 Content-Type
-	Form    map[string]string
-	Retries int // 网络错误或 5xx 时的重试次数，默认 2
+	Method   string
+	URL      string
+	Header   map[string]string
+	Body     []byte // 原始请求体
+	JSON     any    // 若非 nil 则序列化为 JSON 请求体，并设置 Content-Type
+	Form     map[string]string
+	Retries  int          // 网络错误或 5xx 时的重试次数，默认 2
+	ProxyURL string       // 可选代理地址（http/https/socks5/socks5h），为空时使用全局 Client
+	Client   *http.Client // 可选自定义客户端，非 nil 时优先使用
+}
+
+// ValidateProxyURL 校验通知渠道使用的代理地址；空字符串返回 nil, nil。
+func ValidateProxyURL(raw string) (*url.URL, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return nil, i18n.Errorf("代理地址无效: %v", err)
+	}
+	scheme := strings.ToLower(u.Scheme)
+	switch scheme {
+	case "http", "https", "socks5", "socks5h":
+		u.Scheme = scheme
+	default:
+		return nil, i18n.Errorf("不支持的代理协议: %s", u.Scheme)
+	}
+	if u.Hostname() == "" {
+		return nil, i18n.New("代理地址缺少主机名")
+	}
+	if p := u.Port(); p != "" {
+		port, err := strconv.Atoi(p)
+		if err != nil || port < 1 || port > 65535 {
+			return nil, i18n.New("代理端口需在 1-65535 之间")
+		}
+	} else if scheme == "socks5" || scheme == "socks5h" {
+		return nil, i18n.New("SOCKS5 代理必须指定端口")
+	}
+	return u, nil
 }
 
 // Response 为已读取完整响应体的结果。
@@ -78,6 +115,30 @@ func Do(ctx context.Context, req Request) (*Response, error) {
 		retries = 2
 	}
 
+	client := req.Client
+	var proxyURL *url.URL
+	if client == nil {
+		if strings.TrimSpace(req.ProxyURL) != "" {
+			var err error
+			proxyURL, err = ValidateProxyURL(req.ProxyURL)
+			if err != nil {
+				return nil, err
+			}
+			var tr *http.Transport
+			if base, ok := http.DefaultTransport.(*http.Transport); ok {
+				tr = base.Clone()
+			} else {
+				tr = &http.Transport{}
+			}
+			tr.Proxy = http.ProxyURL(proxyURL)
+			tr.DisableKeepAlives = true
+			defer tr.CloseIdleConnections()
+			client = &http.Client{Transport: tr, Timeout: Client.Timeout}
+		} else {
+			client = Client
+		}
+	}
+
 	var lastErr error
 	for attempt := 0; attempt <= retries; attempt++ {
 		if attempt > 0 {
@@ -99,7 +160,7 @@ func Do(ctx context.Context, req Request) (*Response, error) {
 		for k, v := range header {
 			hr.Header.Set(k, v)
 		}
-		resp, err := Client.Do(hr)
+		resp, err := client.Do(hr)
 		if err != nil {
 			lastErr = err
 			if ctx.Err() != nil {
@@ -120,7 +181,23 @@ func Do(ctx context.Context, req Request) (*Response, error) {
 		}
 		return r, nil
 	}
+	if ue, ok := lastErr.(*url.Error); ok {
+		ue.URL = redact(ue.URL)
+	}
+	if proxyURL != nil && proxyURL.User != nil {
+		return nil, fmt.Errorf("请求 %s 失败: %s", redact(req.URL), sanitizeProxyErr(lastErr, proxyURL))
+	}
 	return nil, fmt.Errorf("请求 %s 失败: %w", redact(req.URL), lastErr)
+}
+
+func sanitizeProxyErr(err error, proxyURL *url.URL) string {
+	s := err.Error()
+	s = strings.ReplaceAll(s, proxyURL.String(), proxyURL.Redacted())
+	if pass, ok := proxyURL.User.Password(); ok && pass != "" {
+		s = strings.ReplaceAll(s, proxyURL.User.String()+"@", proxyURL.User.Username()+":xxxxx@")
+		s = strings.ReplaceAll(s, ":"+pass+"@", ":xxxxx@")
+	}
+	return s
 }
 
 // EncodeForm 以稳定顺序编码表单。

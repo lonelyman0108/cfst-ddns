@@ -13,7 +13,7 @@ import (
 )
 
 func init() {
-	Register(schema.TypeMeta{
+	registerHTTP(schema.TypeMeta{
 		Type:        "webhook",
 		Name:        "自定义 Webhook",
 		Description: "向任意 HTTP 地址发送通知，支持占位符 {{title}} {{content}} {{status}} {{time}}",
@@ -92,7 +92,7 @@ func (w *webhook) Send(ctx context.Context, msg Message) error {
 	if err != nil {
 		return err
 	}
-	req := httpx.Request{Method: method, URL: webhookRender(w.cfg.Get("url"), msg, url.QueryEscape)}
+	req := httpx.Request{Method: method, URL: webhookRender(w.cfg.Get("url"), msg, url.QueryEscape), ProxyURL: w.cfg.Get("proxy")}
 
 	if method != "GET" {
 		tpl := w.cfg.Get("bodyTemplate")
